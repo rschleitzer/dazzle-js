@@ -16,6 +16,12 @@ pub struct SchemeEngine {
     search_paths: Vec<std::path::PathBuf>,
 }
 
+/// Prelude code that defines load and other helpers
+/// Currently empty - load primitive removed due to Steel limitations
+const PRELUDE: &str = r#"
+;; Prelude loaded successfully
+"#;
+
 impl SchemeEngine {
     /// Create a new Scheme engine with DSSSL primitives registered
     pub fn new() -> Result<Self> {
@@ -31,6 +37,11 @@ impl SchemeEngine {
         primitives::grove::register_grove_primitives(&mut scheme_engine)?;
         primitives::processing::register_processing_primitives(&mut scheme_engine)?;
         primitives::util::register_util_primitives(&mut scheme_engine)?;
+
+        // Load prelude (defines load and other helpers)
+        scheme_engine.engine
+            .compile_and_run_raw_program(PRELUDE.to_string())
+            .map_err(|e| anyhow::anyhow!("Failed to load prelude: {:?}", e))?;
 
         Ok(scheme_engine)
     }
