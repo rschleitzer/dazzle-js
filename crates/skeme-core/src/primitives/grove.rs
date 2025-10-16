@@ -26,8 +26,8 @@ pub fn register_grove_primitives(engine: &mut SchemeEngine) -> Result<()> {
     engine.register_fn("children", grove_children);
     engine.register_fn("parent", grove_parent);
 
-    // Node list operations
-    engine.register_fn("node-list", grove_node_list);
+    // Node list operations (registered as -from-vec, wrapped in Scheme for variadic support)
+    engine.register_fn("node-list-from-vec", grove_node_list);
     engine.register_fn("node-list-empty?", grove_node_list_empty);
     engine.register_fn("node-list-first", grove_node_list_first);
     engine.register_fn("node-list-rest", grove_node_list_rest);
@@ -232,17 +232,29 @@ fn grove_element_with_id(grove: &Grove, id: String) -> Option<Node> {
     search_for_id(&grove.root(), &id)
 }
 
-/// Get the 1-based index of a node among its siblings
+/// Get the 1-based index of a node among its SAME-TYPE siblings
 /// Usage: (child-number node)
+///
+/// DSSSL behavior (per OpenJade): counts position among siblings of the SAME element type.
+/// For example, if <grammar> has children: <syntax>, <syntax>, <keyword>, <keyword>
+/// - First <syntax> has child-number 1
+/// - Second <syntax> has child-number 2
+/// - First <keyword> has child-number 1 (not 3!)
+/// - Second <keyword> has child-number 2 (not 4!)
 fn grove_child_number(node: &Node) -> usize {
     // Get the parent
     if let Some(parent) = node.parent() {
         let siblings = parent.children();
+        let node_gi = node.gi();  // Element type of this node
 
-        // Find the index of this node among siblings (1-based)
-        for (i, sibling) in siblings.iter().enumerate() {
-            if sibling.ptr_eq(node) {
-                return i + 1;  // 1-based index
+        // Count position among same-type siblings only
+        let mut count = 0;
+        for sibling in siblings.iter() {
+            if sibling.gi() == node_gi {
+                count += 1;
+                if sibling.ptr_eq(node) {
+                    return count;  // 1-based index among same-type siblings
+                }
             }
         }
 

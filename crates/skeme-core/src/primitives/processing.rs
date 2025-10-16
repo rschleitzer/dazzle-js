@@ -73,9 +73,6 @@ impl Sosofo {
             use std::fs;
             use std::path::Path;
 
-            eprintln!("[DEBUG] Writing to file: {}", filename);
-            eprintln!("[DEBUG] Content length: {} bytes", self.text.len());
-
             // Create parent directories if needed
             if let Some(parent) = Path::new(filename).parent() {
                 fs::create_dir_all(parent)
@@ -86,10 +83,8 @@ impl Sosofo {
             fs::write(filename, &self.text)
                 .with_context(|| format!("Failed to write file: {}", filename))?;
 
-            eprintln!("[DEBUG] File written successfully");
             Ok(())
         } else {
-            eprintln!("[DEBUG] SOSOFO has no output file - skipping write");
             Ok(()) // No file to write
         }
     }
@@ -149,11 +144,8 @@ fn processing_sosofo_append_two(s1: &Sosofo, s2: &Sosofo) -> Sosofo {
 /// In OpenJade: (make entity system-id: "filename" (literal "content"))
 /// For us: (make-entity "filename" sosofo)
 fn processing_make_entity(system_id: String, content: &Sosofo) -> Sosofo {
-    eprintln!("[DEBUG] make-entity called: filename='{}', content_len={}", system_id, content.text().len());
     // Create a sosofo with the filename attached
-    let result = Sosofo::with_file(content.text().to_string(), system_id.clone());
-    eprintln!("[DEBUG] make-entity result: has_file={}", result.output_file().is_some());
-    result
+    Sosofo::with_file(content.text().to_string(), system_id)
 }
 
 /// Create a formatting-instruction flow object (plain text output)

@@ -85,8 +85,11 @@ const PRELUDE: &str = r#"
 
 (define gi
   (case-lambda
-    (() (grove-gi-impl (current-node)))
-    ((node) (grove-gi-impl node))))
+    (()
+     (let ((node (current-node)))
+       (if node (grove-gi-impl node) "")))
+    ((node)
+     (if node (grove-gi-impl node) ""))))
 
 (define id
   (case-lambda
@@ -106,15 +109,11 @@ const PRELUDE: &str = r#"
 ;; DSSSL: (attribute-string "name") uses current-node
 ;; DSSSL: (attribute-string "name" node) uses given node
 ;; DSSSL: (attribute-string "name" node "default") returns default if not found
-;; Returns "" (empty string) by default if attribute doesn't exist
+;; Returns #f if attribute doesn't exist (DSSSL standard)
 (define attribute-string
   (case-lambda
-    ((name)
-     (let ((val (grove-attribute-string-impl name (current-node))))
-       (if val val "")))
-    ((name node)
-     (let ((val (grove-attribute-string-impl name node)))
-       (if val val "")))
+    ((name) (grove-attribute-string-impl name (current-node)))
+    ((name node) (grove-attribute-string-impl name node))
     ((name node default)
       (let ((val (grove-attribute-string-impl name node)))
         (if val val default)))))
@@ -126,6 +125,10 @@ const PRELUDE: &str = r#"
     ((null? (cdr sosofos)) (car sosofos))
     (else (sosofo-append-two (car sosofos) (apply sosofo-append (cdr sosofos))))))
 
+;; Variadic node-list constructor (wrapper around node-list-from-vec)
+;; Usage: (node-list node1 node2 node3) or (apply node-list '(node1 node2))
+(define (node-list . nodes)
+  (node-list-from-vec nodes))
 
 ;; ============================================================================
 ;; Node-list operations with predicates
@@ -578,13 +581,6 @@ impl SchemeEngine {
         // Extract text content (entities now expanded by libxml2)
         let node = &nodes[0];
         let text = node.get_content();
-
-        // DEBUG: Write expanded template to file for debugging
-        if let Err(e) = std::fs::write("/tmp/expanded-template.scm", &text) {
-            eprintln!("Warning: Could not write expanded template: {}", e);
-        } else {
-            eprintln!("[DEBUG] Wrote expanded template to /tmp/expanded-template.scm ({} bytes)", text.len());
-        }
 
         // Document's Drop will clean up automatically
 
