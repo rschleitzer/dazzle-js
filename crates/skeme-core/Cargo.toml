@@ -1,0 +1,26 @@
+[package]
+name = "skeme-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Core library for Skeme: Steel Scheme interpreter + libxml2 integration + DSSSL primitives"
+
+[dependencies]
+# Steel Scheme interpreter
+steel-core = { workspace = true }
+
+# XML parsing with DTD validation
+libxml = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+tracing-subscriber = { workspace = true }

@@ -1,0 +1,43 @@
+[workspace]
+members = [
+    "crates/skeme-core",
+    "crates/skeme-template",
+    "crates/skeme-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["R. Schleitzer <r.schleitzer@users.noreply.github.com>"]
+license = "MIT"
+repository = "https://github.com/yourusername/skeme"
+homepage = "https://github.com/yourusername/skeme"
+documentation = "https://docs.rs/skeme"
+description = "A Rust-based code generation tool powered by Scheme templates"
+keywords = ["code-generation", "template", "scheme", "dsssl", "xml"]
+categories = ["command-line-utilities", "development-tools", "template-engine"]
+
+[workspace.dependencies]
+# Core Scheme interpreter
+steel-core = "0.7"
+
+# XML parsing with DTD validation
+libxml = "0.3"
+
+# CLI argument parsing
+clap = { version = "4", features = ["derive"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

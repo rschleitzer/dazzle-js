@@ -1,0 +1,33 @@
+[package]
+name = "skeme-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Command-line interface for Skeme code generation tool"
+
+[[bin]]
+name = "skeme"
+path = "src/main.rs"
+
+[dependencies]
+# Core Skeme functionality
+skeme-core = { path = "../skeme-core" }
+skeme-template = { path = "../skeme-template" }
+
+# CLI argument parsing
+clap = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+# Testing utilities
+tempfile = "3.8"
