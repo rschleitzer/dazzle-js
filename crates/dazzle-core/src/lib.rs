@@ -1,6 +1,6 @@
-//! # Skeme Core
+//! # Dazzle Core
 //!
-//! Core library for Skeme: Steel Scheme interpreter integration,
+//! Core library for Dazzle: Steel Scheme interpreter integration,
 //! libxml2 XML parsing, and DSSSL primitive implementations.
 //!
 //! ## Architecture
@@ -22,7 +22,7 @@ pub use grove::{Grove, Node, NodeList};
 pub use scheme::SchemeEngine;
 pub use xml::XmlParser;
 
-/// Skeme version
+/// Dazzle version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[cfg(test)]

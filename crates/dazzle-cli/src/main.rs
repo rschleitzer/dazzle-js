@@ -1,9 +1,9 @@
-//! Skeme CLI entry point
+//! Dazzle CLI entry point
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use skeme_cli::Args;
-use skeme_core::{SchemeEngine, XmlParser};
+use dazzle_cli::Args;
+use dazzle_core::{SchemeEngine, XmlParser};
 use tracing::{info, Level};
 use tracing_subscriber::FmtSubscriber;
 
@@ -19,7 +19,7 @@ fn main() -> Result<()> {
     tracing::subscriber::set_global_default(subscriber)
         .context("Failed to set up logging")?;
 
-    info!("Skeme v{}", skeme_core::VERSION);
+    info!("Dazzle v{}", dazzle_core::VERSION);
     info!("Template: {}", args.template.display());
     info!("Input: {}", args.input.display());
 
@@ -74,7 +74,7 @@ fn main() -> Result<()> {
         .context("Failed to process document")?;
     info!("Processing complete");
 
-    println!("\nSkeme processing complete!");
+    println!("\nDazzle processing complete!");
     println!("Template: {}", args.template.display());
     println!("Input: {}", args.input.display());
     if !args.variables.is_empty() {

@@ -1,8 +1,8 @@
 [workspace]
 members = [
-    "crates/skeme-core",
-    "crates/skeme-template",
-    "crates/skeme-cli",
+    "crates/dazzle-core",
+    "crates/dazzle-template",
+    "crates/dazzle-cli",
 ]
 resolver = "2"
 
@@ -11,9 +11,9 @@ version = "0.1.0"
 edition = "2021"
 authors = ["R. Schleitzer <r.schleitzer@users.noreply.github.com>"]
 license = "MIT"
-repository = "https://github.com/yourusername/skeme"
-homepage = "https://github.com/yourusername/skeme"
-documentation = "https://docs.rs/skeme"
+repository = "https://github.com/yourusername/dazzle"
+homepage = "https://github.com/yourusername/dazzle"
+documentation = "https://docs.rs/dazzle"
 description = "A Rust-based code generation tool powered by Scheme templates"
 keywords = ["code-generation", "template", "scheme", "dsssl", "xml"]
 categories = ["command-line-utilities", "development-tools", "template-engine"]

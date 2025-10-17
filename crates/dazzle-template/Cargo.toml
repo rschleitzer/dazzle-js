@@ -1,16 +1,16 @@
 [package]
-name = "skeme-template"
+name = "dazzle-template"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Template engine for Skeme: template loading, processing control, file I/O"
+description = "Template engine for Dazzle: template loading, processing control, file I/O"
 
 [dependencies]
-# Core Skeme functionality
-skeme-core = { path = "../skeme-core" }
+# Core Dazzle functionality
+dazzle-core = { path = "../dazzle-core" }
 
 # Steel Scheme interpreter
 steel-core = { workspace = true }

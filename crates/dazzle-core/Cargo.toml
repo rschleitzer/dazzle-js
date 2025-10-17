@@ -1,12 +1,12 @@
 [package]
-name = "skeme-core"
+name = "dazzle-core"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Core library for Skeme: Steel Scheme interpreter + libxml2 integration + DSSSL primitives"
+description = "Core library for Dazzle: Steel Scheme interpreter + libxml2 integration + DSSSL primitives"
 
 [dependencies]
 # Steel Scheme interpreter

@@ -1,21 +1,21 @@
 [package]
-name = "skeme-cli"
+name = "dazzle-cli"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Command-line interface for Skeme code generation tool"
+description = "Command-line interface for Dazzle code generation tool"
 
 [[bin]]
-name = "skeme"
+name = "dazzle"
 path = "src/main.rs"
 
 [dependencies]
-# Core Skeme functionality
-skeme-core = { path = "../skeme-core" }
-skeme-template = { path = "../skeme-template" }
+# Core Dazzle functionality
+dazzle-core = { path = "../dazzle-core" }
+dazzle-template = { path = "../dazzle-template" }
 
 # CLI argument parsing
 clap = { workspace = true }

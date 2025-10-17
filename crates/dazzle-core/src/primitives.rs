@@ -1,7 +1,7 @@
 //! DSSSL primitive implementations
 //!
 //! This module contains implementations of all ~134 DSSSL primitives
-//! that Skeme needs to implement (R5RS primitives are provided by Steel).
+//! that Dazzle needs to implement (R5RS primitives are provided by Steel).
 //!
 //! ## Organization
 //!

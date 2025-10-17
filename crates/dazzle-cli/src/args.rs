@@ -3,9 +3,9 @@
 use clap::Parser;
 use std::path::PathBuf;
 
-/// Skeme: A Rust-based code generation tool powered by Scheme templates
+/// Dazzle: A Rust-based code generation tool powered by Scheme templates
 #[derive(Parser, Debug)]
-#[command(name = "skeme")]
+#[command(name = "dazzle")]
 #[command(about, long_about = None, disable_version_flag = true)]
 pub struct Args {
     /// Template file (.scm)

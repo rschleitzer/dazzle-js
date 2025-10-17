@@ -1,6 +1,6 @@
-//! # Skeme Template
+//! # Dazzle Template
 //!
-//! Template engine for Skeme: handles template loading, processing control,
+//! Template engine for Dazzle: handles template loading, processing control,
 //! and file I/O operations.
 //!
 //! ## Modules

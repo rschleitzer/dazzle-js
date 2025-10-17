@@ -1,8 +1,8 @@
-# CLAUDE.md - Skeme Project Context
+# CLAUDE.md - Dazzle Project Context
 
 > **Context document for Claude Code and future development sessions**
-> 
-> This document provides complete background on the Skeme project, including motivation, design decisions, technical specifications, and implementation guidance.
+>
+> This document provides complete background on the Dazzle project, including motivation, design decisions, technical specifications, and implementation guidance.
 
 ## Table of Contents
 
@@ -21,22 +21,22 @@
 
 ## Project Overview
 
-**Skeme** (pronounced like "Scheme") is a Rust-based code generation tool powered by Scheme templates. It reimplements the essential functionality of OpenJade's SGML backend for modern systems.
+**Dazzle** is a Rust-based code generation tool powered by Scheme templates. It reimplements the essential functionality of OpenJade's SGML backend for modern systems.
 
 ### Key Facts
 
-- **Name**: Skeme (intentional spelling - works as noun and verb: "I skeme the templates")
+- **Name**: Dazzle (evocative of brilliance and transformation)
 - **Purpose**: Template-driven code generation from XML/SGML input
 - **Language**: Rust (host) + Scheme (templates)
 - **Primary Use Case**: fire code generation
 
-### Why "Skeme"?
+### Why "Dazzle"?
 
-- Sounds like "Scheme" - honest about the technology
-- Looks like "schema" - structural/template connotation
-- Works as imperative verb - "skeme this template"
+- Evokes transformation and brilliance - what code generation does
+- Memorable and distinctive
+- Works as imperative verb - "dazzle this template"
 - Available everywhere (crates.io, all distros, Homebrew, MacPorts)
-- No trademark conflicts
+- No trademark conflicts (only libdazzle exists, a GNOME library - different domain)
 
 ---
 
@@ -59,7 +59,7 @@ OpenJade (and its predecessor Jade) are disappearing from package managers:
 - Current project: **fire** (FHIR 5 server in Rust)
 - Large existing codebase depending on OpenJade workflow
 
-### The Solution: Skeme
+### The Solution: Dazzle
 
 Preserve the workflow in a maintainable form:
 
@@ -74,7 +74,7 @@ Preserve the workflow in a maintainable form:
 
 ## DSSSL Lineage
 
-Understanding what Skeme inherits and what it doesn't:
+Understanding what Dazzle inherits and what it doesn't:
 
 ### 1. DSSSL Standard (ISO/IEC 10179:1996)
 
@@ -150,7 +150,7 @@ Simplified subset of DSSSL proposed for web use:
 - `grove/` (2,393 lines) - Grove model
 - `include/` (48 lines) - Headers (depends on external OpenSP library)
 
-**Critical files for Skeme:**
+**Critical files for Dazzle:**
 - `style/primitive.h` - **224 Scheme primitives** defined
 - `style/primitive.cxx` - 5,704 lines - Primitive implementations
 - `style/Interpreter.cxx` - 2,390 lines - Scheme interpreter core
@@ -165,11 +165,11 @@ Simplified subset of DSSSL proposed for web use:
 - OpenSP was split from OpenJade in 2002 (version 1.3.2)
 - OpenJade's `configure` looks for external OpenSP installation
 - OpenSP is ~100-150K lines of C++ (SGML/XML parser)
-- Skeme replaces OpenSP with **libxml2** (XML only, DTD validation included)
+- Dazzle replaces OpenSP with **libxml2** (XML only, DTD validation included)
 
-### What Skeme Must Implement
+### What Dazzle Must Implement
 
-From OpenJade analysis, Skeme needs:
+From OpenJade analysis, Dazzle needs:
 
 1. **224 Scheme primitives** (detailed below)
    - ~90 from R5RS (Steel provides)
@@ -183,7 +183,7 @@ From OpenJade analysis, Skeme needs:
 
 **Key simplification**: User only generates plain text code files (`.java`, `.rs`, etc.), not styled documents. This eliminates ~30 primitives (quantities, colors, spacing) - implement as stubs.
 
-### What Skeme Does NOT Need
+### What Dazzle Does NOT Need
 
 - ❌ OpenSP parser (use libxml2 instead)
 - ❌ Other FOT builders (HTML, RTF, TeX, MIF)
@@ -208,7 +208,7 @@ From OpenJade analysis, Skeme needs:
 - **Characters** (5): Comparison and case conversion
 - **Vectors** (8): `vector?`, `vector`, `vector-ref`, `vector-set!`, `make-vector`, conversions
 
-### Skeme Must Implement: ~134 primitives
+### Dazzle Must Implement: ~134 primitives
 
 Organized by priority and function:
 
@@ -265,7 +265,7 @@ Only `entity` and `formatting-instruction` flow objects needed for code generati
 
 ## Feature Matrix
 
-What Skeme implements from each ancestor:
+What Dazzle implements from each ancestor:
 
 ### From DSSSL Standard (ISO 10179)
 
@@ -295,7 +295,7 @@ What Skeme implements from each ancestor:
 **Scheme Primitives** - ✅ Complete compatibility:
 - ✅ All 224 OpenJade primitives
 - ✅ ~90 from R5RS (Steel provides)
-- ✅ ~134 DSSSL-specific (Skeme implements)
+- ✅ ~134 DSSSL-specific (Dazzle implements)
 
 **Processing & Code Generation:**
 - ✅ `load` procedure (OpenJade extension, not DSSSL standard)
@@ -318,7 +318,7 @@ What Skeme implements from each ancestor:
 - ❌ Full SGML parsing (XML only, via libxml2)
 - ❌ SGML-wrapped templates (`<style-specification>` format)
 
-### Skeme-Specific Features
+### Dazzle-Specific Features
 
 **New/Enhanced:**
 - ✅ Pure Rust implementation
@@ -377,10 +377,11 @@ clap = "4"                  # CLI argument parsing
 ### Project Structure
 
 ```
-skeme/
-├── skeme-core/      # libxml2 + Steel integration
-├── skeme-template/  # Template engine, file writing
-├── skeme-cli/       # Command-line interface
+dazzle/
+├── crates/
+│   ├── dazzle-core/      # libxml2 + Steel integration
+│   ├── dazzle-template/  # Template engine, file writing
+│   └── dazzle-cli/       # Command-line interface
 ├── examples/        # Example templates
 ├── tests/           # Integration tests
 └── docs/            # Documentation
@@ -393,7 +394,7 @@ skeme/
 ### Final Interface
 
 ```bash
-skeme -d template.scm [-t xml] [-V key=value]... [-D dir]... input.xml
+dazzle -d template.scm [-t xml] [-V key=value]... [-D dir]... input.xml
 ```
 
 **Flags:**
@@ -412,16 +413,16 @@ skeme -d template.scm [-t xml] [-V key=value]... [-D dir]... input.xml
 
 ```bash
 # Basic usage
-skeme -d codegen.scm grammar.xml
+dazzle -d codegen.scm grammar.xml
 
 # With variables
-skeme -d gen.scm -V package=com.example -V version=1.0 model.xml
+dazzle -d gen.scm -V package=com.example -V version=1.0 model.xml
 
 # With search paths
-skeme -d template.scm -D /usr/share/skeme/templates input.xml
+dazzle -d template.scm -D /usr/share/dazzle/templates input.xml
 
 # Multiple variables
-skeme -d gen.scm \
+dazzle -d gen.scm \
   -V package=smartonfhir \
   -V outdir=src/generated \
   -V debug=true \
@@ -447,7 +448,7 @@ Templates write files directly:
 
 ## Distribution Strategy
 
-### Package Availability: "skeme"
+### Package Availability: "dazzle"
 
 **Verified Available:**
 - ✅ crates.io
@@ -533,19 +534,19 @@ Can nest: #| inner |#
      (even if multi-line))
 ```
 
-**Extensions needed for Skeme:**
+**Extensions needed for Dazzle:**
 ```scheme
 ; load - OpenJade extension (not DSSSL standard)
 (load "helpers.scm")
 
-; File I/O - Skeme additions
+; File I/O - Dazzle additions
 (write-file "Output.java" content)
 (ensure-dir "src/generated")
 
 ; Variables from CLI
 (get-variable "package" "com.default")
 
-; XML navigation - Skeme API
+; XML navigation - Dazzle API
 (xml-get-attribute node "name")
 (xml-children node)
 (xml-select node "//rule")
@@ -553,7 +554,7 @@ Can nest: #| inner |#
 
 ### Template Pattern
 
-**Typical Skeme template:**
+**Typical Dazzle template:**
 
 ```scheme
 ;; codegen.scm - Main template
@@ -587,7 +588,7 @@ Can nest: #| inner |#
 </grammar>
 ```
 
-When Skeme parses this:
+When Dazzle parses this:
 1. libxml2 sees `<!DOCTYPE>`
 2. Loads `grammar.dtd` automatically
 3. Validates XML against DTD
@@ -651,7 +652,7 @@ project/
     </style-sheet>
 ```
 
-**After (Skeme):**
+**After (Dazzle):**
 ```
 project/
 ├── grammar.xml         # XML source (converted from SGML)
@@ -670,7 +671,7 @@ openjade -t sgml -d codegen.dsl grammar.sgml > Output.java
 
 **After:**
 ```bash
-skeme -d codegen.scm grammar.xml
+dazzle -d codegen.scm grammar.xml
 # Output.java written by template
 ```
 
@@ -708,9 +709,9 @@ skeme -d codegen.scm grammar.xml
 
 **Tasks:**
 1. Set up Cargo workspace with three crates:
-   - `skeme-core`: libxml2 + Steel integration
-   - `skeme-template`: Template engine, file I/O
-   - `skeme-cli`: Command-line interface
+   - `dazzle-core`: libxml2 + Steel integration
+   - `dazzle-template`: Template engine, file I/O
+   - `dazzle-cli`: Command-line interface
 
 2. Dependencies:
    ```toml
@@ -862,7 +863,7 @@ skeme -d codegen.scm grammar.xml
 2. Documentation:
    - README with quick start
    - Primitive reference
-   - Migration guide (OpenJade → Skeme)
+   - Migration guide (OpenJade → Dazzle)
    - Template examples
 
 3. Packaging:
@@ -913,7 +914,7 @@ Integration Tests (synthetic templates)
 
 **Compatibility testing:**
 1. Convert user's SGML → XML (one-time: `opensp -x`)
-2. Run both OpenJade and Skeme on same XML
+2. Run both OpenJade and Dazzle on same XML
 3. Compare outputs
 4. Fix discrepancies
 5. Add regression test
@@ -949,7 +950,7 @@ Integration Tests (synthetic templates)
 - **DSSSL**: ISO/IEC 10179:1996
   - Online: ftp://ftp.jclark.com/pub/dsssl/dsssl96b.pdf
   - Local copy: `/Users/r.schleitzer/Documents/dsssl96b.pdf`
-  - **Key sections for Skeme implementation**:
+  - **Key sections for Dazzle implementation**:
     - Section 8: Grove architecture and node properties
     - Section 9: SDQL (Standard Document Query Language) - grove queries
     - Section 10: Processing model - rules, modes, `next-match`
@@ -1026,7 +1027,7 @@ Integration Tests (synthetic templates)
 
 **Project succeeds if:**
 
-1. ✅ **Drop-in replacement** - User can replace OpenJade with Skeme for their existing templates
+1. ✅ **Drop-in replacement** - User can replace OpenJade with Dazzle for their existing templates
 2. ✅ **Full compatibility** - All 224 OpenJade primitives work identically
 3. ✅ **Output identical** - Templates generate same code as OpenJade
 4. ✅ **Available in package managers** - MacPorts + Homebrew minimum (won't disappear)
@@ -1035,7 +1036,7 @@ Integration Tests (synthetic templates)
 7. ✅ **Community can contribute** - Rust vs C++, clear architecture
 
 **Bonus success:**
-- **Others adopt Skeme** - Beyond original use case
+- **Others adopt Dazzle** - Beyond original use case
 - **Template libraries** - Shared, reusable code generators
 - **Extended features** - REPL mode, watch mode, template debugger
 - **Multiple backends** - S-expression input, JSON output, etc.
@@ -1052,7 +1053,7 @@ Integration Tests (synthetic templates)
 - **Template library**: Reusable code generators
 - **REPL mode**: Interactive template development
 - **Watch mode**: Auto-regenerate on file changes
-- **Language bindings**: Call Skeme from other languages
+- **Language bindings**: Call Dazzle from other languages
 
 ---
 
@@ -1072,7 +1073,7 @@ Integration Tests (synthetic templates)
 2. **OpenSP dependency**: Separate project, ~100-150K lines (not needed - use libxml2)
 3. **Total primitives**: 224 Scheme functions
    - 90 from R5RS (Steel provides)
-   - 134 DSSSL-specific (Skeme must implement)
+   - 134 DSSSL-specific (Dazzle must implement)
 4. **SGML backend**: 2,824 lines (core feature to preserve)
 5. **Critical files**:
    - `style/primitive.h` - All 224 primitives defined

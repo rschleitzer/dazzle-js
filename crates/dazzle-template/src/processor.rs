@@ -3,7 +3,7 @@
 //! Executes templates with processing control.
 
 use anyhow::Result;
-use skeme_core::{Node, SchemeEngine};
+use dazzle_core::{Node, SchemeEngine};
 
 /// Template processor
 pub struct TemplateProcessor {
