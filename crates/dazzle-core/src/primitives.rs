@@ -8,8 +8,10 @@
 //! - `grove`: Grove query primitives (~50 functions)
 //! - `processing`: Processing control primitives (~20 functions)
 //! - `types`: DSSSL type primitives (~30 functions, mostly stubs)
+//! - `character`: Character case conversion primitives
 //! - `util`: Utility primitives (~20 functions)
 
+pub mod character;
 pub mod grove;
 pub mod processing;
 pub mod types_primitives;
@@ -23,6 +25,7 @@ pub fn register_all_primitives(engine: &mut SchemeEngine) -> Result<()> {
     grove::register_grove_primitives(engine)?;
     processing::register_processing_primitives(engine)?;
     types_primitives::register_type_primitives(engine)?;
+    character::register_character_primitives(engine)?;
     util::register_util_primitives(engine)?;
 
     Ok(())

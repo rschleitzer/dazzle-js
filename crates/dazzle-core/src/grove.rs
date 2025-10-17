@@ -10,6 +10,7 @@
 //! - `NodeList`: An ordered collection of nodes
 //! - `NodeProperty`: Grove node properties (GI, ID, attributes, etc.)
 
+use crate::dtd::DtdDefaults;
 use libxml::tree::{Document, Node as XmlNode};
 use steel::rvals::Custom;
 use std::sync::Arc;
@@ -23,6 +24,8 @@ pub struct Grove {
     /// This field is intentionally not accessed directly - its purpose is to keep the Document alive
     #[allow(dead_code)]
     document: Arc<Document>,
+    /// DTD attribute defaults
+    dtd_defaults: Arc<DtdDefaults>,
     /// The root node
     root: Node,
 }
@@ -38,10 +41,18 @@ impl std::fmt::Debug for Grove {
 impl Grove {
     /// Create a new grove from a Document
     pub fn from_document(doc: Document) -> Option<Self> {
+        // Parse DTD defaults
+        let dtd_defaults = Arc::new(
+            DtdDefaults::from_document(&doc)
+                .unwrap_or_else(|_| DtdDefaults::empty())
+        );
+
         let root_elem = doc.get_root_element()?;
-        let root = Node::from_xml_node(root_elem);
+        let root = Node::from_xml_node_with_dtd(root_elem, Arc::clone(&dtd_defaults));
+
         Some(Grove {
             document: Arc::new(doc),
+            dtd_defaults,
             root,
         })
     }
@@ -49,6 +60,11 @@ impl Grove {
     /// Get the root node
     pub fn root(&self) -> &Node {
         &self.root
+    }
+
+    /// Get DTD defaults
+    pub fn dtd_defaults(&self) -> &DtdDefaults {
+        &self.dtd_defaults
     }
 }
 
@@ -62,12 +78,26 @@ impl Custom for Grove {}
 pub struct Node {
     /// The underlying libxml2 node
     inner: XmlNode,
+    /// DTD attribute defaults (shared across all nodes in the grove)
+    dtd_defaults: Arc<DtdDefaults>,
 }
 
 impl Node {
-    /// Create a Node from a libxml Node
+    /// Create a Node from a libxml Node (without DTD defaults)
+    /// For compatibility - prefer from_xml_node_with_dtd
     pub fn from_xml_node(xml_node: XmlNode) -> Self {
-        Node { inner: xml_node }
+        Node {
+            inner: xml_node,
+            dtd_defaults: Arc::new(DtdDefaults::empty()),
+        }
+    }
+
+    /// Create a Node from a libxml Node with DTD defaults
+    pub fn from_xml_node_with_dtd(xml_node: XmlNode, dtd_defaults: Arc<DtdDefaults>) -> Self {
+        Node {
+            inner: xml_node,
+            dtd_defaults,
+        }
     }
 
     /// Get the underlying libxml Node
@@ -82,23 +112,44 @@ impl Node {
 
     /// Get the ID attribute
     pub fn id(&self) -> Option<String> {
-        self.inner.get_attribute("id")
+        self.attribute("id")
     }
 
-    /// Get child nodes
+    /// Get child nodes (DSSSL: only element nodes, not text/comment nodes)
     pub fn children(&self) -> NodeList {
         let child_nodes = self.inner.get_child_nodes();
-        NodeList::from_vec(child_nodes.into_iter().map(Node::from_xml_node).collect())
+        let dtd = Arc::clone(&self.dtd_defaults);
+        NodeList::from_vec(
+            child_nodes
+                .into_iter()
+                .filter(|n| n.is_element_node())  // DSSSL children() returns only element nodes
+                .map(|n| Node::from_xml_node_with_dtd(n, Arc::clone(&dtd)))
+                .collect()
+        )
     }
 
     /// Get parent node
     pub fn parent(&self) -> Option<Node> {
-        self.inner.get_parent().map(Node::from_xml_node)
+        self.inner
+            .get_parent()
+            .map(|n| Node::from_xml_node_with_dtd(n, Arc::clone(&self.dtd_defaults)))
     }
 
-    /// Get attribute value
+    /// Get attribute value (with DTD default support)
+    ///
+    /// Returns the attribute value if present in the XML, otherwise
+    /// returns the DTD default value if one is defined.
     pub fn attribute(&self, name: &str) -> Option<String> {
-        self.inner.get_attribute(name)
+        // First check if attribute is explicitly set
+        if let Some(value) = self.inner.get_attribute(name) {
+            return Some(value);
+        }
+
+        // If not, check DTD defaults
+        let element_name = self.gi();
+        self.dtd_defaults
+            .get_default(&element_name, name)
+            .map(|s| s.to_string())
     }
 
     /// Get text content

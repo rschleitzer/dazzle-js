@@ -46,6 +46,8 @@ pub fn register_grove_primitives(engine: &mut SchemeEngine) -> Result<()> {
     // Node list operations
     engine.register_fn("empty-node-list", grove_empty_node_list);
     engine.register_fn("node-list-reverse", grove_node_list_reverse);
+    engine.register_fn("node-list-last", grove_node_list_last);
+    engine.register_fn("node-list=?", grove_node_list_equal);
 
     // Element lookup (registered as grove-element-with-id, wrapped in Scheme as element-with-id)
     engine.register_fn("grove-element-with-id", grove_element_with_id);
@@ -86,6 +88,10 @@ fn grove_data(node: &Node) -> String {
 
 /// Get an attribute value by name (Rust implementation - always 2 args)
 /// Wrapped in Scheme to support optional node parameter
+///
+/// Returns the attribute value as Option<String>.
+/// DSSSL spec: Returns #f when attribute doesn't exist.
+/// This allows templates to use (if (attribute-string ...) ...) to check existence.
 fn grove_attribute_string_impl(name: String, node: &Node) -> Option<String> {
     node.attribute(&name)
 }
@@ -203,6 +209,22 @@ fn grove_node_list_reverse(nl: &NodeList) -> NodeList {
     let mut nodes: Vec<Node> = nl.iter().cloned().collect();
     nodes.reverse();
     NodeList::from_vec(nodes)
+}
+
+/// Get the last node in a node-list
+/// Usage: (node-list-last node-list)
+fn grove_node_list_last(nl: &NodeList) -> Option<Node> {
+    nl.iter().last().cloned()
+}
+
+/// Check if two node-lists are equal (same nodes in same order)
+/// Usage: (node-list=? nl1 nl2)
+fn grove_node_list_equal(nl1: &NodeList, nl2: &NodeList) -> bool {
+    if nl1.len() != nl2.len() {
+        return false;
+    }
+
+    nl1.iter().zip(nl2.iter()).all(|(n1, n2)| n1.ptr_eq(n2))
 }
 
 /// Find element by ID attribute anywhere in the tree

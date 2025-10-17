@@ -10,7 +10,9 @@
 //! - `primitives`: DSSSL primitive function implementations
 //! - `grove`: Grove node representation and navigation
 //! - `types`: DSSSL type system (quantities, colors, addresses, etc.)
+//! - `dtd`: DTD parsing for attribute defaults
 
+pub mod dtd;
 pub mod grove;
 pub mod primitives;
 pub mod scheme;

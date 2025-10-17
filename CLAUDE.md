@@ -378,200 +378,37 @@ clap = "4"                  # CLI argument parsing
 
 ## Template File Format: XML Wrappers with Entity References
 
-**CRITICAL DESIGN DECISION:** Template format must be compatible with BOTH OpenJade AND Dazzle.
+**CRITICAL**: Templates must work with BOTH OpenJade AND Dazzle for migration compatibility.
 
-### Why XML Wrappers with Entity References?
+### Why Entity References?
 
-**Steel Context Problem:**
-- Steel Scheme has **context isolation** issues with `(load ...)`
-- Each `(load ...)` creates a new evaluation context
-- Definitions from one loaded file are NOT visible to other loaded files
-- This breaks modular template organization
-
-**Solution: Entity-Based Concatenation (DSSSL tradition)**
-- Use XML/SGML entity references to include `.scm` modules
-- Parser (libxml2 for Dazzle, OpenSP for OpenJade) resolves entities
-- Scheme interpreter sees one unified program
-- All definitions visible across modules
-
-**This follows the DSSSL/OpenJade tradition** of using entity references for modular templates.
-
-### Dual-Compatibility Requirement
-
-**During migration, templates MUST work with both:**
-- ✅ **OpenJade** (existing, proven toolchain)
-- ✅ **Dazzle** (new, under development)
-
-Users need to switch back and forth during transition period.
+Steel Scheme has context isolation with `(load ...)` - each file creates a new context. Entity references let the parser concatenate `.scm` files before the interpreter sees them, following DSSSL tradition.
 
 ### Template Format
-
-**The format MUST use proper DSSSL structure for OpenJade compatibility:**
 
 ```xml
 <?xml version="1.0"?>
 <!DOCTYPE style-sheet PUBLIC "-//James Clark//DTD DSSSL Style Sheet//EN" [
 <!ENTITY helpers SYSTEM "helpers.scm">
-<!ENTITY syntax  SYSTEM "syntax.scm">
-<!ENTITY parser  SYSTEM "parser.scm">
 <!ENTITY rules   SYSTEM "rules.scm">
 ]>
 <style-sheet>
 <style-specification>
 &helpers;
-&syntax;
-&parser;
 &rules;
 </style-specification>
 </style-sheet>
 ```
 
-**Key properties:**
-- ✅ Valid XML (Dazzle/libxml2 can parse)
-- ✅ Valid SGML (OpenJade/OpenSP can parse) - XML is SGML subset
-- ✅ Uses DSSSL DOCTYPE with PUBLIC identifier (OpenJade requires this)
-- ✅ Standard entity references (both parsers resolve identically)
-- ✅ `<style-sheet>` and `<style-specification>` elements (DSSSL structure)
-- ✅ No tool-specific extensions
+Both OpenJade/OpenSP and Dazzle/libxml2 parse this identically: resolve entities, extract content from `<style-specification>`, pass unified program to Scheme interpreter.
 
-### Processing Flow
+### CDATA Wrapping
 
-**OpenJade:**
-1. OpenSP parses DSSSL style-sheet (SGML/XML)
-2. Resolves entity references (loads `.scm` files)
-3. Extracts Scheme code from `<style-specification>` element
-4. OpenJade's Scheme interpreter evaluates unified program
+Wrap `.scm` content in `<![CDATA[...]]>` if it contains `<` or `&` characters (Scheme predicates like `string<?`, generated code like `if (a < b)`, strings with `&`). Otherwise, no wrapping needed.
 
-**Dazzle:**
-1. libxml2 parses DSSSL style-sheet (XML)
-2. Resolves entity references (loads `.scm` files)
-3. Extracts Scheme code from `<style-specification>` element
-4. Steel interpreter evaluates unified program
+### Migration from OpenJade SGML
 
-**Result:** Identical behavior in both tools.
-
-### Benefits
-
-**vs. inline CDATA format:**
-- ✅ Modular `.scm` files (not inline in wrapper)
-- ✅ CDATA sections only when needed (for XML-dangerous characters)
-- ✅ Cleaner organization (separate files for helpers, syntax, parser, etc.)
-- ✅ Still uses DSSSL structure (OpenJade compatible)
-
-**IMPORTANT: XML-Dangerous Characters in .scm Files**
-
-Scheme code may contain XML-problematic characters that require CDATA wrapping:
-- `<` (stago) - **DANGEROUS** - starts XML tag
-- `&` (ampersand) - **DANGEROUS** - starts entity reference
-- `>` (greater-than) - **NOT dangerous** - safe to use
-
-**Examples of dangerous content:**
-- Scheme predicates: `string<?`, `<=`, `<`
-- Generated code with `<`: `if (a < b)`, `List<String>`
-- Strings with `&`: `"foo & bar"`, `&entity;`
-- C# XML doc comments: `/// <summary>Checks if a < b</summary>`
-
-**Solution 1: Wrap entire .scm file in CDATA**
-```scheme
-<![CDATA[
-(define (compare a b)
-  (string<? a b))
-
-(define code
-  "/// <summary>Checks if a < b</summary>")
-]]>
-```
-
-**Solution 2: Wrap only critical sections in CDATA**
-```scheme
-(define (safe-function a b)
-  (string-append a b))
-
-(define (generate-method name)
-  (string-append
-<![CDATA[
-    "/// <summary>\n"
-    "/// Checks if a < b and handles foo & bar\n"
-    "/// </summary>\n"
-]]>
-    "public bool Compare(int a, int b) {\n"
-    "  return a < b;\n"
-    "}\n"))
-
-(define (another-safe-function)
-  (process-children))
-```
-
-**Choose based on your needs:**
-- If many `<` or `&` characters → Wrap entire file
-- If only a few critical sections → Wrap those sections only
-- If no `<` or `&` at all → No CDATA needed
-
-**Alternative: Single .scm file without XML wrapper**
-
-If you use a single `.scm` file directly (without XML wrapper), `<` and `&` are **not a problem** at all:
-```scheme
-;; pure-template.scm - no XML wrapper, no CDATA needed
-(define (compare a b)
-  (string<? a b))  ; < is just a character, not XML
-
-(define code
-  "/// <summary>Checks if a < b & c</summary>")  ; < and & are fine
-```
-
-**However:**
-- ❌ **NOT OpenJade compatible** - OpenJade requires DSSSL XML wrapper
-- ✅ **Perfect for Dazzle-only** - If you never need OpenJade
-
-**Recommendation:** Use XML wrapper with entity references for OpenJade/Dazzle dual compatibility during transition.
-
-### Migration Path
-
-**Old (OpenJade-only SGML format):**
-```sgml
-<!DOCTYPE STYLE-SHEET PUBLIC "-//James Clark//DTD DSSSL Style Sheet//EN" [
-<!ENTITY syntax SYSTEM "syntax.scm">
-]>
-<STYLE-SPECIFICATION>
-&syntax;
-</STYLE-SPECIFICATION>
-```
-
-**New (OpenJade + Dazzle compatible XML):**
-```xml
-<?xml version="1.0"?>
-<!DOCTYPE style-sheet PUBLIC "-//James Clark//DTD DSSSL Style Sheet//EN" [
-<!ENTITY syntax SYSTEM "syntax.scm">
-]>
-<style-sheet>
-<style-specification>
-&syntax;
-</style-specification>
-</style-sheet>
-```
-
-**Changes:**
-- Add XML declaration `<?xml version="1.0"?>` (required for XML)
-- Use lowercase `style-sheet` DOCTYPE (proper DSSSL format)
-- Keep PUBLIC identifier (OpenJade needs DSSSL DTD reference)
-- Add `<style-sheet>` wrapper element
-- Nest `<style-specification>` inside (lowercase)
-- Keep entity references (both parsers support)
-
-**The `.scm` files remain unchanged!** Only the wrapper needs updating.
-
-### Project Structure
-
-```
-dazzle/
-├── crates/
-│   ├── dazzle-core/      # libxml2 + Steel integration
-│   ├── dazzle-template/  # Template engine, file writing
-│   └── dazzle-cli/       # Command-line interface
-├── examples/        # Example templates
-├── tests/           # Integration tests
-└── docs/            # Documentation
-```
+Add `<?xml version="1.0"?>` declaration, use lowercase element names (`<style-sheet>`, `<style-specification>`). The `.scm` files remain unchanged.
 
 ---
 
@@ -687,445 +524,70 @@ Templates write files directly:
 
 ## Implementation Notes
 
-### Scheme Features
+### Key Scheme Extensions for Dazzle
 
-**From R4RS (DSSSL base):**
-```scheme
-; Core language
-(define (factorial n)
-  (if (= n 0)
-      1
-      (* n (factorial (- n 1)))))
+**Steel provides**: R5RS Scheme (core language, lists, strings, numbers, predicates, block comments `#| ... |#`)
 
-; Lists
-(map (lambda (x) (* x 2)) '(1 2 3))  ; => (2 4 6)
+**Dazzle must add**:
+- `load` - Load .scm files (OpenJade extension)
+- `write-file`, `ensure-dir` - File I/O
+- `get-variable` - CLI variables
+- Grove navigation - `current-node`, `gi`, `children`, `attribute-string`, etc.
+- Processing - `process-children`, `literal`, `sosofo-append`, etc.
 
-; Strings
-(string-append "Hello" " " "World")  ; => "Hello World"
-```
+### DTD Validation
 
-**From R5RS (Steel provides):**
-```scheme
-; Line comments (R4RS)
-; This is a comment
+Automatic when `<!DOCTYPE>` present in XML. libxml2 loads and validates against DTD, reports errors before template runs.
 
-; Block comments (R5RS)
-#|
-Multi-line block comment
-Can nest: #| inner |#
-|#
+### Rust ↔ Steel Bridge
 
-; S-expression comments (R5RS)
-#; (this whole expression is ignored
-     (even if multi-line))
-```
-
-**Extensions needed for Dazzle:**
-```scheme
-; load - OpenJade extension (not DSSSL standard)
-(load "helpers.scm")
-
-; File I/O - Dazzle additions
-(write-file "Output.java" content)
-(ensure-dir "src/generated")
-
-; Variables from CLI
-(get-variable "package" "com.default")
-
-; XML navigation - Dazzle API
-(xml-get-attribute node "name")
-(xml-children node)
-(xml-select node "//rule")
-```
-
-### Template Pattern
-
-**Typical Dazzle template:**
-
-```scheme
-;; codegen.scm - Main template
-
-; Load utilities
-(load "lib/xml-helpers.scm")
-(load "lib/java-naming.scm")
-
-; Main generation function
-(define (generate-class node)
-  (let* ((name (xml-get-attribute node "name"))
-         (filename (string-append outdir "/" name ".java")))
-    (make entity system-id: filename
-      (make formatting-instruction (string-append
-        "package " package ";\n\n"
-        "public class " name " {\n"
-        "  // Generated code\n"
-        "}\n")))))
-
-### XML + DTD Handling
-
-**Automatic DTD validation:**
-
-```xml
-<?xml version="1.0"?>
-<!DOCTYPE grammar SYSTEM "grammar.dtd">
-<grammar>
-  <rule name="expression">
-    <!-- ... -->
-  </rule>
-</grammar>
-```
-
-When Dazzle parses this:
-1. libxml2 sees `<!DOCTYPE>`
-2. Loads `grammar.dtd` automatically
-3. Validates XML against DTD
-4. Reports errors if validation fails
-5. Only passes validated document to template
-
-**No flag needed - it just works!**
-
-### Bridge Functions (Rust ↔ Scheme)
-
-**What Rust must expose to Steel:**
-
-```rust
-// File I/O
-vm.register_fn("write-file", |path: String, content: String| {
-    std::fs::write(path, content)
-});
-
-vm.register_fn("ensure-dir", |path: String| {
-    std::fs::create_dir_all(path)
-});
-
-// CLI variables
-vm.register_fn("get-variable", |key: String, default: String| {
-    variables.get(&key).cloned().unwrap_or(default)
-});
-
-// XML navigation (simplified)
-vm.register_fn("xml-get-attribute", |node: Node, name: String| {
-    node.get_attribute(&name)
-});
-
-vm.register_fn("xml-children", |node: Node| {
-    node.children()
-});
-
-vm.register_fn("xml-select", |node: Node, xpath: String| {
-    node.select(&xpath)  // XPath queries
-});
-```
+Register Rust functions with Steel VM: file I/O (`write-file`, `ensure-dir`), CLI variables (`get-variable`), XML navigation (`xml-get-attribute`, `xml-children`, `xml-select` with XPath).
 
 ---
 
 ## Migration from OpenJade
 
-### File Organization
+**File changes**: Convert SGML → XML (one-time), pure `.scm` templates (no CDATA in wrapper), keep DTD unchanged.
 
-**Before (OpenJade):**
-```
-project/
-├── grammar.sgml        # SGML source
-├── grammar.dtd         # DTD
-└── codegen.dsl         # DSSSL spec (SGML format!)
-    <!DOCTYPE style-sheet ...>
-    <style-sheet>
-      <style-specification>
-        <![CDATA[
-        (define (foo) ...)  ; Scheme in CDATA
-        ]]>
-      </style-specification>
-    </style-sheet>
-```
+**Command**: `openjade -t sgml -d codegen.dsl grammar.sgml > Output.java` → `dazzle -d codegen.scm grammar.xml` (output controlled by template)
 
-**After (Dazzle):**
-```
-project/
-├── grammar.xml         # XML source (converted from SGML)
-├── grammar.dtd         # DTD (unchanged!)
-└── codegen.scm         # Pure Scheme template
-    ;; No SGML overhead!
-    (define (foo) ...)
-```
-
-### Command Migration
-
-**Before:**
-```bash
-openjade -t sgml -d codegen.dsl grammar.sgml > Output.java
-```
-
-**After:**
-```bash
-dazzle -d codegen.scm grammar.xml
-# Output.java written by template
-```
-
-### Benefits of Migration
-
-**Technical:**
-- ✅ No SGML escaping (`<` is just `<`, not `&lt;`)
-- ✅ No CDATA sections
-- ✅ Pure Scheme files (better editor support)
-- ✅ Block comments available (`#| ... |#`)
-- ✅ Cleaner, more maintainable code
-
-**Operational:**
-- ✅ Won't disappear from package managers
-- ✅ Modern tooling (Rust ecosystem)
-- ✅ Active maintenance
-- ✅ Cross-platform binaries
-- ✅ Better error messages
+**Benefits**: Modern tooling, won't disappear from repos, better editor support, cleaner code, cross-platform binaries.
 
 ---
 
 ## Implementation Roadmap
 
-### Overview
-
-**Total scope**: ~134 Rust functions to implement (~104 real + ~30 stubs) + integration code
-
-**Estimated timeline**: 3-6 months (solo, experienced Rust developer)
-
-**Key simplification**: User only uses `entity` + `formatting-instruction` flow objects for plain text code generation. No document formatting, colors, spacing, or page layout needed.
+**Total**: ~134 Rust functions (~104 real + ~30 stubs). **Timeline**: 3-6 months.
 
 ### Phase 1: Foundation (2-3 weeks)
+Cargo workspace (dazzle-core, dazzle-template, dazzle-cli). Deps: libxml, steel-core, clap. Implement ~30 critical primitives (grove basics, node lists, processing, file I/O). **MVP**: Simple templates work.
 
-**Goal**: Basic project structure + minimal viable product
-
-**Tasks:**
-1. Set up Cargo workspace with three crates:
-   - `dazzle-core`: libxml2 + Steel integration
-   - `dazzle-template`: Template engine, file I/O
-   - `dazzle-cli`: Command-line interface
-
-2. Dependencies:
-   ```toml
-   libxml = "0.3"                 # libxml2 bindings
-   steel-core = "0.5"             # Steel Scheme interpreter
-   clap = { version = "4", features = ["derive"] }
-   ```
-
-3. Implement **~30 critical primitives**:
-   - Grove basics: `current-node`, `gi`, `id`, `children`, `parent`, `attribute-string`, `data`
-   - Node lists: `node-list`, `node-list-empty?`, `node-list-first`, `node-list-rest`
-   - Processing: `process-children`, `literal`, `sosofo-append`, `empty-sosofo`
-   - Selection: `select-elements`, `element-with-id`
-
-4. Basic file I/O:
-   - `write-file`, `ensure-dir`
-   - `get-variable` (CLI variables)
-   - `load` (load .scm files)
-
-**Deliverable**: Can run simple templates that traverse XML and output text.
-
-### Phase 2: Complete Grove Support (3-4 weeks)
-
-**Goal**: Full XML navigation and querying
-
-**Tasks:**
-1. Implement **~50 grove primitives**:
-   - Tree navigation: `ancestor`, `descendants`, `follow`, `preced`, `attributes`
-   - Position predicates: `first-sibling?`, `last-sibling?`, `have-ancestor?`
-   - Numbering: `child-number`, `element-number`, `hierarchical-number`
-   - Entities: `entity-system-id`, `entity-public-id`, etc.
-   - Notations: `notation-system-id`, `notation-public-id`, etc.
-
-2. Pattern matching:
-   - `select-elements` with pattern support
-   - `match-element?` predicate
-   - Pattern parser
-
-3. Node list operations:
-   - `node-list-map`, `node-list-ref`, `node-list-reverse`, `node-list-length`
-   - Lazy evaluation where possible
-
-**Deliverable**: Full OpenJade grove query compatibility.
+### Phase 2: Complete Grove (3-4 weeks)
+~50 grove primitives (navigation, position, numbering, entities, notations). Pattern matching. Node list operations with lazy evaluation. **Complete OpenJade grove compatibility.**
 
 ### Phase 3: Processing & Sosofo (2-3 weeks)
+~20 processing primitives (`process-node-list`, `next-match`, etc.). Sosofo data structure. Formatting helpers (`format-number`, `format-number-list`). **Full code generation workflow.**
 
-**Goal**: Template processing control and output generation
+### Phase 4: DSSSL Types (1-2 days)
+~30 type primitives as **stubs** (quantities, colors, addresses, glyphs return dummy values). Implement properly only if templates use them.
 
-**Tasks:**
-1. Implement **~20 processing primitives**:
-   - `process-node-list`, `process-element-with-id`
-   - `process-matching-children`, `process-first-descendant`
-   - `next-match` (template rule chaining)
-   - `process-children-trim` (whitespace handling)
+### Phase 5: Extensions (1-2 weeks)
+~20 utility primitives (keywords, time, language, style, debug). Optional: `sgml-parse`, `read-entity`, page conditionals. **100% OpenJade compatibility.**
 
-2. Sosofo system:
-   - Sosofo data structure (concatenation of output fragments)
-   - `sosofo-append`, `sosofo-label`, `sosofo-discard-labeled`
-   - `literal` (text output)
+### Phase 6: CLI (1-2 weeks)
+Complete CLI (`-d`, `-V`, `-D`, `-t`). Template loading with search paths. libxml2 integration with automatic DTD validation. **Production CLI.**
 
-3. Formatting helpers:
-   - `format-number` (I, II, III, 1, 2, 3, a, b, c, etc.)
-   - `format-number-list` (1.2.3 hierarchical numbering)
+### Phase 7: Testing & Docs (2-4 weeks)
+Unit tests, integration tests, OpenJade comparison. Documentation (README, primitive reference, migration guide). Packaging (crates.io, binaries). **v1.0 release.**
 
-**Deliverable**: Complete code generation workflow working.
-
-### Phase 4: DSSSL Types (1-2 days) - **SIMPLIFIED**
-
-**Goal**: Stub implementations for DSSSL types (not needed for code generation)
-
-**User's use case**: Only `entity` + `formatting-instruction` flow objects → plain text output
-
-**Tasks:**
-1. Implement **~30 type primitives as STUBS**:
-   - Quantities: Return dummy values (not used for code generation)
-   - Colors: Return dummy values (not used for code generation)
-   - Addresses: Return dummy values (rarely used)
-   - Glyphs: Return dummy values (rarely used)
-   - Spacing: Return dummy values (not used for code generation)
-   - Character properties: Stub `char-script-case`, maybe implement `char-property`
-
-2. Stub implementation pattern:
-   ```rust
-   vm.register_fn("quantity?", |_obj| false);
-   vm.register_fn("color?", |_obj| false);
-   vm.register_fn("display-size", || vec![0, 0]);
-   // etc.
-   ```
-
-3. **Only implement properly if templates actually use them** (unlikely)
-
-**Deliverable**: All type primitives callable (return sensible defaults), templates don't error.
-
-### Phase 5: Extensions & Utilities (1-2 weeks)
-
-**Goal**: Remaining OpenJade primitives
-
-**Tasks:**
-1. Implement **~20 utility primitives**:
-   - Keywords: `keyword?`, `keyword->string`, `string->keyword`
-   - Time: `time`, `time->string`, `time<?`, etc.
-   - Language: `language?`, `current-language`, `with-language`
-   - Style: `style?`, `merge-style`
-   - Debug: `error`, `debug`
-   - Named node lists (if needed)
-
-2. Optional features:
-   - `sgml-parse` (parse nested documents)
-   - `read-entity` (read entity content)
-   - Page conditionals (if needed: `if-first-page`, `if-front-page`)
-
-**Deliverable**: 100% OpenJade primitive compatibility.
-
-### Phase 6: CLI & Integration (1-2 weeks)
-
-**Goal**: Complete CLI tool
-
-**Tasks:**
-1. Command-line interface:
-   - `-d template.scm` - Template file
-   - `-V key=value` - Variables (repeatable)
-   - `-D directory` - Search paths (repeatable)
-   - `-t xml` - Backend selection
-   - Input XML file(s)
-
-2. Template loading:
-   - Search path resolution
-   - `load` procedure integration
-   - Error reporting
-
-3. XML parsing:
-   - libxml2 integration
-   - DTD validation (automatic if `<!DOCTYPE>` present)
-   - Error reporting
-
-**Deliverable**: Complete CLI tool, OpenJade-compatible interface.
-
-### Phase 7: Testing & Documentation (2-4 weeks)
-
-**Goal**: Production-ready release
-
-**Tasks:**
-1. Testing:
-   - Unit tests for each primitive
-   - Integration tests with real templates
-   - Compare output with OpenJade
-   - Test with user's actual templates
-
-2. Documentation:
-   - README with quick start
-   - Primitive reference
-   - Migration guide (OpenJade → Dazzle)
-   - Template examples
-
-3. Packaging:
-   - Publish to crates.io
-   - GitHub releases with binaries
-   - Static musl builds for Linux
-   - macOS universal binaries
-
-**Deliverable**: v1.0 release.
-
-### Phase 8: Distribution (Ongoing, 1-6 months)
-
-**Goal**: Available in package managers
-
-**Tasks:**
-1. **Immediate** (Week 1-2):
-   - Publish to crates.io
-   - GitHub releases
-   - Documentation site
-
-2. **Short-term** (Month 1-2):
-   - Arch AUR package
-   - Homebrew tap (personal)
-   - MacPorts submission
-
-3. **Medium-term** (Month 3-6):
-   - Homebrew core
-   - MacPorts official
-   - Fedora package
-   - openSUSE package
-
-4. **Long-term** (6+ months):
-   - Debian package (slow process)
-   - Ubuntu PPA
+### Phase 8: Distribution (Ongoing)
+**Immediate**: crates.io, GitHub releases. **Short-term**: Arch AUR, Homebrew tap, MacPorts. **Medium-term**: Official repos (Homebrew core, Fedora, openSUSE). **Long-term**: Debian/Ubuntu.
 
 ### Testing Strategy
-
-**Test pyramid:**
-```
-Production Tests (user's actual templates)
-        ↑
-Integration Tests (synthetic templates)
-        ↑
-    Primitive Tests (unit tests)
-        ↑
-    Type Tests (Rust ↔ Steel conversions)
-```
-
-**Compatibility testing:**
-1. Convert user's SGML → XML (one-time: `opensp -x`)
-2. Run both OpenJade and Dazzle on same XML
-3. Compare outputs
-4. Fix discrepancies
-5. Add regression test
+Test pyramid: Rust↔Steel types → Primitive units → Integration tests → Production (user templates). Compare Dazzle vs OpenJade output on identical XML.
 
 ### Success Criteria
-
-**Phase completion checklist:**
-
-- [ ] Phase 1: Can generate simple code from XML
-- [ ] Phase 2: Full XML navigation works
-- [ ] Phase 3: Complex templates with processing control work
-- [ ] Phase 4: DSSSL types all functional
-- [ ] Phase 5: All 224 primitives implemented
-- [ ] Phase 6: CLI matches OpenJade interface
-- [ ] Phase 7: User's templates work identically to OpenJade
-- [ ] Phase 8: Available in at least 2 package managers
-
-**v1.0 Release criteria:**
-1. ✅ All 224 primitives working
-2. ✅ User's actual templates generate identical output to OpenJade
-3. ✅ DTD validation working
-4. ✅ CLI compatible with OpenJade
-5. ✅ Documentation complete
-6. ✅ Published to crates.io
-7. ✅ Binaries for macOS, Linux, Windows
+**v1.0**: All 224 primitives, identical output to OpenJade, DTD validation, CLI compatible, complete docs, published to crates.io, cross-platform binaries.
 
 ---
 
@@ -1163,170 +625,26 @@ Integration Tests (synthetic templates)
 
 ## Design Decisions Summary
 
-**Language Decisions:**
-- **Rust** (not C++) - Maintainability, safety, modern tooling, active ecosystem
-- **Steel Scheme** (not scheme-rs, not port OpenJade interpreter) - Proven, R5RS-compliant, designed for embedding, actively maintained
-- **libxml2** (not pure Rust, not OpenSP) - Only mature option for DTD validation, industry standard
-
-**Scope Decisions:**
-- **Code generation only** (not document formatting)
-  - Implement SGML backend concept (text output)
-  - No RTF, TeX, MIF, HTML backends
-  - No flow objects for pagination
-- **XML only** (not SGML input)
-  - Use libxml2 for parsing
-  - Keep DTD validation
-  - One-time SGML → XML conversion acceptable
-- **Pure .scm templates** (not SGML-wrapped `<style-specification>`)
-  - R5RS Scheme files with block comments
-  - No CDATA sections needed
-  - Better editor support
-
-**Primitive Decisions:**
-- **All 224 OpenJade primitives** for full compatibility
-- **~90 from R5RS** via Steel (lists, strings, math, etc.)
-- **~134 custom implementations** (grove queries, processing, DSSSL types)
-- **Priority**: Grove navigation > Processing > Types > Utilities
-
-**CLI Decisions:**
-- **Drop `-o` flag** - Template controls output via `write-file`
-- **Keep `-d`, `-V`, `-D`** - OpenJade compatible interface
-- **Automatic DTD validation** - No flag needed, triggered by `<!DOCTYPE>`
-- **Search paths** - Current dir, `-D` dirs, system dirs
-
-**Distribution Decisions:**
-- **crates.io first** - Fast, foundational, developer audience
-- **AUR + Homebrew tap** - Quick adoption, early feedback
-- **MacPorts priority** - Stability, won't drop packages easily
-- **Official repos later** - Once proven (Homebrew core, Fedora, Debian)
-
-**Implementation Decisions:**
-- **Use Steel, not port interpreter** - 3-4 months saved, R5RS compliance
-- **Implement primitives as Rust functions** - Type safety, performance
-- **libxml2 FFI** - Battle-tested, not reinvent parser
-- **Phased development** - MVP first, then expand
-- **Test against user's templates** - Real-world validation
+**Stack**: Rust (host), Steel Scheme (templates), libxml2 (XML/DTD). **Scope**: Code generation only (no document formatting). **Primitives**: All 224 OpenJade (90 from Steel R5RS, 134 custom). **CLI**: OpenJade-compatible (`-d`, `-V`, `-D`), template controls output (no `-o`), auto DTD validation. **Distribution**: crates.io first, then AUR/Homebrew/MacPorts, official repos later. **Implementation**: Use Steel (not port), primitives as Rust functions, phased development, real-world validation.
 
 ---
 
-## Success Metrics
+## Success Metrics & Future
 
-**Project succeeds if:**
+**Success**: Drop-in OpenJade replacement, 224 primitives identical, available in MacPorts/Homebrew, maintainable Rust codebase.
 
-1. ✅ **Drop-in replacement** - User can replace OpenJade with Dazzle for their existing templates
-2. ✅ **Full compatibility** - All 224 OpenJade primitives work identically
-3. ✅ **Output identical** - Templates generate same code as OpenJade
-4. ✅ **Available in package managers** - MacPorts + Homebrew minimum (won't disappear)
-5. ✅ **Build from source anywhere** - Pure Rust + libxml2 (standard dependency)
-6. ✅ **Easier to maintain** - Modern codebase, good documentation
-7. ✅ **Community can contribute** - Rust vs C++, clear architecture
+**Bonus**: REPL mode, watch mode, template debugger, S-expression input, JSON output, template libraries.
 
-**Bonus success:**
-- **Others adopt Dazzle** - Beyond original use case
-- **Template libraries** - Shared, reusable code generators
-- **Extended features** - REPL mode, watch mode, template debugger
-- **Multiple backends** - S-expression input, JSON output, etc.
+**Project Status**: In development | **License**: MIT
 
 ---
 
-## Future Possibilities
+## Quick Reference
 
-**Not in scope for v1.0, but possible later:**
+**OpenJade Analysis**: 72K lines C++ (224 primitives in `style/primitive.h`, 2,824-line SGML backend). OpenSP separate (100-150K lines) → replaced with libxml2.
 
-- **S-expression input**: Alternative to XML
-- **More Scheme implementations**: Make backend pluggable
-- **Pure Rust DTD**: If libxml2 becomes problematic
-- **Template library**: Reusable code generators
-- **REPL mode**: Interactive template development
-- **Watch mode**: Auto-regenerate on file changes
-- **Language bindings**: Call Dazzle from other languages
+**Implementation**: Hybrid approach - Steel provides R5RS (90 primitives), Dazzle implements 134 DSSSL primitives as Rust functions (grove queries, processing, types as stubs, utilities).
 
----
+**Timeline**: 3-6 months. **MVP**: 6-8 weeks (Phases 1-3). **Near-complete**: 10-12 weeks (Phases 1-6).
 
-## Contact & Contributing
-
-**Project Status**: In development
-**Target**: v1.0 release when feature-complete
-**License**: MIT
-
----
-
-## Analysis Summary (Updated 2025-01-16)
-
-### Key Findings from OpenJade Analysis
-
-1. **OpenJade codebase**: ~72,000 lines C++ (not including OpenSP)
-2. **OpenSP dependency**: Separate project, ~100-150K lines (not needed - use libxml2)
-3. **Total primitives**: 224 Scheme functions
-   - 90 from R5RS (Steel provides)
-   - 134 DSSSL-specific (Dazzle must implement)
-4. **SGML backend**: 2,824 lines (core feature to preserve)
-5. **Critical files**:
-   - `style/primitive.h` - All 224 primitives defined
-   - `style/primitive.cxx` - 5,704 lines of implementations
-   - `jade/SgmlFOTBuilder.cxx` - 2,824 lines backend logic
-
-### Implementation Strategy
-
-**Chosen approach**: Hybrid (reimplementation with Steel)
-
-**What we use:**
-- ✅ Steel Scheme (R5RS interpreter) - ~90 primitives free
-- ✅ libxml2 (XML + DTD validation) - battle-tested
-- ✅ Pure Rust (modern, safe, maintainable)
-
-**What we implement:**
-- ✅ ~134 DSSSL primitives as Rust functions
-- ✅ Grove query engine (XML navigation)
-- ✅ Processing control (sosofo, template rules)
-- ✅ DSSSL types (quantities, colors, addresses, glyphs)
-- ✅ File I/O and CLI integration
-
-**What we drop:**
-- ❌ OpenSP parser (use libxml2 instead)
-- ❌ OpenJade interpreter (use Steel instead)
-- ❌ Other backends (RTF, TeX, MIF, HTML)
-- ❌ SGML-wrapped templates (pure .scm files)
-- ❌ Document formatting features
-
-### Effort Estimate
-
-**Timeline**: 3-6 months (solo, experienced Rust developer)
-
-**Breakdown**:
-- Foundation: 2-3 weeks
-- Grove support: 3-4 weeks
-- Processing & Sosofo: 2-3 weeks
-- DSSSL types: **1-2 days** (stubs only - major time saver!)
-- Extensions: 1-2 weeks
-- CLI integration: 1-2 weeks
-- Testing & docs: 2-4 weeks
-- Distribution: Ongoing (1-6 months)
-
-**Key milestone**: MVP in ~6-8 weeks (Phases 1-3)
-**Near-complete**: ~10-12 weeks (Phases 1-6)
-
-### Risk Mitigation
-
-**Low risks**:
-- Steel Scheme integration - well-documented, designed for embedding
-- libxml2 FFI - stable, widely used
-- Primitive implementation - straightforward Rust functions
-
-**Medium risks**:
-- Pattern matching complexity - requires parser
-- Node list lazy evaluation - performance critical
-- Template rule chaining (`next-match`) - requires careful design
-
-**Mitigation**:
-- Start with user's actual templates (real-world validation)
-- Compare output with OpenJade at each phase
-- Build test suite from day one
-
-### Next Steps
-
-1. **Phase 1 start**: Set up Cargo workspace
-2. **Implement MVP**: ~30 critical primitives
-3. **Test with simple template**: Validate approach
-4. **Iterate**: Add primitives based on user needs
-5. **Full compatibility**: All 224 primitives working
+**Risks**: Low (Steel/libxml2 proven). Medium (pattern matching, lazy evaluation, `next-match` chaining). **Mitigation**: Real-world templates, OpenJade comparison, tests from day one.

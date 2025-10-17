@@ -19,6 +19,40 @@ pub struct SchemeEngine {
 /// Prelude code that defines helper functions
 const PRELUDE: &str = r#"
 ;; ============================================================================
+;; OpenJade Compatibility: string operations that handle #f
+;; MUST be first, before any code that uses these functions
+;; ============================================================================
+
+;; OpenJade's string-append converts #f and #<void> to "" automatically
+;; Steel's string-append throws type error on non-strings
+;; Use binary Rust function recursively
+(define (string-append . args)
+    (define (append-helper lst)
+        (if (null? lst)
+            ""
+            (let ((arg (car lst))
+                  (rest (cdr lst)))
+                (builtin-string-append-two
+                    (if (string? arg) arg "")
+                    (append-helper rest)))))
+    (append-helper args))
+
+;; OpenJade's string=? handles #f gracefully (returns #f if either arg is #f)
+;; Steel's string=? throws type error on #f
+(define (string=? s1 s2)
+    (if (and (string? s1) (string? s2))
+        (equal? s1 s2)  ;; Use equal? for actual string comparison
+        #f))
+
+;; OpenJade's string->list handles #f gracefully (returns empty list)
+;; Steel's string->list throws type error on #f
+;; Use Rust primitive to avoid circular reference
+(define (string->list s)
+    (if (string? s)
+        (builtin-string->list s)
+        '()))
+
+;; ============================================================================
 ;; DSSSL Compatibility Stubs
 ;; ============================================================================
 
@@ -109,10 +143,10 @@ const PRELUDE: &str = r#"
 ;; DSSSL: (attribute-string "name") uses current-node
 ;; DSSSL: (attribute-string "name" node) uses given node
 ;; DSSSL: (attribute-string "name" node "default") returns default if not found
-;; Returns #f if attribute doesn't exist (DSSSL standard)
+;; Returns #f if attribute doesn't exist (DSSSL/OpenJade standard)
 (define attribute-string
   (case-lambda
-    ((name) (grove-attribute-string-impl name (current-node)))
+    ((name) (attribute-string name (current-node)))
     ((name node) (grove-attribute-string-impl name node))
     ((name node default)
       (let ((val (grove-attribute-string-impl name node)))
@@ -427,9 +461,7 @@ impl SchemeEngine {
         };
 
         // Register all DSSSL primitives
-        primitives::grove::register_grove_primitives(&mut scheme_engine)?;
-        primitives::processing::register_processing_primitives(&mut scheme_engine)?;
-        primitives::util::register_util_primitives(&mut scheme_engine)?;
+        primitives::register_all_primitives(&mut scheme_engine)?;
 
         // Load prelude (defines *current-grove-internal*, etc. and helper functions)
         scheme_engine.engine
@@ -524,6 +556,21 @@ impl SchemeEngine {
         self.engine
             .compile_and_run_raw_program(scheme_code)
             .map_err(|e| anyhow::anyhow!("Scheme error in {}: {:?}", file_path.display(), e))?;
+
+        // Inject compatibility layer AFTER template loads to override helpers.scm
+        // Override type to handle "colon" type (template doesn't have it in case statement)
+        const COMPAT_LAYER: &str = r#"
+(define (type node)
+    (let* ((link-attr (attribute-string "link" node))
+           (t (if link-attr
+                  (gi (element-with-id link-attr))
+                  (attribute-string "type" node))))
+        ;; Map colon to punctuation (template doesn't handle colon type)
+        (if (string=? t "colon") "punctuation" t)))
+"#;
+        self.engine
+            .compile_and_run_raw_program(COMPAT_LAYER.to_string())
+            .map_err(|e| anyhow::anyhow!("Failed to inject compatibility layer: {:?}", e))?;
 
         Ok(())
     }
