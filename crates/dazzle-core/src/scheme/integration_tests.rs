@@ -488,4 +488,124 @@ mod tests {
         let result = eval_string(code);
         assert!(result.is_string());
     }
+
+    // =========================================================================
+    // Lambda and closures
+    // =========================================================================
+
+    #[test]
+    fn test_eval_lambda_simple() {
+        // Simple identity function
+        let code = "((lambda (x) x) 42)";
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(42)));
+    }
+
+    #[test]
+    fn test_eval_lambda_with_operations() {
+        // Lambda that uses primitives
+        let code = "((lambda (x y) (+ x y)) 10 20)";
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(30)));
+    }
+
+    #[test]
+    fn test_eval_lambda_closure() {
+        // Lambda captures outer variable
+        let code = r#"
+            (let ((x 10))
+              ((lambda (y) (+ x y)) 20))
+        "#;
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(30)));
+    }
+
+    #[test]
+    fn test_eval_define_function_shorthand() {
+        // Define function using shorthand syntax
+        let code = r#"
+            (begin
+              (define (add x y) (+ x y))
+              (add 5 7))
+        "#;
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(12)));
+    }
+
+    #[test]
+    fn test_eval_lambda_nested_closures() {
+        // Lambda returning lambda (currying)
+        let code = r#"
+            (let ((make-adder (lambda (x) (lambda (y) (+ x y)))))
+              (let ((add5 (make-adder 5)))
+                (add5 10)))
+        "#;
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(15)));
+    }
+
+    #[test]
+    fn test_eval_lambda_with_list_operations() {
+        // Lambda with list operations
+        let code = "((lambda (lst) (car (cdr lst))) '(1 2 3))";
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(2)));
+    }
+
+    #[test]
+    fn test_eval_lambda_multiple_body_expressions() {
+        // Lambda with multiple body expressions
+        let code = r#"
+            ((lambda (x)
+               (+ x 1)
+               (+ x 2)
+               (+ x 3))
+             10)
+        "#;
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(13))); // Only last expression returned
+    }
+
+    #[test]
+    fn test_eval_higher_order_function() {
+        // Simple higher-order function usage
+        let code = r#"
+            (begin
+              (define (apply-twice f x)
+                (f (f x)))
+              (define (inc x) (+ x 1))
+              (apply-twice inc 10))
+        "#;
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(12)));
+    }
+
+    #[test]
+    fn test_eval_lambda_with_conditionals() {
+        // Lambda with if expression
+        let code = r#"
+            ((lambda (x)
+               (if (< x 10)
+                   "small"
+                   "large"))
+             5)
+        "#;
+        let result = eval_string(code);
+        assert!(result.is_string());
+    }
+
+    #[test]
+    fn test_eval_recursive_function() {
+        // Simple recursive function
+        let code = r#"
+            (begin
+              (define (factorial n)
+                (if (<= n 1)
+                    1
+                    (* n (factorial (- n 1)))))
+              (factorial 5))
+        "#;
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(120)));
+    }
 }

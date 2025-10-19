@@ -174,9 +174,14 @@ pub enum Procedure {
 
     /// User-defined lambda
     ///
-    /// Will be implemented when we add the evaluator.
+    /// Captures:
+    /// - `params`: Parameter names (formal parameters)
+    /// - `body`: Expression to evaluate when called
+    /// - `env`: Closure environment (captures lexical scope)
     Lambda {
-        // TODO: Add lambda representation (params, body, closure)
+        params: Gc<Vec<String>>,
+        body: Gc<Value>,
+        env: Gc<crate::scheme::environment::Environment>,
     },
 }
 
@@ -187,33 +192,54 @@ impl Clone for Procedure {
                 name,
                 func: *func,
             },
-            Procedure::Lambda { .. } => {
-                // TODO: Implement lambda cloning
-                panic!("Lambda cloning not yet implemented")
-            }
+            Procedure::Lambda { params, body, env } => Procedure::Lambda {
+                params: params.clone(),
+                body: body.clone(),
+                env: env.clone(),
+            },
         }
     }
 }
 
 // Manual Trace implementation since function pointers don't need tracing
 unsafe impl gc::Trace for Procedure {
-    // Function pointers don't contain heap-allocated data,
-    // so there's nothing to trace
     unsafe fn trace(&self) {
-        // No-op: primitives don't have GC'd data
-        // TODO: When we add Lambda, we'll need to trace its closure
+        match self {
+            Procedure::Primitive { .. } => {
+                // Primitives don't have GC'd data
+            }
+            Procedure::Lambda { params, body, env } => {
+                // Trace the lambda's garbage-collected fields
+                params.trace();
+                body.trace();
+                env.trace();
+            }
+        }
     }
 
     unsafe fn root(&self) {
-        // No-op for now
+        match self {
+            Procedure::Primitive { .. } => {}
+            Procedure::Lambda { params, body, env } => {
+                params.root();
+                body.root();
+                env.root();
+            }
+        }
     }
 
     unsafe fn unroot(&self) {
-        // No-op for now
+        match self {
+            Procedure::Primitive { .. } => {}
+            Procedure::Lambda { params, body, env } => {
+                params.unroot();
+                body.unroot();
+                env.unroot();
+            }
+        }
     }
 
     fn finalize_glue(&self) {
-        // No finalization needed for function pointers
         gc::Finalize::finalize(self);
     }
 }
@@ -271,6 +297,19 @@ impl Value {
     /// Create a built-in primitive procedure
     pub fn primitive(name: &'static str, func: fn(&[Value]) -> Result<Value, String>) -> Self {
         Value::Procedure(Gc::new(Procedure::Primitive { name, func }))
+    }
+
+    /// Create a user-defined lambda procedure
+    pub fn lambda(
+        params: Vec<String>,
+        body: Value,
+        env: Gc<crate::scheme::environment::Environment>,
+    ) -> Self {
+        Value::Procedure(Gc::new(Procedure::Lambda {
+            params: Gc::new(params),
+            body: Gc::new(body),
+            env,
+        }))
     }
 }
 

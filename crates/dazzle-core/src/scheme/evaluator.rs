@@ -294,9 +294,51 @@ impl Evaluator {
     }
 
     /// (lambda (params...) body...)
-    fn eval_lambda(&mut self, _args: Value, _env: Gc<Environment>) -> EvalResult {
-        // TODO: Implement lambda (needs closure representation)
-        Err(EvalError::new("lambda not yet implemented".to_string()))
+    fn eval_lambda(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+        if args_vec.len() < 2 {
+            return Err(EvalError::new(
+                "lambda requires at least 2 arguments (params and body)".to_string(),
+            ));
+        }
+
+        // Extract parameter list
+        let params_list = &args_vec[0];
+        let params_vec = if params_list.is_nil() {
+            // No parameters: (lambda () body)
+            Vec::new()
+        } else {
+            self.list_to_vec(params_list.clone())?
+        };
+
+        // Convert parameter values to strings
+        let mut param_names = Vec::new();
+        for param in params_vec {
+            if let Value::Symbol(ref name) = param {
+                param_names.push(name.to_string());
+            } else {
+                return Err(EvalError::new(format!(
+                    "Lambda parameter must be a symbol, got: {:?}",
+                    param
+                )));
+            }
+        }
+
+        // Extract body (one or more expressions)
+        let body = if args_vec.len() == 2 {
+            // Single body expression
+            args_vec[1].clone()
+        } else {
+            // Multiple body expressions - wrap in (begin ...)
+            let mut body_list = Value::Nil;
+            for expr in args_vec[1..].iter().rev() {
+                body_list = Value::cons(expr.clone(), body_list);
+            }
+            Value::cons(Value::symbol("begin"), body_list)
+        };
+
+        // Create lambda closure capturing current environment
+        Ok(Value::lambda(param_names, body, env))
     }
 
     /// (let ((var val)...) body...)
@@ -507,9 +549,26 @@ impl Evaluator {
                 Procedure::Primitive { func, .. } => {
                     func(&args).map_err(|e| EvalError::new(e))
                 }
-                Procedure::Lambda { .. } => {
-                    // TODO: Implement lambda application
-                    Err(EvalError::new("Lambda application not yet implemented".to_string()))
+                Procedure::Lambda { params, body, env } => {
+                    // Check argument count
+                    if args.len() != params.len() {
+                        return Err(EvalError::new(format!(
+                            "Lambda expects {} arguments, got {}",
+                            params.len(),
+                            args.len()
+                        )));
+                    }
+
+                    // Create new environment extending the closure environment
+                    let lambda_env = Environment::extend(env.clone());
+
+                    // Bind parameters to arguments
+                    for (param_name, arg_value) in params.iter().zip(args.iter()) {
+                        lambda_env.define(param_name, arg_value.clone());
+                    }
+
+                    // Evaluate body in the new environment
+                    self.eval((**body).clone(), lambda_env)
                 }
             }
         } else {
@@ -695,5 +754,173 @@ mod tests {
 
         let result = eval.eval(expr, env).unwrap();
         assert!(!result.is_true());
+    }
+
+    #[test]
+    fn test_eval_lambda_creation() {
+        let mut eval = Evaluator::new();
+        let env = make_env();
+
+        // (lambda (x) x)
+        let expr = Value::cons(
+            Value::symbol("lambda"),
+            Value::cons(
+                Value::cons(Value::symbol("x"), Value::Nil),
+                Value::cons(Value::symbol("x"), Value::Nil),
+            ),
+        );
+
+        let result = eval.eval(expr, env).unwrap();
+        assert!(result.is_procedure());
+    }
+
+    #[test]
+    fn test_eval_lambda_application() {
+        let mut eval = Evaluator::new();
+        let env = make_env();
+
+        // ((lambda (x) x) 42)
+        let lambda_expr = Value::cons(
+            Value::symbol("lambda"),
+            Value::cons(
+                Value::cons(Value::symbol("x"), Value::Nil),
+                Value::cons(Value::symbol("x"), Value::Nil),
+            ),
+        );
+
+        let app_expr = Value::cons(lambda_expr, Value::cons(Value::integer(42), Value::Nil));
+
+        let result = eval.eval(app_expr, env).unwrap();
+        if let Value::Integer(n) = result {
+            assert_eq!(n, 42);
+        } else {
+            panic!("Expected integer 42");
+        }
+    }
+
+    #[test]
+    fn test_eval_lambda_multiple_params() {
+        let mut eval = Evaluator::new();
+        let env = make_env();
+
+        // ((lambda (x y) x) 1 2) - Just return first param
+        let params = Value::cons(Value::symbol("x"), Value::cons(Value::symbol("y"), Value::Nil));
+        let body = Value::symbol("x");
+
+        let lambda_expr = Value::cons(Value::symbol("lambda"), Value::cons(params, Value::cons(body, Value::Nil)));
+
+        let app_expr = Value::cons(
+            lambda_expr,
+            Value::cons(Value::integer(1), Value::cons(Value::integer(2), Value::Nil)),
+        );
+
+        let result = eval.eval(app_expr, env).unwrap();
+        if let Value::Integer(n) = result {
+            assert_eq!(n, 1);
+        } else {
+            panic!("Expected integer 1");
+        }
+    }
+
+    #[test]
+    fn test_eval_lambda_wrong_arg_count() {
+        let mut eval = Evaluator::new();
+        let env = make_env();
+
+        // ((lambda (x) x) 1 2) - wrong argument count
+        let lambda_expr = Value::cons(
+            Value::symbol("lambda"),
+            Value::cons(
+                Value::cons(Value::symbol("x"), Value::Nil),
+                Value::cons(Value::symbol("x"), Value::Nil),
+            ),
+        );
+
+        let app_expr = Value::cons(
+            lambda_expr,
+            Value::cons(Value::integer(1), Value::cons(Value::integer(2), Value::Nil)),
+        );
+
+        let result = eval.eval(app_expr, env);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_eval_lambda_closure() {
+        let mut eval = Evaluator::new();
+        let env = make_env();
+
+        // (define x 10)
+        env.define("x", Value::integer(10));
+
+        // ((lambda (y) x) 20)
+        // Should capture x from outer environment and ignore y
+        let lambda_expr = Value::cons(
+            Value::symbol("lambda"),
+            Value::cons(
+                Value::cons(Value::symbol("y"), Value::Nil),
+                Value::cons(Value::symbol("x"), Value::Nil),
+            ),
+        );
+
+        let app_expr = Value::cons(lambda_expr, Value::cons(Value::integer(20), Value::Nil));
+
+        let result = eval.eval(app_expr, env).unwrap();
+        if let Value::Integer(n) = result {
+            assert_eq!(n, 10); // Should get x from outer environment
+        } else {
+            panic!("Expected integer 10 from closure");
+        }
+    }
+
+    #[test]
+    fn test_eval_lambda_no_params() {
+        let mut eval = Evaluator::new();
+        let env = make_env();
+
+        // ((lambda () 42))
+        let lambda_expr = Value::cons(
+            Value::symbol("lambda"),
+            Value::cons(Value::Nil, Value::cons(Value::integer(42), Value::Nil)),
+        );
+
+        let app_expr = Value::cons(lambda_expr, Value::Nil);
+
+        let result = eval.eval(app_expr, env).unwrap();
+        if let Value::Integer(n) = result {
+            assert_eq!(n, 42);
+        } else {
+            panic!("Expected integer 42");
+        }
+    }
+
+    #[test]
+    fn test_eval_lambda_multiple_body_expressions() {
+        let mut eval = Evaluator::new();
+        let env = make_env();
+
+        // ((lambda (x) 1 2 x) 99)
+        // Should return x (last expression)
+        let params = Value::cons(Value::symbol("x"), Value::Nil);
+        let body1 = Value::integer(1);
+        let body2 = Value::integer(2);
+        let body3 = Value::symbol("x");
+
+        let lambda_expr = Value::cons(
+            Value::symbol("lambda"),
+            Value::cons(
+                params,
+                Value::cons(body1, Value::cons(body2, Value::cons(body3, Value::Nil))),
+            ),
+        );
+
+        let app_expr = Value::cons(lambda_expr, Value::cons(Value::integer(99), Value::Nil));
+
+        let result = eval.eval(app_expr, env).unwrap();
+        if let Value::Integer(n) = result {
+            assert_eq!(n, 99);
+        } else {
+            panic!("Expected integer 99");
+        }
     }
 }
