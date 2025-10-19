@@ -30,6 +30,8 @@ mod tests {
         primitives::register_io_primitives(&env);
         primitives::register_conversion_primitives(&env);
         primitives::register_keyword_primitives(&env);
+        primitives::register_dsssl_type_primitives(&env);
+        primitives::register_format_primitives(&env);
 
         // Eval
         let mut evaluator = Evaluator::new();

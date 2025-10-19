@@ -2036,6 +2036,301 @@ pub fn prim_assoc(args: &[Value]) -> PrimitiveResult {
 }
 
 // =============================================================================
+// DSSSL Type Stub Primitives (Document Formatting - Not Needed for Code Gen)
+// =============================================================================
+//
+// These primitives are part of DSSSL but are primarily used for document
+// formatting (print/screen output). For code generation templates, they're
+// not typically needed, so we implement them as stubs that return dummy values.
+//
+// If a template actually uses these, they can be properly implemented later.
+
+/// (quantity? obj) → boolean
+///
+/// Returns #t if obj is a quantity (length/dimension), otherwise #f.
+///
+/// **DSSSL**: Type predicate (stub - quantities not implemented)
+pub fn prim_quantity_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("quantity? requires exactly 1 argument".to_string());
+    }
+    // Quantities not implemented - always return #f
+    Ok(Value::bool(false))
+}
+
+/// (color? obj) → boolean
+///
+/// Returns #t if obj is a color, otherwise #f.
+///
+/// **DSSSL**: Type predicate (stub - colors not implemented)
+pub fn prim_color_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("color? requires exactly 1 argument".to_string());
+    }
+    // Colors not implemented - always return #f
+    Ok(Value::bool(false))
+}
+
+/// (address? obj) → boolean
+///
+/// Returns #t if obj is an address, otherwise #f.
+///
+/// **DSSSL**: Type predicate (stub - addresses not implemented)
+pub fn prim_address_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("address? requires exactly 1 argument".to_string());
+    }
+    // Addresses not implemented - always return #f
+    Ok(Value::bool(false))
+}
+
+// =============================================================================
+// Additional Utility Primitives
+// =============================================================================
+
+/// (cadr list) → value
+///
+/// Equivalent to (car (cdr list)). Returns the second element of a list.
+///
+/// **R4RS**: Library procedure
+pub fn prim_cadr(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("cadr requires exactly 1 argument".to_string());
+    }
+
+    // Get cdr
+    let cdr = prim_cdr(args)?;
+    // Get car of result
+    prim_car(&[cdr])
+}
+
+/// (caddr list) → value
+///
+/// Equivalent to (car (cdr (cdr list))). Returns the third element of a list.
+///
+/// **R4RS**: Library procedure
+pub fn prim_caddr(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("caddr requires exactly 1 argument".to_string());
+    }
+
+    // Get cdr twice
+    let cdr1 = prim_cdr(args)?;
+    let cdr2 = prim_cdr(&[cdr1])?;
+    // Get car of result
+    prim_car(&[cdr2])
+}
+
+/// (cadddr list) → value
+///
+/// Equivalent to (car (cdr (cdr (cdr list)))). Returns the fourth element.
+///
+/// **R4RS**: Library procedure
+pub fn prim_cadddr(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("cadddr requires exactly 1 argument".to_string());
+    }
+
+    // Get cdr three times
+    let cdr1 = prim_cdr(args)?;
+    let cdr2 = prim_cdr(&[cdr1])?;
+    let cdr3 = prim_cdr(&[cdr2])?;
+    // Get car of result
+    prim_car(&[cdr3])
+}
+
+/// (caar list) → value
+///
+/// Equivalent to (car (car list)).
+///
+/// **R4RS**: Library procedure
+pub fn prim_caar(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("caar requires exactly 1 argument".to_string());
+    }
+
+    let car = prim_car(args)?;
+    prim_car(&[car])
+}
+
+/// (cddr list) → value
+///
+/// Equivalent to (cdr (cdr list)).
+///
+/// **R4RS**: Library procedure
+pub fn prim_cddr(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("cddr requires exactly 1 argument".to_string());
+    }
+
+    let cdr1 = prim_cdr(args)?;
+    prim_cdr(&[cdr1])
+}
+
+/// (zero? n) → boolean (alias check)
+///
+/// Returns #t if n is zero. Already implemented, but commonly used.
+///
+/// This is already in number primitives, just documenting it here.
+
+/// (null? obj) → boolean (alias check)
+///
+/// Returns #t if obj is the empty list. Already implemented.
+///
+/// This is already in list primitives, just documenting it here.
+
+// =============================================================================
+// Format/Number Formatting Primitives (DSSSL)
+// =============================================================================
+
+/// (format-number n format) → string
+///
+/// Formats a number according to format string.
+/// Simplified implementation for basic number formatting.
+///
+/// **DSSSL**: Processing primitive
+pub fn prim_format_number(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("format-number requires exactly 2 arguments".to_string());
+    }
+
+    let n = match &args[0] {
+        Value::Integer(i) => *i,
+        Value::Real(r) => *r as i64,
+        _ => return Err(format!("format-number: not a number: {:?}", args[0])),
+    };
+
+    let format = match &args[1] {
+        Value::String(s) => s.as_str(),
+        Value::Symbol(s) => s.as_ref(),
+        _ => return Err(format!("format-number: invalid format: {:?}", args[1])),
+    };
+
+    // Simple format implementation
+    let result = match format {
+        "1" | "decimal" => n.to_string(),
+        "I" | "roman-upper" => {
+            // Simple Roman numeral conversion (up to 20 for simplicity)
+            let roman_str = match n {
+                1 => "I",
+                2 => "II",
+                3 => "III",
+                4 => "IV",
+                5 => "V",
+                6 => "VI",
+                7 => "VII",
+                8 => "VIII",
+                9 => "IX",
+                10 => "X",
+                11 => "XI",
+                12 => "XII",
+                13 => "XIII",
+                14 => "XIV",
+                15 => "XV",
+                16 => "XVI",
+                17 => "XVII",
+                18 => "XVIII",
+                19 => "XIX",
+                20 => "XX",
+                _ => return Ok(Value::string(n.to_string())),
+            };
+            roman_str.to_string()
+        }
+        "i" | "roman-lower" => {
+            let roman_str = match n {
+                1 => "i",
+                2 => "ii",
+                3 => "iii",
+                4 => "iv",
+                5 => "v",
+                6 => "vi",
+                7 => "vii",
+                8 => "viii",
+                9 => "ix",
+                10 => "x",
+                11 => "xi",
+                12 => "xii",
+                13 => "xiii",
+                14 => "xiv",
+                15 => "xv",
+                16 => "xvi",
+                17 => "xvii",
+                18 => "xviii",
+                19 => "xix",
+                20 => "xx",
+                _ => return Ok(Value::string(n.to_string())),
+            };
+            roman_str.to_string()
+        }
+        "a" | "alpha-lower" => {
+            // Convert to lowercase letter (1=a, 2=b, etc.)
+            if n >= 1 && n <= 26 {
+                ((b'a' + (n as u8 - 1)) as char).to_string()
+            } else {
+                n.to_string()
+            }
+        }
+        "A" | "alpha-upper" => {
+            // Convert to uppercase letter (1=A, 2=B, etc.)
+            if n >= 1 && n <= 26 {
+                ((b'A' + (n as u8 - 1)) as char).to_string()
+            } else {
+                n.to_string()
+            }
+        }
+        _ => n.to_string(), // Default to decimal
+    };
+
+    Ok(Value::string(result))
+}
+
+/// (format-number-list numlist format) → string
+///
+/// Formats a list of numbers as a compound number (e.g., "1.2.3").
+///
+/// **DSSSL**: Processing primitive
+pub fn prim_format_number_list(args: &[Value]) -> PrimitiveResult {
+    if args.is_empty() || args.len() > 2 {
+        return Err("format-number-list requires 1 or 2 arguments".to_string());
+    }
+
+    let separator = if args.len() == 2 {
+        match &args[1] {
+            Value::String(s) => s.as_str(),
+            Value::Symbol(s) => s.as_ref(),
+            _ => ".",
+        }
+    } else {
+        "."
+    };
+
+    let mut numbers = Vec::new();
+    let mut current = args[0].clone();
+
+    loop {
+        match current {
+            Value::Nil => break,
+            Value::Pair(ref p) => {
+                let pair = p.borrow();
+                match &pair.car {
+                    Value::Integer(n) => numbers.push(n.to_string()),
+                    Value::Real(r) => numbers.push((*r as i64).to_string()),
+                    _ => {
+                        return Err("format-number-list: list must contain only numbers".to_string())
+                    }
+                }
+                let cdr = pair.cdr.clone();
+                drop(pair);
+                current = cdr;
+            }
+            _ => return Err("format-number-list: not a proper list".to_string()),
+        }
+    }
+
+    Ok(Value::string(numbers.join(separator)))
+}
+
+// =============================================================================
 // Registration
 // =============================================================================
 
@@ -2059,6 +2354,12 @@ pub fn register_list_primitives(env: &gc::Gc<crate::scheme::environment::Environ
     env.define("assq", Value::primitive("assq", prim_assq));
     env.define("assv", Value::primitive("assv", prim_assv));
     env.define("assoc", Value::primitive("assoc", prim_assoc));
+    // cXXr combinations
+    env.define("cadr", Value::primitive("cadr", prim_cadr));
+    env.define("caddr", Value::primitive("caddr", prim_caddr));
+    env.define("cadddr", Value::primitive("cadddr", prim_cadddr));
+    env.define("caar", Value::primitive("caar", prim_caar));
+    env.define("cddr", Value::primitive("cddr", prim_cddr));
 }
 
 /// Register all number primitives in an environment
@@ -2164,6 +2465,19 @@ pub fn register_keyword_primitives(env: &gc::Gc<crate::scheme::environment::Envi
     env.define("keyword?", Value::primitive("keyword?", prim_keyword_p));
     env.define("keyword->string", Value::primitive("keyword->string", prim_keyword_to_string));
     env.define("string->keyword", Value::primitive("string->keyword", prim_string_to_keyword));
+}
+
+/// Register DSSSL type stub primitives in an environment
+pub fn register_dsssl_type_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
+    env.define("quantity?", Value::primitive("quantity?", prim_quantity_p));
+    env.define("color?", Value::primitive("color?", prim_color_p));
+    env.define("address?", Value::primitive("address?", prim_address_p));
+}
+
+/// Register format primitives in an environment
+pub fn register_format_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
+    env.define("format-number", Value::primitive("format-number", prim_format_number));
+    env.define("format-number-list", Value::primitive("format-number-list", prim_format_number_list));
 }
 
 // =============================================================================
@@ -3019,5 +3333,194 @@ mod tests {
         // Not found
         let result = prim_assoc(&[Value::string("z".to_string()), alist]).unwrap();
         assert!(matches!(result, Value::Bool(false)));
+    }
+
+    // =========================================================================
+    // cXXr combination tests
+    // =========================================================================
+
+    #[test]
+    fn test_cadr() {
+        // (cadr '(1 2 3)) => 2
+        let list = prim_list(&[Value::integer(1), Value::integer(2), Value::integer(3)]).unwrap();
+        let result = prim_cadr(&[list]).unwrap();
+        assert!(matches!(result, Value::Integer(2)));
+    }
+
+    #[test]
+    fn test_caddr() {
+        // (caddr '(1 2 3 4)) => 3
+        let list = prim_list(&[
+            Value::integer(1),
+            Value::integer(2),
+            Value::integer(3),
+            Value::integer(4),
+        ])
+        .unwrap();
+        let result = prim_caddr(&[list]).unwrap();
+        assert!(matches!(result, Value::Integer(3)));
+    }
+
+    #[test]
+    fn test_cadddr() {
+        // (cadddr '(1 2 3 4 5)) => 4
+        let list = prim_list(&[
+            Value::integer(1),
+            Value::integer(2),
+            Value::integer(3),
+            Value::integer(4),
+            Value::integer(5),
+        ])
+        .unwrap();
+        let result = prim_cadddr(&[list]).unwrap();
+        assert!(matches!(result, Value::Integer(4)));
+    }
+
+    #[test]
+    fn test_caar() {
+        // (caar '((1 2) 3)) => 1
+        let inner = prim_list(&[Value::integer(1), Value::integer(2)]).unwrap();
+        let outer = prim_list(&[inner, Value::integer(3)]).unwrap();
+        let result = prim_caar(&[outer]).unwrap();
+        assert!(matches!(result, Value::Integer(1)));
+    }
+
+    #[test]
+    fn test_cddr() {
+        // (cddr '(1 2 3 4)) => (3 4)
+        let list = prim_list(&[
+            Value::integer(1),
+            Value::integer(2),
+            Value::integer(3),
+            Value::integer(4),
+        ])
+        .unwrap();
+        let result = prim_cddr(&[list]).unwrap();
+        assert!(result.is_list());
+        // First element should be 3
+        let first = prim_car(&[result.clone()]).unwrap();
+        assert!(matches!(first, Value::Integer(3)));
+    }
+
+    // =========================================================================
+    // DSSSL type stub tests
+    // =========================================================================
+
+    #[test]
+    fn test_quantity_p() {
+        // All types should return #f since quantities are not implemented
+        assert!(matches!(prim_quantity_p(&[Value::integer(1)]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_quantity_p(&[Value::string("10pt".to_string())]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_quantity_p(&[Value::symbol("quantity")]).unwrap(), Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_color_p() {
+        // All types should return #f since colors are not implemented
+        assert!(matches!(prim_color_p(&[Value::string("red".to_string())]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_color_p(&[Value::integer(0)]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_color_p(&[Value::symbol("color")]).unwrap(), Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_address_p() {
+        // All types should return #f since addresses are not implemented
+        assert!(matches!(prim_address_p(&[Value::string("addr".to_string())]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_address_p(&[Value::integer(0)]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_address_p(&[Value::symbol("address")]).unwrap(), Value::Bool(false)));
+    }
+
+    // =========================================================================
+    // Format function tests
+    // =========================================================================
+
+    #[test]
+    fn test_format_number_decimal() {
+        let result = prim_format_number(&[Value::integer(42), Value::string("1".to_string())]).unwrap();
+        if let Value::String(ref s) = result {
+            assert_eq!(&***s, "42");
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    #[test]
+    fn test_format_number_roman_upper() {
+        let result = prim_format_number(&[Value::integer(5), Value::string("I".to_string())]).unwrap();
+        if let Value::String(ref s) = result {
+            assert_eq!(&***s, "V");
+        } else {
+            panic!("Expected string");
+        }
+
+        let result = prim_format_number(&[Value::integer(10), Value::string("I".to_string())]).unwrap();
+        if let Value::String(ref s) = result {
+            assert_eq!(&***s, "X");
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    #[test]
+    fn test_format_number_roman_lower() {
+        let result = prim_format_number(&[Value::integer(3), Value::string("i".to_string())]).unwrap();
+        if let Value::String(ref s) = result {
+            assert_eq!(&***s, "iii");
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    #[test]
+    fn test_format_number_alpha_upper() {
+        let result = prim_format_number(&[Value::integer(1), Value::string("A".to_string())]).unwrap();
+        if let Value::String(ref s) = result {
+            assert_eq!(&***s, "A");
+        } else {
+            panic!("Expected string");
+        }
+
+        let result = prim_format_number(&[Value::integer(26), Value::string("A".to_string())]).unwrap();
+        if let Value::String(ref s) = result {
+            assert_eq!(&***s, "Z");
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    #[test]
+    fn test_format_number_alpha_lower() {
+        let result = prim_format_number(&[Value::integer(1), Value::string("a".to_string())]).unwrap();
+        if let Value::String(ref s) = result {
+            assert_eq!(&***s, "a");
+        } else {
+            panic!("Expected string");
+        }
+
+        let result = prim_format_number(&[Value::integer(3), Value::string("a".to_string())]).unwrap();
+        if let Value::String(ref s) = result {
+            assert_eq!(&***s, "c");
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    #[test]
+    fn test_format_number_list() {
+        let nums = prim_list(&[Value::integer(1), Value::integer(2), Value::integer(3)]).unwrap();
+        let result = prim_format_number_list(&[nums.clone()]).unwrap();
+        if let Value::String(ref s) = result {
+            assert_eq!(&***s, "1.2.3");
+        } else {
+            panic!("Expected string");
+        }
+
+        // With custom separator
+        let result = prim_format_number_list(&[nums, Value::string("-".to_string())]).unwrap();
+        if let Value::String(ref s) = result {
+            assert_eq!(&***s, "1-2-3");
+        } else {
+            panic!("Expected string");
+        }
     }
 }
