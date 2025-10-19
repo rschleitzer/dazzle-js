@@ -4052,6 +4052,20 @@ pub fn prim_epilog(_args: &[Value]) -> PrimitiveResult {
     Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))) // Stub
 }
 
+// define-language is now a special form in evaluator.rs
+
+/// declare-default-language: Set default language (DSSSL declaration, no-op)
+pub fn prim_declare_default_language(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified)
+}
+
+// declare-flow-object-class is now a special form in evaluator.rs
+
+/// declare-characteristic: Declare a characteristic (DSSSL declaration, no-op)
+pub fn prim_declare_characteristic(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified)
+}
+
 /// (origin-to-subnode-rel-forest-addr node subnode) → address
 pub fn prim_origin_to_subnode_rel_forest_addr(_args: &[Value]) -> PrimitiveResult {
     Ok(Value::Unspecified) // Stub
@@ -4917,6 +4931,10 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("document-element", Value::primitive("document-element", prim_document_element));
     env.define("prolog", Value::primitive("prolog", prim_prolog));
     env.define("epilog", Value::primitive("epilog", prim_epilog));
+
+    // DSSSL Language & Flow Object Class Declarations (define-language and declare-flow-object-class are special forms)
+    env.define("declare-default-language", Value::primitive("declare-default-language", prim_declare_default_language));
+    env.define("declare-characteristic", Value::primitive("declare-characteristic", prim_declare_characteristic));
     env.define("origin-to-subnode-rel-forest-addr", Value::primitive("origin-to-subnode-rel-forest-addr", prim_origin_to_subnode_rel_forest_addr));
 
     // Node-list Extended (stubs)
