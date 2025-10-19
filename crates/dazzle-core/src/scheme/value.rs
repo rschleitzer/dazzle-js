@@ -44,7 +44,10 @@ use std::rc::Rc;
 /// **Memory management**: Uses `Gc<T>` for heap-allocated values.
 /// The `gc` crate provides conservative garbage collection similar
 /// to OpenJade's `Collector`.
-#[derive(Clone, gc::Trace, gc::Finalize)]
+///
+/// **Note**: We manually implement Trace/Finalize because Node and NodeList
+/// variants use Rc (not Gc) and contain trait objects.
+#[derive(Clone)]
 pub enum Value {
     /// The empty list `()`
     ///
@@ -117,11 +120,33 @@ pub enum Value {
     /// - User-defined lambda (compiled bytecode or AST)
     Procedure(Gc<Procedure>),
 
-    // DSSSL types (to be fully implemented later)
+    // DSSSL types (grove and flow objects)
+    /// A node in the document grove
+    ///
+    /// Represents a node from the XML document tree.
+    /// Corresponds to OpenJade's node objects in the grove.
+    ///
+    /// **Phase 3**: Now fully implemented with libxml2 grove.
+    ///
+    /// Uses `Rc<Box<dyn Node>>` instead of Gc because:
+    /// - Nodes are owned by the grove, not the Scheme GC
+    /// - Grove lifetime is managed separately
+    /// - Trait objects can't derive Trace automatically
+    ///
+    /// NOTE: Managed by Rc, not GC - see manual Trace impl below
+    Node(Rc<Box<dyn crate::grove::Node>>),
+
     /// Node list (grove query result)
     ///
-    /// Placeholder - will be properly implemented when we add grove support.
-    NodeList,
+    /// Represents a collection of nodes from grove queries.
+    /// Corresponds to DSSSL node-list objects.
+    ///
+    /// **Phase 3**: Now fully implemented with libxml2 grove.
+    ///
+    /// Uses `Rc<Box<dyn NodeList>>` for same reasons as Node.
+    ///
+    /// NOTE: Managed by Rc, not GC - see manual Trace impl below
+    NodeList(Rc<Box<dyn crate::grove::NodeList>>),
 
     /// Sosofo (flow object sequence)
     ///
@@ -311,6 +336,16 @@ impl Value {
             env,
         }))
     }
+
+    /// Create a node value
+    pub fn node(node: Box<dyn crate::grove::Node>) -> Self {
+        Value::Node(Rc::new(node))
+    }
+
+    /// Create a node list value
+    pub fn node_list(node_list: Box<dyn crate::grove::NodeList>) -> Self {
+        Value::NodeList(Rc::new(node_list))
+    }
 }
 
 // =============================================================================
@@ -395,7 +430,14 @@ impl Value {
             (Value::String(_), Value::String(_)) => false,
 
             // Special types
-            (Value::NodeList, Value::NodeList) => true,
+            (Value::Node(n1), Value::Node(n2)) => {
+                // Nodes are equal by pointer identity (same Rc)
+                Rc::ptr_eq(n1, n2)
+            }
+            (Value::NodeList(nl1), Value::NodeList(nl2)) => {
+                // NodeLists are equal by pointer identity (same object)
+                Rc::ptr_eq(nl1, nl2)
+            }
             (Value::Sosofo, Value::Sosofo) => true,
             (Value::Unspecified, Value::Unspecified) => true,
             (Value::Error, Value::Error) => true,
@@ -487,6 +529,16 @@ impl Value {
     pub fn is_procedure(&self) -> bool {
         matches!(self, Value::Procedure(_))
     }
+
+    /// Is this a node?
+    pub fn is_node(&self) -> bool {
+        matches!(self, Value::Node(_))
+    }
+
+    /// Is this a node list?
+    pub fn is_node_list(&self) -> bool {
+        matches!(self, Value::NodeList(_))
+    }
 }
 
 // =============================================================================
@@ -524,7 +576,15 @@ impl fmt::Debug for Value {
                 Procedure::Primitive { name, .. } => write!(f, "#<primitive:{}>", name),
                 Procedure::Lambda { .. } => write!(f, "#<lambda>"),
             },
-            Value::NodeList => write!(f, "#<node-list>"),
+            Value::Node(node) => {
+                // Display node with its gi if available
+                if let Some(gi) = node.gi() {
+                    write!(f, "#<node:{}>", gi)
+                } else {
+                    write!(f, "#<node>")
+                }
+            }
+            Value::NodeList(nl) => write!(f, "#<node-list:{}>", nl.length()),
             Value::Sosofo => write!(f, "#<sosofo>"),
             Value::Unspecified => write!(f, "#<unspecified>"),
             Value::Error => write!(f, "#<error>"),
@@ -538,6 +598,81 @@ impl fmt::Display for Value {
         write!(f, "{:?}", self)
     }
 }
+
+// =============================================================================
+// Garbage Collection (Manual Trace Implementation)
+// =============================================================================
+
+/// Manual implementation of Trace for Value
+///
+/// We implement this manually because:
+/// - Node and NodeList use Rc<Box<dyn Trait>>, which doesn't implement Trace
+/// - These are managed by Rc, not the GC
+/// - All other variants use Gc and need proper tracing
+unsafe impl gc::Trace for Value {
+    unsafe fn trace(&self) {
+        match self {
+            Value::Nil => {}
+            Value::Bool(_) => {}
+            Value::Integer(_) => {}
+            Value::Real(_) => {}
+            Value::Char(_) => {}
+            Value::String(s) => s.trace(),
+            Value::Symbol(s) => s.trace(),
+            Value::Keyword(k) => k.trace(),
+            Value::Pair(p) => p.trace(),
+            Value::Vector(v) => v.trace(),
+            Value::Procedure(proc) => proc.trace(),
+            // Node and NodeList use Rc, not Gc - no tracing needed
+            Value::Node(_) => {}
+            Value::NodeList(_) => {}
+            Value::Sosofo => {}
+            Value::Unspecified => {}
+            Value::Error => {}
+        }
+    }
+
+    unsafe fn root(&self) {
+        match self {
+            Value::String(s) => s.root(),
+            Value::Symbol(s) => s.root(),
+            Value::Keyword(k) => k.root(),
+            Value::Pair(p) => p.root(),
+            Value::Vector(v) => v.root(),
+            Value::Procedure(proc) => proc.root(),
+            _ => {}
+        }
+    }
+
+    unsafe fn unroot(&self) {
+        match self {
+            Value::String(s) => s.unroot(),
+            Value::Symbol(s) => s.unroot(),
+            Value::Keyword(k) => k.unroot(),
+            Value::Pair(p) => p.unroot(),
+            Value::Vector(v) => v.unroot(),
+            Value::Procedure(proc) => proc.unroot(),
+            _ => {}
+        }
+    }
+
+    fn finalize_glue(&self) {
+        match self {
+            Value::String(s) => s.finalize_glue(),
+            Value::Symbol(s) => s.finalize_glue(),
+            Value::Keyword(k) => k.finalize_glue(),
+            Value::Pair(p) => p.finalize_glue(),
+            Value::Vector(v) => v.finalize_glue(),
+            Value::Procedure(proc) => proc.finalize_glue(),
+            _ => {}
+        }
+    }
+}
+
+/// Manual implementation of Finalize for Value
+///
+/// No finalization needed - all cleanup is handled by Drop impls
+impl gc::Finalize for Value {}
 
 #[cfg(test)]
 mod tests {

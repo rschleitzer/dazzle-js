@@ -28,7 +28,46 @@
 
 use crate::scheme::environment::Environment;
 use crate::scheme::value::{Procedure, Value};
+use crate::grove::{Grove, Node};
 use gc::Gc;
+use std::rc::Rc;
+use std::cell::RefCell;
+
+// Thread-local evaluator context for primitives
+//
+// Similar to OpenJade's approach, we use thread-local storage to give
+// primitives access to the evaluator state (current node, grove, etc.)
+// without changing all primitive signatures.
+//
+// This is safe because:
+// 1. Scheme evaluation is single-threaded in our implementation
+// 2. The context is set/cleared around each eval call
+// 3. Primitives only run during evaluation
+thread_local! {
+    static EVALUATOR_CONTEXT: RefCell<Option<EvaluatorContext>> = RefCell::new(None);
+}
+
+/// Context available to primitives during evaluation
+#[derive(Clone)]
+pub struct EvaluatorContext {
+    pub grove: Option<Rc<dyn Grove>>,
+    pub current_node: Option<Rc<Box<dyn Node>>>,
+}
+
+/// Get the current evaluator context (for use in primitives)
+pub fn get_evaluator_context() -> Option<EvaluatorContext> {
+    EVALUATOR_CONTEXT.with(|ctx| ctx.borrow().clone())
+}
+
+/// Set the evaluator context (called by evaluator before eval)
+fn set_evaluator_context(ctx: EvaluatorContext) {
+    EVALUATOR_CONTEXT.with(|c| *c.borrow_mut() = Some(ctx));
+}
+
+/// Clear the evaluator context (called by evaluator after eval)
+fn clear_evaluator_context() {
+    EVALUATOR_CONTEXT.with(|c| *c.borrow_mut() = None);
+}
 
 // =============================================================================
 // Evaluation Error
@@ -71,13 +110,57 @@ pub type EvalResult = Result<Value, EvalError>;
 /// let result = evaluator.eval(expr, env)?;
 /// ```
 pub struct Evaluator {
-    // Future: tail call optimization state, macro table, etc.
+    /// The document grove (for element-with-id, etc.)
+    grove: Option<Rc<dyn Grove>>,
+
+    /// Current node context (for current-node primitive)
+    ///
+    /// This changes dynamically as we process the document tree.
+    /// When evaluating a template, this starts as the root node.
+    /// When processing children, it changes to each child node.
+    current_node: Option<Rc<Box<dyn Node>>>,
 }
 
 impl Evaluator {
-    /// Create a new evaluator
+    /// Create a new evaluator without a grove
     pub fn new() -> Self {
-        Evaluator {}
+        Evaluator {
+            grove: None,
+            current_node: None,
+        }
+    }
+
+    /// Create a new evaluator with a grove
+    pub fn with_grove(grove: Rc<dyn Grove>) -> Self {
+        Evaluator {
+            grove: Some(grove),
+            current_node: None,
+        }
+    }
+
+    /// Set the grove
+    pub fn set_grove(&mut self, grove: Rc<dyn Grove>) {
+        self.grove = Some(grove);
+    }
+
+    /// Get the grove
+    pub fn grove(&self) -> Option<&Rc<dyn Grove>> {
+        self.grove.as_ref()
+    }
+
+    /// Set the current node
+    pub fn set_current_node(&mut self, node: Box<dyn Node>) {
+        self.current_node = Some(Rc::new(node));
+    }
+
+    /// Get the current node
+    pub fn current_node(&self) -> Option<Rc<Box<dyn Node>>> {
+        self.current_node.clone()
+    }
+
+    /// Clear the current node
+    pub fn clear_current_node(&mut self) {
+        self.current_node = None;
     }
 
     /// Evaluate an expression in an environment
@@ -90,6 +173,23 @@ impl Evaluator {
     /// 2. **Symbols**: Variable lookup in environment
     /// 3. **Lists**: Check first element for special forms, otherwise apply
     pub fn eval(&mut self, expr: Value, env: Gc<Environment>) -> EvalResult {
+        // Set evaluator context for primitives
+        set_evaluator_context(EvaluatorContext {
+            grove: self.grove.clone(),
+            current_node: self.current_node.clone(),
+        });
+
+        // Evaluate (and ensure context is cleared on return or error)
+        let result = self.eval_inner(expr, env);
+
+        // Clear context (important for nested evals)
+        clear_evaluator_context();
+
+        result
+    }
+
+    /// Inner eval implementation (separated to ensure context cleanup)
+    fn eval_inner(&mut self, expr: Value, env: Gc<Environment>) -> EvalResult {
         match expr {
             // Self-evaluating literals
             Value::Nil => Ok(Value::Nil),
@@ -104,7 +204,8 @@ impl Evaluator {
             Value::Error => Ok(expr),
 
             // DSSSL types (self-evaluating for now)
-            Value::NodeList => Ok(expr),
+            Value::Node(_) => Ok(expr),
+            Value::NodeList(_) => Ok(expr),
             Value::Sosofo => Ok(expr),
 
             // Symbols: variable lookup
@@ -208,12 +309,12 @@ impl Evaluator {
             ));
         }
 
-        let test = self.eval(args_vec[0].clone(), env.clone())?;
+        let test = self.eval_inner(args_vec[0].clone(), env.clone())?;
 
         if test.is_true() {
-            self.eval(args_vec[1].clone(), env)
+            self.eval_inner(args_vec[1].clone(), env)
         } else if args_vec.len() == 3 {
-            self.eval(args_vec[2].clone(), env)
+            self.eval_inner(args_vec[2].clone(), env)
         } else {
             Ok(Value::Unspecified)
         }
@@ -237,7 +338,7 @@ impl Evaluator {
                         "define with symbol requires exactly 2 arguments".to_string(),
                     ));
                 }
-                let value = self.eval(args_vec[1].clone(), env.clone())?;
+                let value = self.eval_inner(args_vec[1].clone(), env.clone())?;
                 env.define(name, value);
                 Ok(Value::Unspecified)
             }
@@ -259,7 +360,7 @@ impl Evaluator {
                         Value::cons(params, body_list),
                     );
 
-                    let lambda_value = self.eval(lambda_expr, env.clone())?;
+                    let lambda_value = self.eval_inner(lambda_expr, env.clone())?;
                     env.define(name, lambda_value);
                     Ok(Value::Unspecified)
                 } else {
@@ -370,7 +471,7 @@ impl Evaluator {
             }
 
             if let Value::Symbol(ref name) = binding_vec[0] {
-                let value = self.eval(binding_vec[1].clone(), env.clone())?;
+                let value = self.eval_inner(binding_vec[1].clone(), env.clone())?;
                 new_env.define(name, value);
             } else {
                 return Err(EvalError::new(
@@ -410,7 +511,7 @@ impl Evaluator {
             }
 
             if let Value::Symbol(ref name) = binding_vec[0] {
-                let value = self.eval(binding_vec[1].clone(), current_env.clone())?;
+                let value = self.eval_inner(binding_vec[1].clone(), current_env.clone())?;
                 current_env.define(name, value);
             } else {
                 return Err(EvalError::new(
@@ -471,7 +572,7 @@ impl Evaluator {
         // Second pass: evaluate all values in the new environment and update bindings
         for (i, binding) in bindings.iter().enumerate() {
             let binding_vec = self.list_to_vec(binding.clone())?;
-            let value = self.eval(binding_vec[1].clone(), new_env.clone())?;
+            let value = self.eval_inner(binding_vec[1].clone(), new_env.clone())?;
 
             // Update the binding (set! will work since we already defined it)
             new_env.set(&var_names[i], value)
@@ -507,7 +608,7 @@ impl Evaluator {
             }
 
             // Evaluate test
-            let test = self.eval(clause_vec[0].clone(), env.clone())?;
+            let test = self.eval_inner(clause_vec[0].clone(), env.clone())?;
             if test.is_true() {
                 if clause_vec.len() == 1 {
                     return Ok(test);
@@ -540,7 +641,7 @@ impl Evaluator {
         }
 
         // Evaluate the key expression
-        let key = self.eval(args_vec[0].clone(), env.clone())?;
+        let key = self.eval_inner(args_vec[0].clone(), env.clone())?;
 
         // Iterate through clauses
         for clause in &args_vec[1..] {
@@ -587,7 +688,7 @@ impl Evaluator {
 
         let mut result = Value::bool(true);
         for expr in args_vec {
-            result = self.eval(expr, env.clone())?;
+            result = self.eval_inner(expr, env.clone())?;
             if !result.is_true() {
                 return Ok(Value::bool(false));
             }
@@ -601,7 +702,7 @@ impl Evaluator {
         let args_vec = self.list_to_vec(args)?;
 
         for expr in args_vec {
-            let result = self.eval(expr, env.clone())?;
+            let result = self.eval_inner(expr, env.clone())?;
             if result.is_true() {
                 return Ok(result);
             }
@@ -618,7 +719,7 @@ impl Evaluator {
 
         let mut result = Value::Unspecified;
         for expr in exprs {
-            result = self.eval(expr.clone(), env.clone())?;
+            result = self.eval_inner(expr.clone(), env.clone())?;
         }
 
         Ok(result)
@@ -637,10 +738,10 @@ impl Evaluator {
         }
 
         // Evaluate the procedure
-        let proc = self.eval(args_vec[0].clone(), env.clone())?;
+        let proc = self.eval_inner(args_vec[0].clone(), env.clone())?;
 
         // Evaluate the argument list
-        let arg_list = self.eval(args_vec[1].clone(), env)?;
+        let arg_list = self.eval_inner(args_vec[1].clone(), env)?;
 
         // Convert argument list to vector
         let arg_values = self.list_to_vec(arg_list)?;
@@ -660,10 +761,10 @@ impl Evaluator {
         }
 
         // Evaluate the procedure
-        let proc = self.eval(args_vec[0].clone(), env.clone())?;
+        let proc = self.eval_inner(args_vec[0].clone(), env.clone())?;
 
         // Evaluate the list
-        let list = self.eval(args_vec[1].clone(), env)?;
+        let list = self.eval_inner(args_vec[1].clone(), env)?;
 
         // Convert list to vector
         let list_vec = self.list_to_vec(list)?;
@@ -697,10 +798,10 @@ impl Evaluator {
         }
 
         // Evaluate the procedure
-        let proc = self.eval(args_vec[0].clone(), env.clone())?;
+        let proc = self.eval_inner(args_vec[0].clone(), env.clone())?;
 
         // Evaluate the list
-        let list = self.eval(args_vec[1].clone(), env)?;
+        let list = self.eval_inner(args_vec[1].clone(), env)?;
 
         // Convert list to vector
         let list_vec = self.list_to_vec(list)?;
@@ -725,13 +826,13 @@ impl Evaluator {
         env: Gc<Environment>,
     ) -> EvalResult {
         // Evaluate operator
-        let proc = self.eval(operator, env.clone())?;
+        let proc = self.eval_inner(operator, env.clone())?;
 
         // Evaluate arguments
         let args_vec = self.list_to_vec(args)?;
         let mut evaled_args = Vec::new();
         for arg in args_vec {
-            evaled_args.push(self.eval(arg, env.clone())?);
+            evaled_args.push(self.eval_inner(arg, env.clone())?);
         }
 
         // Apply procedure
@@ -764,7 +865,7 @@ impl Evaluator {
                     }
 
                     // Evaluate body in the new environment
-                    self.eval((**body).clone(), lambda_env)
+                    self.eval_inner((**body).clone(), lambda_env)
                 }
             }
         } else {

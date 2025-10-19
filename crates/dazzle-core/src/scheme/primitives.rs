@@ -23,6 +23,7 @@
 //! | **Total**         | **~236**       |               |
 
 use crate::scheme::value::Value;
+use crate::grove::EmptyNodeList;
 
 /// Result type for primitive procedures
 pub type PrimitiveResult = Result<Value, String>;
@@ -2936,6 +2937,32 @@ pub fn prim_format_number_list(args: &[Value]) -> PrimitiveResult {
 // **Implementation Status**: Basic API defined. Full grove integration
 // with libxml2 will connect these to actual XML documents.
 
+/// (current-node) → node
+///
+/// Returns the current node being processed.
+///
+/// In DSSSL, the current node is an implicit context variable that changes
+/// as the evaluator processes the document tree. When processing children
+/// or a node-list, the current-node changes to each node in turn.
+///
+/// **DSSSL**: Grove primitive (context-dependent)
+pub fn prim_current_node(args: &[Value]) -> PrimitiveResult {
+    if !args.is_empty() {
+        return Err("current-node requires no arguments".to_string());
+    }
+
+    // Get the current evaluator context
+    let ctx = crate::scheme::evaluator::get_evaluator_context()
+        .ok_or_else(|| "current-node: no evaluator context available".to_string())?;
+
+    // Get the current node from the context
+    let node = ctx
+        .current_node
+        .ok_or_else(|| "current-node: no current node set".to_string())?;
+
+    Ok(Value::Node(node))
+}
+
 /// (node-list? obj) → boolean
 ///
 /// Returns #t if obj is a node-list.
@@ -2946,7 +2973,7 @@ pub fn prim_node_list_p(args: &[Value]) -> PrimitiveResult {
         return Err("node-list? requires exactly 1 argument".to_string());
     }
 
-    Ok(Value::bool(matches!(args[0], Value::NodeList)))
+    Ok(Value::bool(matches!(args[0], Value::NodeList(_))))
 }
 
 /// (empty-node-list) → node-list
@@ -2959,7 +2986,7 @@ pub fn prim_empty_node_list(args: &[Value]) -> PrimitiveResult {
         return Err("empty-node-list requires no arguments".to_string());
     }
 
-    Ok(Value::NodeList)
+    Ok(Value::node_list(Box::new(EmptyNodeList::new())))
 }
 
 /// (node-list-empty? nl) → boolean
@@ -2973,9 +3000,9 @@ pub fn prim_node_list_empty_p(args: &[Value]) -> PrimitiveResult {
     }
 
     match &args[0] {
-        Value::NodeList => {
-            // For now, NodeList is just a placeholder - always empty
-            Ok(Value::bool(true))
+        Value::NodeList(nl) => {
+            // Now implemented with real grove support
+            Ok(Value::bool(nl.is_empty()))
         }
         _ => Err(format!("node-list-empty?: not a node-list: {:?}", args[0])),
     }
@@ -2992,9 +3019,9 @@ pub fn prim_node_list_length(args: &[Value]) -> PrimitiveResult {
     }
 
     match &args[0] {
-        Value::NodeList => {
-            // For now, NodeList is just a placeholder - always empty
-            Ok(Value::integer(0))
+        Value::NodeList(nl) => {
+            // Now implemented with real grove support
+            Ok(Value::integer(nl.length() as i64))
         }
         _ => Err(format!("node-list-length: not a node-list: {:?}", args[0])),
     }
@@ -3012,10 +3039,13 @@ pub fn prim_node_list_first(args: &[Value]) -> PrimitiveResult {
     }
 
     match &args[0] {
-        Value::NodeList => {
-            // For now, NodeList is just a placeholder - always empty
-            // So return #f
-            Ok(Value::bool(false))
+        Value::NodeList(nl) => {
+            // Now implemented with real grove support
+            if let Some(node) = nl.first() {
+                Ok(Value::node(node))
+            } else {
+                Ok(Value::bool(false))
+            }
         }
         _ => Err(format!("node-list-first: not a node-list: {:?}", args[0])),
     }
@@ -3033,10 +3063,10 @@ pub fn prim_node_list_rest(args: &[Value]) -> PrimitiveResult {
     }
 
     match &args[0] {
-        Value::NodeList => {
-            // For now, NodeList is just a placeholder - always empty
-            // So return empty node-list
-            Ok(Value::NodeList)
+        Value::NodeList(_nl) => {
+            // Now implemented with real grove support
+            let rest = _nl.rest();
+            Ok(Value::node_list(rest))
         }
         _ => Err(format!("node-list-rest: not a node-list: {:?}", args[0])),
     }
@@ -3054,13 +3084,19 @@ pub fn prim_node_list_ref(args: &[Value]) -> PrimitiveResult {
     }
 
     match &args[0] {
-        Value::NodeList => {
+        Value::NodeList(nl) => {
             // Check index is an integer
             match &args[1] {
-                Value::Integer(_) => {
-                    // For now, NodeList is just a placeholder - always empty
-                    // So any index is out of bounds
-                    Ok(Value::bool(false))
+                Value::Integer(idx) => {
+                    // Now implemented with real grove support
+                    if *idx < 0 {
+                        return Err("node-list-ref: index must be non-negative".to_string());
+                    }
+                    if let Some(node) = nl.get(*idx as usize) {
+                        Ok(Value::node(node))
+                    } else {
+                        Ok(Value::bool(false))
+                    }
                 }
                 _ => Err(format!("node-list-ref: index not an integer: {:?}", args[1])),
             }
@@ -3080,12 +3116,167 @@ pub fn prim_node_list_reverse(args: &[Value]) -> PrimitiveResult {
     }
 
     match &args[0] {
-        Value::NodeList => {
-            // For now, NodeList is just a placeholder
-            // Reversing an empty list gives an empty list
-            Ok(Value::NodeList)
+        Value::NodeList(_nl) => {
+            // TODO: Implement proper node-list reversal
+            // For now, just return empty list
+            Ok(Value::node_list(Box::new(EmptyNodeList::new())))
         }
         _ => Err(format!("node-list-reverse: not a node-list: {:?}", args[0])),
+    }
+}
+
+/// (node? obj) → boolean
+///
+/// Returns #t if obj is a node.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_node_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("node? requires exactly 1 argument".to_string());
+    }
+
+    Ok(Value::bool(matches!(args[0], Value::Node(_))))
+}
+
+/// (gi node) → string | #f
+///
+/// Returns the generic identifier (element name) of a node.
+/// Returns #f if the node is not an element node.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_gi(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("gi requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::Node(node) => {
+            if let Some(gi) = node.gi() {
+                Ok(Value::string(gi))
+            } else {
+                Ok(Value::bool(false))
+            }
+        }
+        _ => Err(format!("gi: not a node: {:?}", args[0])),
+    }
+}
+
+/// (data node) → string | #f
+///
+/// Returns the text content of a node.
+/// For text nodes, returns the text. For elements, returns concatenated descendant text.
+/// Returns #f if the node has no data.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_data(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("data requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::Node(node) => {
+            if let Some(data) = node.data() {
+                Ok(Value::string(data))
+            } else {
+                Ok(Value::bool(false))
+            }
+        }
+        _ => Err(format!("data: not a node: {:?}", args[0])),
+    }
+}
+
+/// (attribute-string name node) → string | #f
+///
+/// Returns the value of the attribute with the given name.
+/// Returns #f if the attribute does not exist.
+/// Includes DTD default values.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_attribute_string(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("attribute-string requires exactly 2 arguments".to_string());
+    }
+
+    let name = match &args[0] {
+        Value::String(s) => s.as_str(),
+        _ => return Err(format!("attribute-string: name not a string: {:?}", args[0])),
+    };
+
+    match &args[1] {
+        Value::Node(node) => {
+            if let Some(value) = node.attribute_string(name) {
+                Ok(Value::string(value))
+            } else {
+                Ok(Value::bool(false))
+            }
+        }
+        _ => Err(format!("attribute-string: not a node: {:?}", args[1])),
+    }
+}
+
+/// (children node) → node-list
+///
+/// Returns the child nodes of a node.
+/// In DSSSL, this returns only element children, not text nodes.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_children(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("children requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::Node(node) => {
+            let children = node.children();
+            Ok(Value::node_list(children))
+        }
+        _ => Err(format!("children: not a node: {:?}", args[0])),
+    }
+}
+
+/// (parent node) → node | #f
+///
+/// Returns the parent node of a node.
+/// Returns #f if the node has no parent (i.e., it's the root).
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_parent(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("parent requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::Node(node) => {
+            if let Some(parent) = node.parent() {
+                Ok(Value::node(parent))
+            } else {
+                Ok(Value::bool(false))
+            }
+        }
+        _ => Err(format!("parent: not a node: {:?}", args[0])),
+    }
+}
+
+/// (id node) → string | #f
+///
+/// Returns the ID attribute value of a node.
+/// Returns #f if the node has no ID.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_id(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("id requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::Node(node) => {
+            if let Some(id) = node.id() {
+                Ok(Value::string(id))
+            } else {
+                Ok(Value::bool(false))
+            }
+        }
+        _ => Err(format!("id: not a node: {:?}", args[0])),
     }
 }
 
@@ -3636,6 +3827,19 @@ pub fn register_format_primitives(env: &gc::Gc<crate::scheme::environment::Envir
 
 /// Register grove query primitives in an environment
 pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
+    // Context primitives
+    env.define("current-node", Value::primitive("current-node", prim_current_node));
+
+    // Node primitives
+    env.define("node?", Value::primitive("node?", prim_node_p));
+    env.define("gi", Value::primitive("gi", prim_gi));
+    env.define("data", Value::primitive("data", prim_data));
+    env.define("id", Value::primitive("id", prim_id));
+    env.define("attribute-string", Value::primitive("attribute-string", prim_attribute_string));
+    env.define("children", Value::primitive("children", prim_children));
+    env.define("parent", Value::primitive("parent", prim_parent));
+
+    // Node-list primitives
     env.define("node-list?", Value::primitive("node-list?", prim_node_list_p));
     env.define("empty-node-list", Value::primitive("empty-node-list", prim_empty_node_list));
     env.define("node-list-empty?", Value::primitive("node-list-empty?", prim_node_list_empty_p));
@@ -5159,7 +5363,8 @@ mod tests {
     #[test]
     fn test_node_list_p() {
         // NodeList is a node-list
-        assert!(matches!(prim_node_list_p(&[Value::NodeList]).unwrap(), Value::Bool(true)));
+        let nl = prim_empty_node_list(&[]).unwrap();
+        assert!(matches!(prim_node_list_p(&[nl]).unwrap(), Value::Bool(true)));
 
         // Other types are not node-lists
         assert!(matches!(prim_node_list_p(&[Value::integer(1)]).unwrap(), Value::Bool(false)));
@@ -5170,7 +5375,7 @@ mod tests {
     #[test]
     fn test_empty_node_list() {
         let result = prim_empty_node_list(&[]).unwrap();
-        assert!(matches!(result, Value::NodeList));
+        assert!(matches!(result, Value::NodeList(_)));
     }
 
     #[test]
@@ -5211,7 +5416,7 @@ mod tests {
         // Rest of empty node-list is empty node-list
         let nl = prim_empty_node_list(&[]).unwrap();
         let result = prim_node_list_rest(&[nl]).unwrap();
-        assert!(matches!(result, Value::NodeList));
+        assert!(matches!(result, Value::NodeList(_)));
 
         // Non-node-list should error
         assert!(prim_node_list_rest(&[Value::integer(1)]).is_err());
@@ -5237,7 +5442,7 @@ mod tests {
         // Reverse of empty node-list is empty node-list
         let nl = prim_empty_node_list(&[]).unwrap();
         let result = prim_node_list_reverse(&[nl]).unwrap();
-        assert!(matches!(result, Value::NodeList));
+        assert!(matches!(result, Value::NodeList(_)));
 
         // Non-node-list should error
         assert!(prim_node_list_reverse(&[Value::integer(1)]).is_err());
@@ -5381,7 +5586,8 @@ mod tests {
         // Other types are not sosofos
         assert!(matches!(prim_sosofo_p(&[Value::integer(1)]).unwrap(), Value::Bool(false)));
         assert!(matches!(prim_sosofo_p(&[Value::string("test".to_string())]).unwrap(), Value::Bool(false)));
-        assert!(matches!(prim_sosofo_p(&[Value::NodeList]).unwrap(), Value::Bool(false)));
+        let nl = prim_empty_node_list(&[]).unwrap();
+        assert!(matches!(prim_sosofo_p(&[nl]).unwrap(), Value::Bool(false)));
     }
 
     #[test]
