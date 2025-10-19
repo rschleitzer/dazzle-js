@@ -13,15 +13,27 @@
    # Paste your API token when prompted
    ```
 
+## Pre-Publication Verification
+
+First verify all crates are ready (3/4 will succeed):
+
+```bash
+cd crates/dazzle-core && cargo publish --dry-run && cd ../..
+cd crates/dazzle-grove-libxml2 && cargo publish --dry-run && cd ../..
+cd crates/dazzle-backend-sgml && cargo publish --dry-run && cd ../..
+# Note: dazzle-cli dry-run will fail until dependencies are published - this is expected
+```
+
 ## Publication Order
 
-Publish in this exact order (dependencies first):
+**IMPORTANT**: Publish in this exact order (dependencies first). Wait 1-2 minutes between steps for crates.io to index.
 
 ### 1. Publish dazzle-core
 ```bash
 cd crates/dazzle-core
 cargo publish
 cd ../..
+# Wait 1-2 minutes for crates.io to index
 ```
 
 ### 2. Publish dazzle-grove-libxml2
@@ -29,6 +41,7 @@ cd ../..
 cd crates/dazzle-grove-libxml2
 cargo publish
 cd ../..
+# Wait 1-2 minutes for crates.io to index
 ```
 
 ### 3. Publish dazzle-backend-sgml
@@ -36,6 +49,7 @@ cd ../..
 cd crates/dazzle-backend-sgml
 cargo publish
 cd ../..
+# Wait 1-2 minutes for crates.io to index
 ```
 
 ### 4. Publish dazzle-cli
