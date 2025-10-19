@@ -3872,6 +3872,25 @@ pub fn register_utility_primitives(env: &gc::Gc<crate::scheme::environment::Envi
     env.define("current-language", Value::primitive("current-language", prim_current_language));
 }
 
+/// Register all primitives in an environment
+///
+/// This is a convenience function for testing and REPL use.
+/// It registers all available primitives in the given environment.
+pub fn register_all_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
+    register_list_primitives(env);
+    register_number_primitives(env);
+    register_string_primitives(env);
+    register_boolean_primitives(env);
+    register_io_primitives(env);
+    register_conversion_primitives(env);
+    register_keyword_primitives(env);
+    register_dsssl_type_primitives(env);
+    register_format_primitives(env);
+    register_grove_primitives(env);
+    register_sosofo_primitives(env);
+    register_utility_primitives(env);
+}
+
 // =============================================================================
 // Tests
 // =============================================================================

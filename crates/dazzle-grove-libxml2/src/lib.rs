@@ -120,14 +120,14 @@ impl LibXml2Grove {
         }
 
         // Recurse into children
-        let children = node.children();
-        let mut current = children.first();
-        while let Some(child_node) = current {
+        let mut children_list = node.children();
+        while let Some(child_node) = children_list.first() {
             // Downcast to LibXml2Node (we know it's our type)
             if let Some(child) = Self::downcast_node(&child_node) {
                 Self::collect_ids_recursive(&child, document, map);
             }
-            current = children.rest().first();
+            // Move to next child
+            children_list = children_list.rest();
         }
     }
 
