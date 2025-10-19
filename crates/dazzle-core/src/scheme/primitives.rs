@@ -2167,6 +2167,152 @@ pub fn prim_cddr(args: &[Value]) -> PrimitiveResult {
     prim_cdr(&[cdr1])
 }
 
+/// (cdar list) → value
+///
+/// Equivalent to (cdr (car list)).
+///
+/// **R4RS**: Library procedure
+pub fn prim_cdar(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("cdar requires exactly 1 argument".to_string());
+    }
+
+    let car = prim_car(args)?;
+    prim_cdr(&[car])
+}
+
+/// (caaar list) → value
+///
+/// Equivalent to (car (car (car list))).
+///
+/// **R4RS**: Library procedure
+pub fn prim_caaar(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("caaar requires exactly 1 argument".to_string());
+    }
+
+    let car1 = prim_car(args)?;
+    let car2 = prim_car(&[car1])?;
+    prim_car(&[car2])
+}
+
+/// (cdaar list) → value
+///
+/// Equivalent to (cdr (car (car list))).
+///
+/// **R4RS**: Library procedure
+pub fn prim_cdaar(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("cdaar requires exactly 1 argument".to_string());
+    }
+
+    let car1 = prim_car(args)?;
+    let car2 = prim_car(&[car1])?;
+    prim_cdr(&[car2])
+}
+
+/// (cadar list) → value
+///
+/// Equivalent to (car (cdr (car list))).
+///
+/// **R4RS**: Library procedure
+pub fn prim_cadar(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("cadar requires exactly 1 argument".to_string());
+    }
+
+    let car = prim_car(args)?;
+    let cdr = prim_cdr(&[car])?;
+    prim_car(&[cdr])
+}
+
+/// (cddar list) → value
+///
+/// Equivalent to (cdr (cdr (car list))).
+///
+/// **R4RS**: Library procedure
+pub fn prim_cddar(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("cddar requires exactly 1 argument".to_string());
+    }
+
+    let car = prim_car(args)?;
+    let cdr1 = prim_cdr(&[car])?;
+    prim_cdr(&[cdr1])
+}
+
+/// (caadr list) → value
+///
+/// Equivalent to (car (car (cdr list))).
+///
+/// **R4RS**: Library procedure
+pub fn prim_caadr(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("caadr requires exactly 1 argument".to_string());
+    }
+
+    let cdr = prim_cdr(args)?;
+    let car = prim_car(&[cdr])?;
+    prim_car(&[car])
+}
+
+/// (cdadr list) → value
+///
+/// Equivalent to (cdr (car (cdr list))).
+///
+/// **R4RS**: Library procedure
+pub fn prim_cdadr(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("cdadr requires exactly 1 argument".to_string());
+    }
+
+    let cdr = prim_cdr(args)?;
+    let car = prim_car(&[cdr])?;
+    prim_cdr(&[car])
+}
+
+// =============================================================================
+// Additional List Utilities
+// =============================================================================
+
+/// (last pair) → value
+///
+/// Returns the last element of a list (or the last cdr for improper lists).
+///
+/// **Extension**: Useful utility
+pub fn prim_last(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("last requires exactly 1 argument".to_string());
+    }
+
+    let mut current = args[0].clone();
+    loop {
+        match current {
+            Value::Nil => return Err("last: empty list".to_string()),
+            Value::Pair(ref p) => {
+                let pair = p.borrow();
+                match &pair.cdr {
+                    Value::Nil => {
+                        // This is the last pair, return its car
+                        return Ok(pair.car.clone());
+                    }
+                    Value::Pair(_) => {
+                        // Continue to next pair
+                        let next = pair.cdr.clone();
+                        drop(pair);
+                        current = next;
+                    }
+                    other => {
+                        // Improper list - return the last element before the improper cdr
+                        return Ok(pair.car.clone());
+                    }
+                }
+            }
+            _ => return Err(format!("last: not a list: {:?}", args[0])),
+        }
+    }
+}
+
 /// (zero? n) → boolean (alias check)
 ///
 /// Returns #t if n is zero. Already implemented, but commonly used.
@@ -2610,6 +2756,15 @@ pub fn register_list_primitives(env: &gc::Gc<crate::scheme::environment::Environ
     env.define("cadddr", Value::primitive("cadddr", prim_cadddr));
     env.define("caar", Value::primitive("caar", prim_caar));
     env.define("cddr", Value::primitive("cddr", prim_cddr));
+    env.define("cdar", Value::primitive("cdar", prim_cdar));
+    env.define("caaar", Value::primitive("caaar", prim_caaar));
+    env.define("cdaar", Value::primitive("cdaar", prim_cdaar));
+    env.define("cadar", Value::primitive("cadar", prim_cadar));
+    env.define("cddar", Value::primitive("cddar", prim_cddar));
+    env.define("caadr", Value::primitive("caadr", prim_caadr));
+    env.define("cdadr", Value::primitive("cdadr", prim_cdadr));
+    // Additional list utilities
+    env.define("last", Value::primitive("last", prim_last));
 }
 
 /// Register all number primitives in an environment
@@ -3680,6 +3835,95 @@ mod tests {
         // First element should be 3
         let first = prim_car(&[result.clone()]).unwrap();
         assert!(matches!(first, Value::Integer(3)));
+    }
+
+    #[test]
+    fn test_cdar() {
+        // (cdar '((1 2 3) 4)) => (2 3)
+        let inner = prim_list(&[Value::integer(1), Value::integer(2), Value::integer(3)]).unwrap();
+        let outer = prim_list(&[inner, Value::integer(4)]).unwrap();
+        let result = prim_cdar(&[outer]).unwrap();
+        assert!(result.is_list());
+        let first = prim_car(&[result]).unwrap();
+        assert!(matches!(first, Value::Integer(2)));
+    }
+
+    #[test]
+    fn test_caaar() {
+        // (caaar '(((1 2) 3) 4)) => 1
+        let innermost = prim_list(&[Value::integer(1), Value::integer(2)]).unwrap();
+        let middle = prim_list(&[innermost, Value::integer(3)]).unwrap();
+        let outer = prim_list(&[middle, Value::integer(4)]).unwrap();
+        let result = prim_caaar(&[outer]).unwrap();
+        assert!(matches!(result, Value::Integer(1)));
+    }
+
+    #[test]
+    fn test_cdaar() {
+        // (cdaar '(((1 2) 3) 4)) => (2)
+        let innermost = prim_list(&[Value::integer(1), Value::integer(2)]).unwrap();
+        let middle = prim_list(&[innermost, Value::integer(3)]).unwrap();
+        let outer = prim_list(&[middle, Value::integer(4)]).unwrap();
+        let result = prim_cdaar(&[outer]).unwrap();
+        assert!(result.is_list());
+        let first = prim_car(&[result]).unwrap();
+        assert!(matches!(first, Value::Integer(2)));
+    }
+
+    #[test]
+    fn test_cadar() {
+        // (cadar '((1 2 3) 4)) => 2
+        let inner = prim_list(&[Value::integer(1), Value::integer(2), Value::integer(3)]).unwrap();
+        let outer = prim_list(&[inner, Value::integer(4)]).unwrap();
+        let result = prim_cadar(&[outer]).unwrap();
+        assert!(matches!(result, Value::Integer(2)));
+    }
+
+    #[test]
+    fn test_cddar() {
+        // (cddar '((1 2 3 4) 5)) => (3 4)
+        let inner = prim_list(&[Value::integer(1), Value::integer(2), Value::integer(3), Value::integer(4)]).unwrap();
+        let outer = prim_list(&[inner, Value::integer(5)]).unwrap();
+        let result = prim_cddar(&[outer]).unwrap();
+        assert!(result.is_list());
+        let first = prim_car(&[result]).unwrap();
+        assert!(matches!(first, Value::Integer(3)));
+    }
+
+    #[test]
+    fn test_caadr() {
+        // (caadr '(1 (2 3) 4)) => 2
+        let inner = prim_list(&[Value::integer(2), Value::integer(3)]).unwrap();
+        let outer = prim_list(&[Value::integer(1), inner, Value::integer(4)]).unwrap();
+        let result = prim_caadr(&[outer]).unwrap();
+        assert!(matches!(result, Value::Integer(2)));
+    }
+
+    #[test]
+    fn test_cdadr() {
+        // (cdadr '(1 (2 3 4) 5)) => (3 4)
+        let inner = prim_list(&[Value::integer(2), Value::integer(3), Value::integer(4)]).unwrap();
+        let outer = prim_list(&[Value::integer(1), inner, Value::integer(5)]).unwrap();
+        let result = prim_cdadr(&[outer]).unwrap();
+        assert!(result.is_list());
+        let first = prim_car(&[result]).unwrap();
+        assert!(matches!(first, Value::Integer(3)));
+    }
+
+    #[test]
+    fn test_last() {
+        // (last '(1 2 3 4)) => 4
+        let list = prim_list(&[Value::integer(1), Value::integer(2), Value::integer(3), Value::integer(4)]).unwrap();
+        let result = prim_last(&[list]).unwrap();
+        assert!(matches!(result, Value::Integer(4)));
+
+        // (last '(1)) => 1
+        let single = prim_list(&[Value::integer(1)]).unwrap();
+        let result = prim_last(&[single]).unwrap();
+        assert!(matches!(result, Value::Integer(1)));
+
+        // Empty list should error
+        assert!(prim_last(&[Value::Nil]).is_err());
     }
 
     // =========================================================================
