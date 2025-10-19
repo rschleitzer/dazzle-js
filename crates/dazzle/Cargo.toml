@@ -1,12 +1,12 @@
 [package]
-name = "dazzle-cli"
+name = "dazzle"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Command-line interface for Dazzle code generation tool"
+description = "Template-driven code generation tool powered by Scheme and XML (DSSSL)"
 
 [[bin]]
 name = "dazzle"
