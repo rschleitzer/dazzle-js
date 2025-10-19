@@ -1017,6 +1017,497 @@ pub fn prim_round(args: &[Value]) -> PrimitiveResult {
 }
 
 // =============================================================================
+// String Primitives (R4RS)
+// =============================================================================
+
+/// (string-length string) → integer
+///
+/// Returns the number of characters in string.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_length(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("string-length requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::String(s) => Ok(Value::integer(s.chars().count() as i64)),
+        _ => Err(format!("string-length: not a string: {:?}", args[0])),
+    }
+}
+
+/// (string-ref string k) → char
+///
+/// Returns the kth character of string (zero-indexed).
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_ref(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("string-ref requires exactly 2 arguments".to_string());
+    }
+
+    let s = match &args[0] {
+        Value::String(s) => s,
+        _ => return Err(format!("string-ref: not a string: {:?}", args[0])),
+    };
+
+    let k = match args[1] {
+        Value::Integer(n) if n >= 0 => n as usize,
+        _ => return Err("string-ref: second argument must be a non-negative integer".to_string()),
+    };
+
+    let chars: Vec<char> = s.chars().collect();
+    if k >= chars.len() {
+        return Err("string-ref: index out of bounds".to_string());
+    }
+
+    Ok(Value::char(chars[k]))
+}
+
+/// (string-append string ...) → string
+///
+/// Returns a newly allocated string consisting of the concatenation of all arguments.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_append(args: &[Value]) -> PrimitiveResult {
+    let mut result = String::new();
+
+    for arg in args {
+        match arg {
+            Value::String(s) => result.push_str(s),
+            _ => return Err(format!("string-append: not a string: {:?}", arg)),
+        }
+    }
+
+    Ok(Value::string(result))
+}
+
+/// (substring string start end) → string
+///
+/// Returns a newly allocated string formed from the characters of string
+/// beginning with index start (inclusive) and ending with index end (exclusive).
+///
+/// **R4RS**: Required procedure
+pub fn prim_substring(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 3 {
+        return Err("substring requires exactly 3 arguments".to_string());
+    }
+
+    let s = match &args[0] {
+        Value::String(s) => s,
+        _ => return Err(format!("substring: not a string: {:?}", args[0])),
+    };
+
+    let start = match args[1] {
+        Value::Integer(n) if n >= 0 => n as usize,
+        _ => return Err("substring: start must be a non-negative integer".to_string()),
+    };
+
+    let end = match args[2] {
+        Value::Integer(n) if n >= 0 => n as usize,
+        _ => return Err("substring: end must be a non-negative integer".to_string()),
+    };
+
+    let chars: Vec<char> = s.chars().collect();
+    if start > end || end > chars.len() {
+        return Err("substring: invalid range".to_string());
+    }
+
+    let substring: String = chars[start..end].iter().collect();
+    Ok(Value::string(substring))
+}
+
+/// (string=? string1 string2) → boolean
+///
+/// Returns #t if the two strings are equal, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_eq(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("string=? requires exactly 2 arguments".to_string());
+    }
+
+    let s1 = match &args[0] {
+        Value::String(s) => s,
+        _ => return Err(format!("string=?: not a string: {:?}", args[0])),
+    };
+
+    let s2 = match &args[1] {
+        Value::String(s) => s,
+        _ => return Err(format!("string=?: not a string: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(s1 == s2))
+}
+
+/// (string<? string1 string2) → boolean
+///
+/// Returns #t if string1 is lexicographically less than string2, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_lt(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("string<? requires exactly 2 arguments".to_string());
+    }
+
+    let s1 = match &args[0] {
+        Value::String(s) => s,
+        _ => return Err(format!("string<?: not a string: {:?}", args[0])),
+    };
+
+    let s2 = match &args[1] {
+        Value::String(s) => s,
+        _ => return Err(format!("string<?: not a string: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(s1 < s2))
+}
+
+/// (string>? string1 string2) → boolean
+///
+/// Returns #t if string1 is lexicographically greater than string2, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_gt(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("string>? requires exactly 2 arguments".to_string());
+    }
+
+    let s1 = match &args[0] {
+        Value::String(s) => s,
+        _ => return Err(format!("string>?: not a string: {:?}", args[0])),
+    };
+
+    let s2 = match &args[1] {
+        Value::String(s) => s,
+        _ => return Err(format!("string>?: not a string: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(s1 > s2))
+}
+
+/// (string<=? string1 string2) → boolean
+///
+/// Returns #t if string1 is lexicographically less than or equal to string2, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_le(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("string<=? requires exactly 2 arguments".to_string());
+    }
+
+    let s1 = match &args[0] {
+        Value::String(s) => s,
+        _ => return Err(format!("string<=?: not a string: {:?}", args[0])),
+    };
+
+    let s2 = match &args[1] {
+        Value::String(s) => s,
+        _ => return Err(format!("string<=?: not a string: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(s1 <= s2))
+}
+
+/// (string>=? string1 string2) → boolean
+///
+/// Returns #t if string1 is lexicographically greater than or equal to string2, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_ge(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("string>=? requires exactly 2 arguments".to_string());
+    }
+
+    let s1 = match &args[0] {
+        Value::String(s) => s,
+        _ => return Err(format!("string>=?: not a string: {:?}", args[0])),
+    };
+
+    let s2 = match &args[1] {
+        Value::String(s) => s,
+        _ => return Err(format!("string>=?: not a string: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(s1 >= s2))
+}
+
+/// (string? obj) → boolean
+///
+/// Returns #t if obj is a string, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("string? requires exactly 1 argument".to_string());
+    }
+
+    Ok(Value::bool(matches!(args[0], Value::String(_))))
+}
+
+/// (make-string k [char]) → string
+///
+/// Returns a newly allocated string of length k. If char is given,
+/// then all elements of the string are initialized to char, otherwise
+/// the contents are unspecified (we use space).
+///
+/// **R4RS**: Required procedure
+pub fn prim_make_string(args: &[Value]) -> PrimitiveResult {
+    if args.is_empty() || args.len() > 2 {
+        return Err("make-string requires 1 or 2 arguments".to_string());
+    }
+
+    let k = match args[0] {
+        Value::Integer(n) if n >= 0 => n as usize,
+        _ => return Err("make-string: first argument must be a non-negative integer".to_string()),
+    };
+
+    let ch = if args.len() == 2 {
+        match args[1] {
+            Value::Char(c) => c,
+            _ => return Err("make-string: second argument must be a character".to_string()),
+        }
+    } else {
+        ' '
+    };
+
+    Ok(Value::string(ch.to_string().repeat(k)))
+}
+
+/// (string char ...) → string
+///
+/// Returns a newly allocated string composed of the arguments.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string(args: &[Value]) -> PrimitiveResult {
+    let mut result = String::new();
+
+    for arg in args {
+        match arg {
+            Value::Char(c) => result.push(*c),
+            _ => return Err(format!("string: not a character: {:?}", arg)),
+        }
+    }
+
+    Ok(Value::string(result))
+}
+
+/// (string->list string) → list
+///
+/// Returns a newly allocated list of the characters of string.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_to_list(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("string->list requires exactly 1 argument".to_string());
+    }
+
+    let s = match &args[0] {
+        Value::String(s) => s,
+        _ => return Err(format!("string->list: not a string: {:?}", args[0])),
+    };
+
+    let mut result = Value::Nil;
+    for ch in s.chars().rev() {
+        result = Value::cons(Value::char(ch), result);
+    }
+
+    Ok(result)
+}
+
+/// (list->string list) → string
+///
+/// Returns a newly allocated string formed from the characters in list.
+///
+/// **R4RS**: Required procedure
+pub fn prim_list_to_string(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("list->string requires exactly 1 argument".to_string());
+    }
+
+    let mut result = String::new();
+    let mut current = args[0].clone();
+
+    loop {
+        match current {
+            Value::Nil => break,
+            Value::Pair(ref p) => {
+                let pair = p.borrow();
+                match pair.car {
+                    Value::Char(c) => result.push(c),
+                    _ => return Err("list->string: list must contain only characters".to_string()),
+                }
+                let cdr = pair.cdr.clone();
+                drop(pair);
+                current = cdr;
+            }
+            _ => return Err("list->string: not a proper list".to_string()),
+        }
+    }
+
+    Ok(Value::string(result))
+}
+
+/// (symbol->string symbol) → string
+///
+/// Returns the name of symbol as a string.
+///
+/// **R4RS**: Required procedure
+pub fn prim_symbol_to_string(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("symbol->string requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::Symbol(s) => Ok(Value::string(s.to_string())),
+        _ => Err(format!("symbol->string: not a symbol: {:?}", args[0])),
+    }
+}
+
+/// (string->symbol string) → symbol
+///
+/// Returns the symbol whose name is string.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_to_symbol(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("string->symbol requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::String(s) => Ok(Value::symbol(s)),
+        _ => Err(format!("string->symbol: not a string: {:?}", args[0])),
+    }
+}
+
+/// (symbol? obj) → boolean
+///
+/// Returns #t if obj is a symbol, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_symbol_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("symbol? requires exactly 1 argument".to_string());
+    }
+
+    Ok(Value::bool(matches!(args[0], Value::Symbol(_))))
+}
+
+/// (char? obj) → boolean
+///
+/// Returns #t if obj is a character, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("char? requires exactly 1 argument".to_string());
+    }
+
+    Ok(Value::bool(matches!(args[0], Value::Char(_))))
+}
+
+/// (char=? char1 char2) → boolean
+///
+/// Returns #t if the two characters are equal, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_eq(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("char=? requires exactly 2 arguments".to_string());
+    }
+
+    let c1 = match args[0] {
+        Value::Char(c) => c,
+        _ => return Err(format!("char=?: not a character: {:?}", args[0])),
+    };
+
+    let c2 = match args[1] {
+        Value::Char(c) => c,
+        _ => return Err(format!("char=?: not a character: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(c1 == c2))
+}
+
+/// (char<? char1 char2) → boolean
+///
+/// Returns #t if char1 is less than char2, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_lt(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("char<? requires exactly 2 arguments".to_string());
+    }
+
+    let c1 = match args[0] {
+        Value::Char(c) => c,
+        _ => return Err(format!("char<?: not a character: {:?}", args[0])),
+    };
+
+    let c2 = match args[1] {
+        Value::Char(c) => c,
+        _ => return Err(format!("char<?: not a character: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(c1 < c2))
+}
+
+/// (char>? char1 char2) → boolean
+///
+/// Returns #t if char1 is greater than char2, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_gt(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("char>? requires exactly 2 arguments".to_string());
+    }
+
+    let c1 = match args[0] {
+        Value::Char(c) => c,
+        _ => return Err(format!("char>?: not a character: {:?}", args[0])),
+    };
+
+    let c2 = match args[1] {
+        Value::Char(c) => c,
+        _ => return Err(format!("char>?: not a character: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(c1 > c2))
+}
+
+/// (char-upcase char) → char
+///
+/// Returns the uppercase equivalent of char.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_upcase(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("char-upcase requires exactly 1 argument".to_string());
+    }
+
+    match args[0] {
+        Value::Char(c) => Ok(Value::char(c.to_ascii_uppercase())),
+        _ => Err(format!("char-upcase: not a character: {:?}", args[0])),
+    }
+}
+
+/// (char-downcase char) → char
+///
+/// Returns the lowercase equivalent of char.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_downcase(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("char-downcase requires exactly 1 argument".to_string());
+    }
+
+    match args[0] {
+        Value::Char(c) => Ok(Value::char(c.to_ascii_lowercase())),
+        _ => Err(format!("char-downcase: not a character: {:?}", args[0])),
+    }
+}
+
+// =============================================================================
 // Registration
 // =============================================================================
 
@@ -1072,6 +1563,42 @@ pub fn register_number_primitives(env: &gc::Gc<crate::scheme::environment::Envir
     env.define("ceiling", Value::primitive("ceiling", prim_ceiling));
     env.define("truncate", Value::primitive("truncate", prim_truncate));
     env.define("round", Value::primitive("round", prim_round));
+}
+
+/// Register all string primitives in an environment
+pub fn register_string_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
+    // String operations
+    env.define("string-length", Value::primitive("string-length", prim_string_length));
+    env.define("string-ref", Value::primitive("string-ref", prim_string_ref));
+    env.define("string-append", Value::primitive("string-append", prim_string_append));
+    env.define("substring", Value::primitive("substring", prim_substring));
+    env.define("make-string", Value::primitive("make-string", prim_make_string));
+    env.define("string", Value::primitive("string", prim_string));
+
+    // String comparison
+    env.define("string=?", Value::primitive("string=?", prim_string_eq));
+    env.define("string<?", Value::primitive("string<?", prim_string_lt));
+    env.define("string>?", Value::primitive("string>?", prim_string_gt));
+    env.define("string<=?", Value::primitive("string<=?", prim_string_le));
+    env.define("string>=?", Value::primitive("string>=?", prim_string_ge));
+
+    // String conversions
+    env.define("string->list", Value::primitive("string->list", prim_string_to_list));
+    env.define("list->string", Value::primitive("list->string", prim_list_to_string));
+    env.define("string->symbol", Value::primitive("string->symbol", prim_string_to_symbol));
+    env.define("symbol->string", Value::primitive("symbol->string", prim_symbol_to_string));
+
+    // Type predicates
+    env.define("string?", Value::primitive("string?", prim_string_p));
+    env.define("symbol?", Value::primitive("symbol?", prim_symbol_p));
+    env.define("char?", Value::primitive("char?", prim_char_p));
+
+    // Character operations
+    env.define("char=?", Value::primitive("char=?", prim_char_eq));
+    env.define("char<?", Value::primitive("char<?", prim_char_lt));
+    env.define("char>?", Value::primitive("char>?", prim_char_gt));
+    env.define("char-upcase", Value::primitive("char-upcase", prim_char_upcase));
+    env.define("char-downcase", Value::primitive("char-downcase", prim_char_downcase));
 }
 
 // =============================================================================
@@ -1424,5 +1951,203 @@ mod tests {
 
         let result = prim_round(&[Value::real(3.4)]).unwrap();
         assert!(matches!(result, Value::Integer(3)));
+    }
+
+    // =========================================================================
+    // String primitive tests
+    // =========================================================================
+
+    #[test]
+    fn test_string_length() {
+        let s = Value::string("hello".to_string());
+        let result = prim_string_length(&[s]).unwrap();
+        assert!(matches!(result, Value::Integer(5)));
+
+        let empty = Value::string(String::new());
+        let result = prim_string_length(&[empty]).unwrap();
+        assert!(matches!(result, Value::Integer(0)));
+    }
+
+    #[test]
+    fn test_string_ref() {
+        let s = Value::string("hello".to_string());
+        let result = prim_string_ref(&[s.clone(), Value::integer(0)]).unwrap();
+        assert!(matches!(result, Value::Char('h')));
+
+        let result = prim_string_ref(&[s, Value::integer(4)]).unwrap();
+        assert!(matches!(result, Value::Char('o')));
+    }
+
+    #[test]
+    fn test_string_append() {
+        let s1 = Value::string("hello".to_string());
+        let s2 = Value::string(" ".to_string());
+        let s3 = Value::string("world".to_string());
+        let result = prim_string_append(&[s1, s2, s3]).unwrap();
+
+        if let Value::String(ref s) = result {
+            assert_eq!(&**s, "hello world");
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    #[test]
+    fn test_substring() {
+        let s = Value::string("hello".to_string());
+        let result = prim_substring(&[s, Value::integer(1), Value::integer(4)]).unwrap();
+
+        if let Value::String(ref s) = result {
+            assert_eq!(&**s, "ell");
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    #[test]
+    fn test_string_eq() {
+        let s1 = Value::string("hello".to_string());
+        let s2 = Value::string("hello".to_string());
+        let s3 = Value::string("world".to_string());
+
+        let result = prim_string_eq(&[s1.clone(), s2]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_eq(&[s1, s3]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_string_lt() {
+        let s1 = Value::string("abc".to_string());
+        let s2 = Value::string("def".to_string());
+
+        let result = prim_string_lt(&[s1.clone(), s2.clone()]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_lt(&[s2, s1]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_make_string() {
+        let result = prim_make_string(&[Value::integer(5), Value::char('a')]).unwrap();
+
+        if let Value::String(ref s) = result {
+            assert_eq!(&**s, "aaaaa");
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    #[test]
+    fn test_string() {
+        let result = prim_string(&[
+            Value::char('h'),
+            Value::char('i'),
+        ]).unwrap();
+
+        if let Value::String(ref s) = result {
+            assert_eq!(&**s, "hi");
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    #[test]
+    fn test_string_to_list() {
+        let s = Value::string("hi".to_string());
+        let result = prim_string_to_list(&[s]).unwrap();
+
+        // Should be a list of 2 characters
+        let len = prim_length(&[result.clone()]).unwrap();
+        assert!(matches!(len, Value::Integer(2)));
+
+        let first = prim_car(&[result]).unwrap();
+        assert!(matches!(first, Value::Char('h')));
+    }
+
+    #[test]
+    fn test_list_to_string() {
+        let list = prim_list(&[
+            Value::char('h'),
+            Value::char('i'),
+        ]).unwrap();
+
+        let result = prim_list_to_string(&[list]).unwrap();
+
+        if let Value::String(ref s) = result {
+            assert_eq!(&**s, "hi");
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    #[test]
+    fn test_symbol_to_string() {
+        let sym = Value::symbol("foo");
+        let result = prim_symbol_to_string(&[sym]).unwrap();
+
+        if let Value::String(ref s) = result {
+            assert_eq!(&**s, "foo");
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    #[test]
+    fn test_string_to_symbol() {
+        let s = Value::string("foo".to_string());
+        let result = prim_string_to_symbol(&[s]).unwrap();
+
+        assert!(matches!(result, Value::Symbol(_)));
+    }
+
+    #[test]
+    fn test_string_p() {
+        assert!(matches!(prim_string_p(&[Value::string("hello".to_string())]).unwrap(), Value::Bool(true)));
+        assert!(matches!(prim_string_p(&[Value::integer(42)]).unwrap(), Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_symbol_p() {
+        assert!(matches!(prim_symbol_p(&[Value::symbol("foo")]).unwrap(), Value::Bool(true)));
+        assert!(matches!(prim_symbol_p(&[Value::string("foo".to_string())]).unwrap(), Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_char_p() {
+        assert!(matches!(prim_char_p(&[Value::char('a')]).unwrap(), Value::Bool(true)));
+        assert!(matches!(prim_char_p(&[Value::integer(65)]).unwrap(), Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_char_eq() {
+        let result = prim_char_eq(&[Value::char('a'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_eq(&[Value::char('a'), Value::char('b')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_char_lt() {
+        let result = prim_char_lt(&[Value::char('a'), Value::char('b')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_lt(&[Value::char('b'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_char_upcase() {
+        let result = prim_char_upcase(&[Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Char('A')));
+    }
+
+    #[test]
+    fn test_char_downcase() {
+        let result = prim_char_downcase(&[Value::char('Z')]).unwrap();
+        assert!(matches!(result, Value::Char('z')));
     }
 }

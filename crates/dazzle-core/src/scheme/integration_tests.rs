@@ -25,6 +25,7 @@ mod tests {
         let env = Environment::new_global();
         primitives::register_list_primitives(&env);
         primitives::register_number_primitives(&env);
+        primitives::register_string_primitives(&env);
 
         // Eval
         let mut evaluator = Evaluator::new();
@@ -394,5 +395,97 @@ mod tests {
         let code = "(list-ref '(10 20 30) (- 2 1))";
         let result = eval_string(code);
         assert!(matches!(result, Value::Integer(20))); // index 1
+    }
+
+    // =========================================================================
+    // String primitives
+    // =========================================================================
+
+    #[test]
+    fn test_eval_string_operations() {
+        let result = eval_string(r#"(string-length "hello")"#);
+        assert!(matches!(result, Value::Integer(5)));
+
+        let result = eval_string(r#"(string-append "hello" " " "world")"#);
+        assert!(result.is_string());
+
+        let result = eval_string(r#"(substring "hello" 1 4)"#);
+        assert!(result.is_string());
+    }
+
+    #[test]
+    fn test_eval_string_comparison() {
+        let result = eval_string(r#"(string=? "hello" "hello")"#);
+        assert!(result.is_true());
+
+        let result = eval_string(r#"(string<? "abc" "def")"#);
+        assert!(result.is_true());
+
+        let result = eval_string(r#"(string>? "xyz" "abc")"#);
+        assert!(result.is_true());
+    }
+
+    #[test]
+    fn test_eval_string_predicates() {
+        let result = eval_string(r#"(string? "hello")"#);
+        assert!(result.is_true());
+
+        let result = eval_string(r#"(symbol? 'foo)"#);
+        assert!(result.is_true());
+
+        let result = eval_string(r#"(char? #\a)"#);
+        assert!(result.is_true());
+    }
+
+    #[test]
+    fn test_eval_string_conversions() {
+        let result = eval_string(r#"(symbol->string 'foo)"#);
+        assert!(result.is_string());
+
+        let result = eval_string(r#"(string->symbol "bar")"#);
+        assert!(matches!(result, Value::Symbol(_)));
+
+        let result = eval_string(r#"(string->list "hi")"#);
+        assert!(result.is_list());
+
+        let result = eval_string(r#"(list->string '(#\h #\i))"#);
+        assert!(result.is_string());
+    }
+
+    #[test]
+    fn test_eval_char_operations() {
+        let result = eval_string(r#"(char=? #\a #\a)"#);
+        assert!(result.is_true());
+
+        let result = eval_string(r#"(char<? #\a #\b)"#);
+        assert!(result.is_true());
+
+        let result = eval_string(r#"(char-upcase #\a)"#);
+        assert!(matches!(result, Value::Char('A')));
+
+        let result = eval_string(r#"(char-downcase #\Z)"#);
+        assert!(matches!(result, Value::Char('z')));
+    }
+
+    #[test]
+    fn test_eval_complex_string_operations() {
+        // String append in let binding
+        let code = r#"
+            (let ((s1 "hello")
+                  (s2 "world"))
+              (string-append s1 " " s2))
+        "#;
+        let result = eval_string(code);
+        assert!(result.is_string());
+
+        // Using string-length with comparison
+        let code = r#"(< (string-length "hi") (string-length "hello"))"#;
+        let result = eval_string(code);
+        assert!(result.is_true());
+
+        // Round-trip conversion
+        let code = r#"(list->string (string->list "test"))"#;
+        let result = eval_string(code);
+        assert!(result.is_string());
     }
 }
