@@ -133,9 +133,16 @@ impl Node for LibXml2Node {
     }
 
     fn parent(&self) -> Option<Box<dyn Node>> {
-        self.node
-            .get_parent()
-            .map(|p| Box::new(LibXml2Node::from_libxml_node(p)) as Box<dyn Node>)
+        // Get parent, but filter out document nodes
+        // In DSSSL, the root element has no parent (document node is not exposed)
+        self.node.get_parent().and_then(|p| {
+            // Check if parent is a document node
+            if p.get_type() == Some(libxml::tree::NodeType::DocumentNode) {
+                None
+            } else {
+                Some(Box::new(LibXml2Node::from_libxml_node(p)) as Box<dyn Node>)
+            }
+        })
     }
 
     fn attribute_string(&self, name: &str) -> Option<String> {
