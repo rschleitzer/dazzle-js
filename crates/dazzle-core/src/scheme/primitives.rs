@@ -1232,6 +1232,121 @@ pub fn prim_string_ge(args: &[Value]) -> PrimitiveResult {
     Ok(Value::bool(s1 >= s2))
 }
 
+/// (string-ci=? string1 string2) → boolean
+///
+/// Returns #t if the two strings are equal ignoring case, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_ci_eq(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("string-ci=? requires exactly 2 arguments".to_string());
+    }
+
+    let s1 = match &args[0] {
+        Value::String(s) => s.to_lowercase(),
+        _ => return Err(format!("string-ci=?: not a string: {:?}", args[0])),
+    };
+
+    let s2 = match &args[1] {
+        Value::String(s) => s.to_lowercase(),
+        _ => return Err(format!("string-ci=?: not a string: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(s1 == s2))
+}
+
+/// (string-ci<? string1 string2) → boolean
+///
+/// Returns #t if string1 is lexicographically less than string2 (ignoring case), otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_ci_lt(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("string-ci<? requires exactly 2 arguments".to_string());
+    }
+
+    let s1 = match &args[0] {
+        Value::String(s) => s.to_lowercase(),
+        _ => return Err(format!("string-ci<?: not a string: {:?}", args[0])),
+    };
+
+    let s2 = match &args[1] {
+        Value::String(s) => s.to_lowercase(),
+        _ => return Err(format!("string-ci<?: not a string: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(s1 < s2))
+}
+
+/// (string-ci>? string1 string2) → boolean
+///
+/// Returns #t if string1 is lexicographically greater than string2 (ignoring case), otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_ci_gt(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("string-ci>? requires exactly 2 arguments".to_string());
+    }
+
+    let s1 = match &args[0] {
+        Value::String(s) => s.to_lowercase(),
+        _ => return Err(format!("string-ci>?: not a string: {:?}", args[0])),
+    };
+
+    let s2 = match &args[1] {
+        Value::String(s) => s.to_lowercase(),
+        _ => return Err(format!("string-ci>?: not a string: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(s1 > s2))
+}
+
+/// (string-ci<=? string1 string2) → boolean
+///
+/// Returns #t if string1 is lexicographically less than or equal to string2 (ignoring case), otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_ci_le(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("string-ci<=? requires exactly 2 arguments".to_string());
+    }
+
+    let s1 = match &args[0] {
+        Value::String(s) => s.to_lowercase(),
+        _ => return Err(format!("string-ci<=?: not a string: {:?}", args[0])),
+    };
+
+    let s2 = match &args[1] {
+        Value::String(s) => s.to_lowercase(),
+        _ => return Err(format!("string-ci<=?: not a string: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(s1 <= s2))
+}
+
+/// (string-ci>=? string1 string2) → boolean
+///
+/// Returns #t if string1 is lexicographically greater than or equal to string2 (ignoring case), otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_ci_ge(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("string-ci>=? requires exactly 2 arguments".to_string());
+    }
+
+    let s1 = match &args[0] {
+        Value::String(s) => s.to_lowercase(),
+        _ => return Err(format!("string-ci>=?: not a string: {:?}", args[0])),
+    };
+
+    let s2 = match &args[1] {
+        Value::String(s) => s.to_lowercase(),
+        _ => return Err(format!("string-ci>=?: not a string: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(s1 >= s2))
+}
+
 /// (string? obj) → boolean
 ///
 /// Returns #t if obj is a string, otherwise #f.
@@ -1504,6 +1619,140 @@ pub fn prim_char_downcase(args: &[Value]) -> PrimitiveResult {
     match args[0] {
         Value::Char(c) => Ok(Value::char(c.to_ascii_lowercase())),
         _ => Err(format!("char-downcase: not a character: {:?}", args[0])),
+    }
+}
+
+/// (char<=? char1 char2) → boolean
+///
+/// Returns #t if char1 is less than or equal to char2, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_le(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("char<=? requires exactly 2 arguments".to_string());
+    }
+
+    let c1 = match args[0] {
+        Value::Char(c) => c,
+        _ => return Err(format!("char<=?: not a character: {:?}", args[0])),
+    };
+
+    let c2 = match args[1] {
+        Value::Char(c) => c,
+        _ => return Err(format!("char<=?: not a character: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(c1 <= c2))
+}
+
+/// (char>=? char1 char2) → boolean
+///
+/// Returns #t if char1 is greater than or equal to char2, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_ge(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("char>=? requires exactly 2 arguments".to_string());
+    }
+
+    let c1 = match args[0] {
+        Value::Char(c) => c,
+        _ => return Err(format!("char>=?: not a character: {:?}", args[0])),
+    };
+
+    let c2 = match args[1] {
+        Value::Char(c) => c,
+        _ => return Err(format!("char>=?: not a character: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(c1 >= c2))
+}
+
+/// (char->integer char) → integer
+///
+/// Returns the Unicode/ASCII code point of the character.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_to_integer(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("char->integer requires exactly 1 argument".to_string());
+    }
+
+    match args[0] {
+        Value::Char(c) => Ok(Value::integer(c as i64)),
+        _ => Err(format!("char->integer: not a character: {:?}", args[0])),
+    }
+}
+
+/// (integer->char n) → char
+///
+/// Returns the character with the given Unicode/ASCII code point.
+///
+/// **R4RS**: Required procedure
+pub fn prim_integer_to_char(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("integer->char requires exactly 1 argument".to_string());
+    }
+
+    match args[0] {
+        Value::Integer(n) => {
+            if n < 0 || n > 0x10FFFF {
+                return Err(format!("integer->char: invalid code point: {}", n));
+            }
+            match char::from_u32(n as u32) {
+                Some(c) => Ok(Value::char(c)),
+                None => Err(format!("integer->char: invalid Unicode code point: {}", n)),
+            }
+        }
+        _ => Err(format!("integer->char: not an integer: {:?}", args[0])),
+    }
+}
+
+/// (char-alphabetic? char) → boolean
+///
+/// Returns #t if char is an alphabetic character, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_alphabetic_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("char-alphabetic? requires exactly 1 argument".to_string());
+    }
+
+    match args[0] {
+        Value::Char(c) => Ok(Value::bool(c.is_alphabetic())),
+        _ => Err(format!("char-alphabetic?: not a character: {:?}", args[0])),
+    }
+}
+
+/// (char-numeric? char) → boolean
+///
+/// Returns #t if char is a numeric character, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_numeric_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("char-numeric? requires exactly 1 argument".to_string());
+    }
+
+    match args[0] {
+        Value::Char(c) => Ok(Value::bool(c.is_numeric())),
+        _ => Err(format!("char-numeric?: not a character: {:?}", args[0])),
+    }
+}
+
+/// (char-whitespace? char) → boolean
+///
+/// Returns #t if char is a whitespace character, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_whitespace_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("char-whitespace? requires exactly 1 argument".to_string());
+    }
+
+    match args[0] {
+        Value::Char(c) => Ok(Value::bool(c.is_whitespace())),
+        _ => Err(format!("char-whitespace?: not a character: {:?}", args[0])),
     }
 }
 
@@ -2550,6 +2799,272 @@ pub fn prim_node_list_length(args: &[Value]) -> PrimitiveResult {
     }
 }
 
+/// (node-list-first nl) → node
+///
+/// Returns the first node in a node-list.
+/// Returns #f if the node-list is empty.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_node_list_first(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("node-list-first requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::NodeList => {
+            // For now, NodeList is just a placeholder - always empty
+            // So return #f
+            Ok(Value::bool(false))
+        }
+        _ => Err(format!("node-list-first: not a node-list: {:?}", args[0])),
+    }
+}
+
+/// (node-list-rest nl) → node-list
+///
+/// Returns a node-list containing all but the first node.
+/// Returns an empty node-list if the input is empty or has only one element.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_node_list_rest(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("node-list-rest requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::NodeList => {
+            // For now, NodeList is just a placeholder - always empty
+            // So return empty node-list
+            Ok(Value::NodeList)
+        }
+        _ => Err(format!("node-list-rest: not a node-list: {:?}", args[0])),
+    }
+}
+
+/// (node-list-ref nl index) → node
+///
+/// Returns the node at the given index in the node-list (0-based).
+/// Returns #f if index is out of bounds.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_node_list_ref(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("node-list-ref requires exactly 2 arguments".to_string());
+    }
+
+    match &args[0] {
+        Value::NodeList => {
+            // Check index is an integer
+            match &args[1] {
+                Value::Integer(_) => {
+                    // For now, NodeList is just a placeholder - always empty
+                    // So any index is out of bounds
+                    Ok(Value::bool(false))
+                }
+                _ => Err(format!("node-list-ref: index not an integer: {:?}", args[1])),
+            }
+        }
+        _ => Err(format!("node-list-ref: not a node-list: {:?}", args[0])),
+    }
+}
+
+/// (node-list-reverse nl) → node-list
+///
+/// Returns a node-list with the nodes in reverse order.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_node_list_reverse(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("node-list-reverse requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::NodeList => {
+            // For now, NodeList is just a placeholder
+            // Reversing an empty list gives an empty list
+            Ok(Value::NodeList)
+        }
+        _ => Err(format!("node-list-reverse: not a node-list: {:?}", args[0])),
+    }
+}
+
+// =============================================================================
+// Additional Math Primitives (R4RS/R5RS)
+// =============================================================================
+
+/// (expt base exponent) → number
+///
+/// Returns base raised to the power of exponent.
+///
+/// **R4RS**: Math primitive
+pub fn prim_expt(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("expt requires exactly 2 arguments".to_string());
+    }
+
+    let base = match &args[0] {
+        Value::Integer(n) => *n as f64,
+        Value::Real(r) => *r,
+        _ => return Err(format!("expt: not a number: {:?}", args[0])),
+    };
+
+    let exponent = match &args[1] {
+        Value::Integer(n) => *n as f64,
+        Value::Real(r) => *r,
+        _ => return Err(format!("expt: not a number: {:?}", args[1])),
+    };
+
+    let result = base.powf(exponent);
+
+    // Return integer if both inputs were integers and result is whole
+    if matches!(args[0], Value::Integer(_)) && matches!(args[1], Value::Integer(_)) && result.fract() == 0.0 {
+        Ok(Value::integer(result as i64))
+    } else {
+        Ok(Value::real(result))
+    }
+}
+
+/// (sqrt n) → number
+///
+/// Returns the square root of n.
+///
+/// **R4RS**: Math primitive
+pub fn prim_sqrt(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("sqrt requires exactly 1 argument".to_string());
+    }
+
+    let n = match &args[0] {
+        Value::Integer(i) => *i as f64,
+        Value::Real(r) => *r,
+        _ => return Err(format!("sqrt: not a number: {:?}", args[0])),
+    };
+
+    if n < 0.0 {
+        return Err("sqrt: negative argument".to_string());
+    }
+
+    Ok(Value::real(n.sqrt()))
+}
+
+/// (sin n) → number
+///
+/// Returns the sine of n (in radians).
+///
+/// **R5RS**: Math primitive
+pub fn prim_sin(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("sin requires exactly 1 argument".to_string());
+    }
+
+    let n = match &args[0] {
+        Value::Integer(i) => *i as f64,
+        Value::Real(r) => *r,
+        _ => return Err(format!("sin: not a number: {:?}", args[0])),
+    };
+
+    Ok(Value::real(n.sin()))
+}
+
+/// (cos n) → number
+///
+/// Returns the cosine of n (in radians).
+///
+/// **R5RS**: Math primitive
+pub fn prim_cos(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("cos requires exactly 1 argument".to_string());
+    }
+
+    let n = match &args[0] {
+        Value::Integer(i) => *i as f64,
+        Value::Real(r) => *r,
+        _ => return Err(format!("cos: not a number: {:?}", args[0])),
+    };
+
+    Ok(Value::real(n.cos()))
+}
+
+/// (tan n) → number
+///
+/// Returns the tangent of n (in radians).
+///
+/// **R5RS**: Math primitive
+pub fn prim_tan(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("tan requires exactly 1 argument".to_string());
+    }
+
+    let n = match &args[0] {
+        Value::Integer(i) => *i as f64,
+        Value::Real(r) => *r,
+        _ => return Err(format!("tan: not a number: {:?}", args[0])),
+    };
+
+    Ok(Value::real(n.tan()))
+}
+
+/// (atan n) → number
+///
+/// Returns the arctangent of n (in radians).
+///
+/// **R5RS**: Math primitive
+pub fn prim_atan(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("atan requires exactly 1 argument".to_string());
+    }
+
+    let n = match &args[0] {
+        Value::Integer(i) => *i as f64,
+        Value::Real(r) => *r,
+        _ => return Err(format!("atan: not a number: {:?}", args[0])),
+    };
+
+    Ok(Value::real(n.atan()))
+}
+
+/// (log n) → number
+///
+/// Returns the natural logarithm of n.
+///
+/// **R5RS**: Math primitive
+pub fn prim_log(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("log requires exactly 1 argument".to_string());
+    }
+
+    let n = match &args[0] {
+        Value::Integer(i) => *i as f64,
+        Value::Real(r) => *r,
+        _ => return Err(format!("log: not a number: {:?}", args[0])),
+    };
+
+    if n <= 0.0 {
+        return Err("log: argument must be positive".to_string());
+    }
+
+    Ok(Value::real(n.ln()))
+}
+
+/// (exp n) → number
+///
+/// Returns e raised to the power of n.
+///
+/// **R5RS**: Math primitive
+pub fn prim_exp(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("exp requires exactly 1 argument".to_string());
+    }
+
+    let n = match &args[0] {
+        Value::Integer(i) => *i as f64,
+        Value::Real(r) => *r,
+        _ => return Err(format!("exp: not a number: {:?}", args[0])),
+    };
+
+    Ok(Value::real(n.exp()))
+}
+
 // =============================================================================
 // Sosofo Primitives (DSSSL)
 // =============================================================================
@@ -2803,6 +3318,16 @@ pub fn register_number_primitives(env: &gc::Gc<crate::scheme::environment::Envir
     env.define("ceiling", Value::primitive("ceiling", prim_ceiling));
     env.define("truncate", Value::primitive("truncate", prim_truncate));
     env.define("round", Value::primitive("round", prim_round));
+
+    // Advanced math functions
+    env.define("expt", Value::primitive("expt", prim_expt));
+    env.define("sqrt", Value::primitive("sqrt", prim_sqrt));
+    env.define("sin", Value::primitive("sin", prim_sin));
+    env.define("cos", Value::primitive("cos", prim_cos));
+    env.define("tan", Value::primitive("tan", prim_tan));
+    env.define("atan", Value::primitive("atan", prim_atan));
+    env.define("log", Value::primitive("log", prim_log));
+    env.define("exp", Value::primitive("exp", prim_exp));
 }
 
 /// Register all string primitives in an environment
@@ -2822,6 +3347,13 @@ pub fn register_string_primitives(env: &gc::Gc<crate::scheme::environment::Envir
     env.define("string<=?", Value::primitive("string<=?", prim_string_le));
     env.define("string>=?", Value::primitive("string>=?", prim_string_ge));
 
+    // Case-insensitive string comparison
+    env.define("string-ci=?", Value::primitive("string-ci=?", prim_string_ci_eq));
+    env.define("string-ci<?", Value::primitive("string-ci<?", prim_string_ci_lt));
+    env.define("string-ci>?", Value::primitive("string-ci>?", prim_string_ci_gt));
+    env.define("string-ci<=?", Value::primitive("string-ci<=?", prim_string_ci_le));
+    env.define("string-ci>=?", Value::primitive("string-ci>=?", prim_string_ci_ge));
+
     // String conversions
     env.define("string->list", Value::primitive("string->list", prim_string_to_list));
     env.define("list->string", Value::primitive("list->string", prim_list_to_string));
@@ -2837,8 +3369,15 @@ pub fn register_string_primitives(env: &gc::Gc<crate::scheme::environment::Envir
     env.define("char=?", Value::primitive("char=?", prim_char_eq));
     env.define("char<?", Value::primitive("char<?", prim_char_lt));
     env.define("char>?", Value::primitive("char>?", prim_char_gt));
+    env.define("char<=?", Value::primitive("char<=?", prim_char_le));
+    env.define("char>=?", Value::primitive("char>=?", prim_char_ge));
     env.define("char-upcase", Value::primitive("char-upcase", prim_char_upcase));
     env.define("char-downcase", Value::primitive("char-downcase", prim_char_downcase));
+    env.define("char->integer", Value::primitive("char->integer", prim_char_to_integer));
+    env.define("integer->char", Value::primitive("integer->char", prim_integer_to_char));
+    env.define("char-alphabetic?", Value::primitive("char-alphabetic?", prim_char_alphabetic_p));
+    env.define("char-numeric?", Value::primitive("char-numeric?", prim_char_numeric_p));
+    env.define("char-whitespace?", Value::primitive("char-whitespace?", prim_char_whitespace_p));
 }
 
 /// Register all boolean and equality primitives in an environment
@@ -2891,6 +3430,10 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("empty-node-list", Value::primitive("empty-node-list", prim_empty_node_list));
     env.define("node-list-empty?", Value::primitive("node-list-empty?", prim_node_list_empty_p));
     env.define("node-list-length", Value::primitive("node-list-length", prim_node_list_length));
+    env.define("node-list-first", Value::primitive("node-list-first", prim_node_list_first));
+    env.define("node-list-rest", Value::primitive("node-list-rest", prim_node_list_rest));
+    env.define("node-list-ref", Value::primitive("node-list-ref", prim_node_list_ref));
+    env.define("node-list-reverse", Value::primitive("node-list-reverse", prim_node_list_reverse));
 }
 
 /// Register sosofo primitives in an environment
@@ -3344,6 +3887,116 @@ mod tests {
     }
 
     #[test]
+    fn test_string_ci_eq() {
+        // Case-insensitive equal
+        let result = prim_string_ci_eq(&[
+            Value::string("Hello".to_string()),
+            Value::string("hello".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_ci_eq(&[
+            Value::string("WORLD".to_string()),
+            Value::string("world".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_ci_eq(&[
+            Value::string("hello".to_string()),
+            Value::string("world".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_string_ci_lt() {
+        // Case-insensitive less than
+        let result = prim_string_ci_lt(&[
+            Value::string("ABC".to_string()),
+            Value::string("def".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_ci_lt(&[
+            Value::string("abc".to_string()),
+            Value::string("DEF".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_ci_lt(&[
+            Value::string("def".to_string()),
+            Value::string("ABC".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_string_ci_gt() {
+        // Case-insensitive greater than
+        let result = prim_string_ci_gt(&[
+            Value::string("DEF".to_string()),
+            Value::string("abc".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_ci_gt(&[
+            Value::string("def".to_string()),
+            Value::string("ABC".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_ci_gt(&[
+            Value::string("ABC".to_string()),
+            Value::string("def".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_string_ci_le() {
+        // Case-insensitive less than or equal
+        let result = prim_string_ci_le(&[
+            Value::string("ABC".to_string()),
+            Value::string("def".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_ci_le(&[
+            Value::string("Hello".to_string()),
+            Value::string("hello".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_ci_le(&[
+            Value::string("def".to_string()),
+            Value::string("ABC".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_string_ci_ge() {
+        // Case-insensitive greater than or equal
+        let result = prim_string_ci_ge(&[
+            Value::string("DEF".to_string()),
+            Value::string("abc".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_ci_ge(&[
+            Value::string("Hello".to_string()),
+            Value::string("hello".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_ci_ge(&[
+            Value::string("ABC".to_string()),
+            Value::string("def".to_string()),
+        ]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
     fn test_make_string() {
         let result = prim_make_string(&[Value::integer(5), Value::char('a')]).unwrap();
 
@@ -3463,6 +4116,121 @@ mod tests {
     fn test_char_downcase() {
         let result = prim_char_downcase(&[Value::char('Z')]).unwrap();
         assert!(matches!(result, Value::Char('z')));
+    }
+
+    #[test]
+    fn test_char_le() {
+        let result = prim_char_le(&[Value::char('a'), Value::char('b')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_le(&[Value::char('a'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_le(&[Value::char('b'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_char_ge() {
+        let result = prim_char_ge(&[Value::char('b'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_ge(&[Value::char('a'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_ge(&[Value::char('a'), Value::char('b')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_char_to_integer() {
+        let result = prim_char_to_integer(&[Value::char('A')]).unwrap();
+        assert!(matches!(result, Value::Integer(65)));
+
+        let result = prim_char_to_integer(&[Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Integer(97)));
+
+        let result = prim_char_to_integer(&[Value::char('0')]).unwrap();
+        assert!(matches!(result, Value::Integer(48)));
+
+        // Non-char should error
+        assert!(prim_char_to_integer(&[Value::integer(65)]).is_err());
+    }
+
+    #[test]
+    fn test_integer_to_char() {
+        let result = prim_integer_to_char(&[Value::integer(65)]).unwrap();
+        assert!(matches!(result, Value::Char('A')));
+
+        let result = prim_integer_to_char(&[Value::integer(97)]).unwrap();
+        assert!(matches!(result, Value::Char('a')));
+
+        let result = prim_integer_to_char(&[Value::integer(48)]).unwrap();
+        assert!(matches!(result, Value::Char('0')));
+
+        // Invalid code point should error
+        assert!(prim_integer_to_char(&[Value::integer(-1)]).is_err());
+        assert!(prim_integer_to_char(&[Value::integer(0x200000)]).is_err());
+
+        // Non-integer should error
+        assert!(prim_integer_to_char(&[Value::char('A')]).is_err());
+    }
+
+    #[test]
+    fn test_char_alphabetic_p() {
+        let result = prim_char_alphabetic_p(&[Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_alphabetic_p(&[Value::char('Z')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_alphabetic_p(&[Value::char('5')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        let result = prim_char_alphabetic_p(&[Value::char(' ')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        // Non-char should error
+        assert!(prim_char_alphabetic_p(&[Value::integer(97)]).is_err());
+    }
+
+    #[test]
+    fn test_char_numeric_p() {
+        let result = prim_char_numeric_p(&[Value::char('5')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_numeric_p(&[Value::char('0')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_numeric_p(&[Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        let result = prim_char_numeric_p(&[Value::char(' ')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        // Non-char should error
+        assert!(prim_char_numeric_p(&[Value::integer(5)]).is_err());
+    }
+
+    #[test]
+    fn test_char_whitespace_p() {
+        let result = prim_char_whitespace_p(&[Value::char(' ')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_whitespace_p(&[Value::char('\t')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_whitespace_p(&[Value::char('\n')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_whitespace_p(&[Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        let result = prim_char_whitespace_p(&[Value::char('5')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        // Non-char should error
+        assert!(prim_char_whitespace_p(&[Value::integer(32)]).is_err());
     }
 
     // =========================================================================
@@ -4089,6 +4857,180 @@ mod tests {
 
         // Non-node-list should error
         assert!(prim_node_list_length(&[Value::integer(1)]).is_err());
+    }
+
+    #[test]
+    fn test_node_list_first() {
+        // Empty node-list returns #f
+        let nl = prim_empty_node_list(&[]).unwrap();
+        let result = prim_node_list_first(&[nl]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        // Non-node-list should error
+        assert!(prim_node_list_first(&[Value::integer(1)]).is_err());
+    }
+
+    #[test]
+    fn test_node_list_rest() {
+        // Rest of empty node-list is empty node-list
+        let nl = prim_empty_node_list(&[]).unwrap();
+        let result = prim_node_list_rest(&[nl]).unwrap();
+        assert!(matches!(result, Value::NodeList));
+
+        // Non-node-list should error
+        assert!(prim_node_list_rest(&[Value::integer(1)]).is_err());
+    }
+
+    #[test]
+    fn test_node_list_ref() {
+        // Out-of-bounds on empty node-list returns #f
+        let nl = prim_empty_node_list(&[]).unwrap();
+        let result = prim_node_list_ref(&[nl, Value::integer(0)]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        // Non-node-list should error
+        assert!(prim_node_list_ref(&[Value::integer(1), Value::integer(0)]).is_err());
+
+        // Non-integer index should error
+        let nl = prim_empty_node_list(&[]).unwrap();
+        assert!(prim_node_list_ref(&[nl, Value::string("x".to_string())]).is_err());
+    }
+
+    #[test]
+    fn test_node_list_reverse() {
+        // Reverse of empty node-list is empty node-list
+        let nl = prim_empty_node_list(&[]).unwrap();
+        let result = prim_node_list_reverse(&[nl]).unwrap();
+        assert!(matches!(result, Value::NodeList));
+
+        // Non-node-list should error
+        assert!(prim_node_list_reverse(&[Value::integer(1)]).is_err());
+    }
+
+    // =========================================================================
+    // Math primitive tests
+    // =========================================================================
+
+    #[test]
+    fn test_expt() {
+        // Integer exponentiation
+        let result = prim_expt(&[Value::integer(2), Value::integer(3)]).unwrap();
+        assert!(matches!(result, Value::Integer(8)));
+
+        // Real exponentiation
+        let result = prim_expt(&[Value::real(2.0), Value::integer(3)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if (r - 8.0).abs() < 0.001));
+
+        // Fractional exponent
+        let result = prim_expt(&[Value::integer(4), Value::real(0.5)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if (r - 2.0).abs() < 0.001));
+
+        // Non-number should error
+        assert!(prim_expt(&[Value::string("x".to_string()), Value::integer(2)]).is_err());
+    }
+
+    #[test]
+    fn test_sqrt() {
+        // Square root of integer
+        let result = prim_sqrt(&[Value::integer(16)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if (r - 4.0).abs() < 0.001));
+
+        // Square root of real
+        let result = prim_sqrt(&[Value::real(2.0)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if (r - 1.414).abs() < 0.01));
+
+        // Negative should error
+        assert!(prim_sqrt(&[Value::integer(-1)]).is_err());
+
+        // Non-number should error
+        assert!(prim_sqrt(&[Value::string("x".to_string())]).is_err());
+    }
+
+    #[test]
+    fn test_sin() {
+        // sin(0) = 0
+        let result = prim_sin(&[Value::integer(0)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if r.abs() < 0.001));
+
+        // sin(π/2) ≈ 1
+        let result = prim_sin(&[Value::real(std::f64::consts::PI / 2.0)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if (r - 1.0).abs() < 0.001));
+
+        // Non-number should error
+        assert!(prim_sin(&[Value::string("x".to_string())]).is_err());
+    }
+
+    #[test]
+    fn test_cos() {
+        // cos(0) = 1
+        let result = prim_cos(&[Value::integer(0)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if (r - 1.0).abs() < 0.001));
+
+        // cos(π) ≈ -1
+        let result = prim_cos(&[Value::real(std::f64::consts::PI)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if (r + 1.0).abs() < 0.001));
+
+        // Non-number should error
+        assert!(prim_cos(&[Value::string("x".to_string())]).is_err());
+    }
+
+    #[test]
+    fn test_tan() {
+        // tan(0) = 0
+        let result = prim_tan(&[Value::integer(0)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if r.abs() < 0.001));
+
+        // tan(π/4) ≈ 1
+        let result = prim_tan(&[Value::real(std::f64::consts::PI / 4.0)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if (r - 1.0).abs() < 0.001));
+
+        // Non-number should error
+        assert!(prim_tan(&[Value::string("x".to_string())]).is_err());
+    }
+
+    #[test]
+    fn test_atan() {
+        // atan(0) = 0
+        let result = prim_atan(&[Value::integer(0)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if r.abs() < 0.001));
+
+        // atan(1) ≈ π/4
+        let result = prim_atan(&[Value::integer(1)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if (r - std::f64::consts::PI / 4.0).abs() < 0.001));
+
+        // Non-number should error
+        assert!(prim_atan(&[Value::string("x".to_string())]).is_err());
+    }
+
+    #[test]
+    fn test_log() {
+        // log(e) ≈ 1
+        let result = prim_log(&[Value::real(std::f64::consts::E)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if (r - 1.0).abs() < 0.001));
+
+        // log(1) = 0
+        let result = prim_log(&[Value::integer(1)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if r.abs() < 0.001));
+
+        // Negative should error
+        assert!(prim_log(&[Value::integer(-1)]).is_err());
+
+        // Non-number should error
+        assert!(prim_log(&[Value::string("x".to_string())]).is_err());
+    }
+
+    #[test]
+    fn test_exp() {
+        // exp(0) = 1
+        let result = prim_exp(&[Value::integer(0)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if (r - 1.0).abs() < 0.001));
+
+        // exp(1) ≈ e
+        let result = prim_exp(&[Value::integer(1)]).unwrap();
+        assert!(matches!(result, Value::Real(r) if (r - std::f64::consts::E).abs() < 0.001));
+
+        // Non-number should error
+        assert!(prim_exp(&[Value::string("x".to_string())]).is_err());
     }
 
     // =========================================================================
