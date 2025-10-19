@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "libxml2-based grove implementation for Dazzle (XML + DTD validation)"
 
 [dependencies]

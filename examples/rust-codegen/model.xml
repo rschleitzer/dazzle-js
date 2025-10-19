@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<model name="UserAPI">
+  <struct name="User">
+    <field name="id" type="u64" required="true"/>
+    <field name="username" type="String" required="true"/>
+    <field name="email" type="String" required="true"/>
+    <field name="created_at" type="DateTime" required="false"/>
+  </struct>
+  <struct name="Post">
+    <field name="id" type="u64" required="true"/>
+    <field name="author_id" type="u64" required="true"/>
+    <field name="title" type="String" required="true"/>
+    <field name="content" type="String" required="true"/>
+    <field name="published" type="bool" required="false"/>
+  </struct>
+</model>

@@ -360,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn test_eval_multiline_let_THE_CRITICAL_TEST() {
+    fn test_eval_multiline_let_the_critical_test() {
         // THE TEST THAT BREAKS STEEL!
         // Multi-line let bindings with arbitrary whitespace
         let code = r#"

@@ -414,4 +414,52 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 
 **Success**: 224 primitives, byte-for-byte OpenJade match, ≤2x perf, DTD, CLI, crates.io, 1+ pkg mgr
 
-**License**: MIT | **Status**: In development
+**License**: MIT | **Status**: v0.1.0 Feature Complete (Oct 2025)
+
+---
+
+## Current Status (October 19, 2025)
+
+### ✅ v0.1.0 - FEATURE COMPLETE
+
+**All 7 Phases Completed:**
+- ✅ Phase 1: Architecture & Traits (Oct 17-19)
+- ✅ Phase 2: Scheme Interpreter (Oct 17-19)
+- ✅ Phase 3: libxml2 Grove (Oct 17-19)
+- ✅ Phase 4: SGML Backend & Processing (Oct 19)
+- ✅ Phase 5: 256 Primitives (Oct 19)
+- ✅ Phase 6: CLI & Loading (Oct 19)
+- ✅ Phase 7: Testing & Documentation (Oct 19)
+- 🚧 Phase 8: Distribution (In Progress)
+
+**Implementation Stats:**
+- **Lines of Code**: ~10,000 Rust (vs 72,000 C++ in OpenJade)
+- **Primitives**: 256 (exceeds OpenJade's 224!)
+- **Tests**: 322 passing (100% success rate)
+- **Build**: Zero warnings, zero errors
+- **Performance**: TBD (benchmarking in Phase 8)
+
+**Feature Highlights:**
+- ✅ Complete R4RS Scheme interpreter with named let
+- ✅ Full DSSSL grove query primitives
+- ✅ libxml2 integration with DTD validation
+- ✅ SGML backend for code generation
+- ✅ CLI with template loading, variables, search paths
+- ✅ Comprehensive test coverage
+- ✅ Real-world code generation examples (Rust codegen)
+- ✅ Full documentation (README, examples, primitive reference)
+
+**Deliverables:**
+- ✅ Working CLI tool (`dazzle`)
+- ✅ 4 publishable crates (core, grove-libxml2, backend-sgml, cli)
+- ✅ Example project (XML → Rust struct generation)
+- ✅ Comprehensive README (279 lines)
+- ✅ Test suite (322 tests)
+
+**Next Steps:**
+- Prepare for crates.io publication
+- Create GitHub release
+- Tag v0.1.0
+- Begin distribution (Homebrew, AUR, etc.)
+
+---

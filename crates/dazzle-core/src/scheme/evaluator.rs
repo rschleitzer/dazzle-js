@@ -266,6 +266,15 @@ impl Evaluator {
         }
     }
 
+    /// Convert a Vec to a list
+    fn vec_to_list(&self, vec: Vec<Value>) -> Value {
+        let mut result = Value::Nil;
+        for val in vec.iter().rev() {
+            result = Value::cons(val.clone(), result);
+        }
+        result
+    }
+
     /// Convert a list to a Vec of elements
     fn list_to_vec(&self, list: Value) -> Result<Vec<Value>, EvalError> {
         let mut result = Vec::new();
@@ -455,7 +464,56 @@ impl Evaluator {
             ));
         }
 
-        // Parse bindings: ((var1 val1) (var2 val2) ...)
+        // Check if this is named let: (let name ((var val)...) body...)
+        if let Value::Symbol(ref loop_name) = args_vec[0] {
+            if args_vec.len() < 3 {
+                return Err(EvalError::new(
+                    "named let requires at least 3 arguments".to_string(),
+                ));
+            }
+
+            // Named let: transform to (letrec ((name (lambda (vars...) body...))) (name vals...))
+            let bindings_list = &args_vec[1];
+            let bindings = self.list_to_vec(bindings_list.clone())?;
+            let body = &args_vec[2..];
+
+            // Extract variable names and initial values
+            let mut var_names = Vec::new();
+            let mut init_values = Vec::new();
+            for binding in &bindings {
+                let binding_vec = self.list_to_vec(binding.clone())?;
+                if binding_vec.len() != 2 {
+                    return Err(EvalError::new(
+                        "named let binding must have exactly 2 elements".to_string(),
+                    ));
+                }
+                var_names.push(binding_vec[0].clone());
+                init_values.push(binding_vec[1].clone());
+            }
+
+            // Create lambda: (lambda (vars...) body...)
+            let lambda_params = self.vec_to_list(var_names);
+            let mut lambda_body = vec![Value::symbol("lambda"), lambda_params];
+            lambda_body.extend_from_slice(body);
+            let lambda_expr = self.vec_to_list(lambda_body);
+
+            // Create letrec binding: ((name (lambda ...)))
+            let letrec_binding = Value::cons(
+                Value::symbol(loop_name),
+                Value::cons(lambda_expr, Value::Nil),
+            );
+            let letrec_bindings = Value::cons(letrec_binding, Value::Nil);
+
+            // Create function call: (name vals...)
+            let mut call_expr = vec![Value::symbol(loop_name)];
+            call_expr.extend_from_slice(&init_values);
+            let call = self.vec_to_list(call_expr);
+
+            // Evaluate: (letrec ((name (lambda ...))) (name vals...))
+            return self.eval_letrec(self.vec_to_list(vec![letrec_bindings, call]), env);
+        }
+
+        // Standard let: (let ((var val)...) body...)
         let bindings_list = &args_vec[0];
         let bindings = self.list_to_vec(bindings_list.clone())?;
 
