@@ -48,14 +48,17 @@ pub trait Node: Debug {
     /// Returns `None` for non-element nodes.
     ///
     /// DSSSL: `gi` property
-    fn gi(&self) -> Option<&str>;
+    ///
+    /// **Design Note**: Returns owned `String` rather than `&str` because
+    /// XML parsers (libxml2) return owned strings. This avoids lifetime complexity.
+    fn gi(&self) -> Option<String>;
 
     /// Get the ID attribute value
     ///
     /// Returns `None` if node has no ID attribute.
     ///
     /// DSSSL: `id` property
-    fn id(&self) -> Option<&str>;
+    fn id(&self) -> Option<String>;
 
     /// Get text content
     ///
@@ -63,7 +66,7 @@ pub trait Node: Debug {
     /// concatenated descendant text.
     ///
     /// DSSSL: `data` property
-    fn data(&self) -> Option<&str>;
+    fn data(&self) -> Option<String>;
 
     /// Get child nodes
     ///
