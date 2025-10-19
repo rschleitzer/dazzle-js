@@ -3280,6 +3280,113 @@ pub fn prim_id(args: &[Value]) -> PrimitiveResult {
     }
 }
 
+/// (ancestor gi node) → node | #f
+///
+/// Returns the nearest ancestor element with the given generic identifier.
+/// Returns #f if no such ancestor exists.
+///
+/// **DSSSL**: Grove primitive (stub)
+pub fn prim_ancestor(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 && args.len() != 2 {
+        return Err("ancestor requires 1 or 2 arguments".to_string());
+    }
+
+    // TODO: Implement full ancestor search by walking parent chain
+    // For now, return #f (stub)
+    Ok(Value::bool(false))
+}
+
+/// (descendants node) → node-list
+///
+/// Returns all descendant nodes of the given node.
+///
+/// **DSSSL**: Grove primitive (stub)
+pub fn prim_descendants(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("descendants requires exactly 1 argument".to_string());
+    }
+
+    // TODO: Implement recursive descendant collection
+    // For now, return empty node-list (stub)
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+}
+
+/// (follow node) → node-list
+///
+/// Returns all following sibling nodes.
+///
+/// **DSSSL**: Grove primitive (stub)
+pub fn prim_follow(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("follow requires exactly 1 argument".to_string());
+    }
+
+    // TODO: Implement following siblings traversal
+    // For now, return empty node-list (stub)
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+}
+
+/// (preced node) → node-list
+///
+/// Returns all preceding sibling nodes.
+///
+/// **DSSSL**: Grove primitive (stub)
+pub fn prim_preced(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("preced requires exactly 1 argument".to_string());
+    }
+
+    // TODO: Implement preceding siblings traversal
+    // For now, return empty node-list (stub)
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+}
+
+/// (attributes node) → node-list
+///
+/// Returns the attributes of the given node as a node-list.
+///
+/// **DSSSL**: Grove primitive (stub)
+pub fn prim_attributes(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("attributes requires exactly 1 argument".to_string());
+    }
+
+    // TODO: Implement attribute node-list
+    // For now, return empty node-list (stub)
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+}
+
+/// (select-elements node-list gi) → node-list
+///
+/// Returns a node-list containing only elements with the given gi.
+///
+/// **DSSSL**: Grove primitive (stub)
+pub fn prim_select_elements(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("select-elements requires exactly 2 arguments".to_string());
+    }
+
+    // TODO: Implement filtering by gi
+    // For now, return empty node-list (stub)
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+}
+
+/// (element-with-id id) → node | #f
+///
+/// Returns the element with the given ID.
+/// Returns #f if no element has that ID.
+///
+/// **DSSSL**: Grove primitive (stub)
+pub fn prim_element_with_id(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 && args.len() != 2 {
+        return Err("element-with-id requires 1 or 2 arguments".to_string());
+    }
+
+    // TODO: Use grove's ID lookup table
+    // For now, return #f (stub)
+    Ok(Value::bool(false))
+}
+
 // =============================================================================
 // Additional Math Primitives (R4RS/R5RS)
 // =============================================================================
@@ -3455,6 +3562,761 @@ pub fn prim_exp(args: &[Value]) -> PrimitiveResult {
     };
 
     Ok(Value::real(n.exp()))
+}
+
+/// (asin n) → number
+///
+/// Returns the arcsine of n (in radians).
+///
+/// **R5RS**: Math primitive
+pub fn prim_asin(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("asin requires exactly 1 argument".to_string());
+    }
+
+    let n = match &args[0] {
+        Value::Integer(i) => *i as f64,
+        Value::Real(r) => *r,
+        _ => return Err(format!("asin: not a number: {:?}", args[0])),
+    };
+
+    if n < -1.0 || n > 1.0 {
+        return Err("asin: argument must be in range [-1, 1]".to_string());
+    }
+
+    Ok(Value::real(n.asin()))
+}
+
+/// (acos n) → number
+///
+/// Returns the arccosine of n (in radians).
+///
+/// **R5RS**: Math primitive
+pub fn prim_acos(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("acos requires exactly 1 argument".to_string());
+    }
+
+    let n = match &args[0] {
+        Value::Integer(i) => *i as f64,
+        Value::Real(r) => *r,
+        _ => return Err(format!("acos: not a number: {:?}", args[0])),
+    };
+
+    if n < -1.0 || n > 1.0 {
+        return Err("acos: argument must be in range [-1, 1]".to_string());
+    }
+
+    Ok(Value::real(n.acos()))
+}
+
+/// (exact? n) → boolean
+///
+/// Returns #t if n is exact (integer), #f otherwise.
+///
+/// **R5RS**: Number predicate
+pub fn prim_exact_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("exact? requires exactly 1 argument".to_string());
+    }
+
+    Ok(Value::bool(matches!(args[0], Value::Integer(_))))
+}
+
+/// (inexact? n) → boolean
+///
+/// Returns #t if n is inexact (real), #f otherwise.
+///
+/// **R5RS**: Number predicate
+pub fn prim_inexact_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("inexact? requires exactly 1 argument".to_string());
+    }
+
+    Ok(Value::bool(matches!(args[0], Value::Real(_))))
+}
+
+/// (exact->inexact n) → number
+///
+/// Converts an exact number to inexact.
+///
+/// **R5RS**: Number conversion
+pub fn prim_exact_to_inexact(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("exact->inexact requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::Integer(i) => Ok(Value::real(*i as f64)),
+        Value::Real(r) => Ok(Value::real(*r)), // Already inexact
+        _ => Err(format!("exact->inexact: not a number: {:?}", args[0])),
+    }
+}
+
+/// (inexact->exact n) → number
+///
+/// Converts an inexact number to exact.
+///
+/// **R5RS**: Number conversion
+pub fn prim_inexact_to_exact(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("inexact->exact requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::Real(r) => {
+            if r.fract() == 0.0 && r.is_finite() {
+                Ok(Value::integer(*r as i64))
+            } else {
+                Err("inexact->exact: cannot convert non-integer to exact".to_string())
+            }
+        }
+        Value::Integer(i) => Ok(Value::integer(*i)), // Already exact
+        _ => Err(format!("inexact->exact: not a number: {:?}", args[0])),
+    }
+}
+
+// =============================================================================
+// Entity and Notation Primitives (DSSSL) - Stubs
+// =============================================================================
+
+/// (entity-system-id name) → string | #f
+pub fn prim_entity_system_id(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (entity-public-id name) → string | #f
+pub fn prim_entity_public_id(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (notation-system-id name) → string | #f
+pub fn prim_notation_system_id(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (notation-public-id name) → string | #f
+pub fn prim_notation_public_id(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+// =============================================================================
+// DSSSL Type Stubs (Quantities, Colors, Addresses, Glyphs, Spacing)
+// =============================================================================
+
+/// (color color-space ...) → color
+pub fn prim_color(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub - return placeholder color
+}
+
+/// (color-space name) → color-space
+pub fn prim_color_space(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (color-space? obj) → boolean
+pub fn prim_color_space_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("color-space? requires exactly 1 argument".to_string());
+    }
+    Ok(Value::bool(false)) // Stub - no color-space type yet
+}
+
+/// (display-space ...) → display-space
+pub fn prim_display_space(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (display-space? obj) → boolean
+pub fn prim_display_space_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("display-space? requires exactly 1 argument".to_string());
+    }
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (inline-space ...) → inline-space
+pub fn prim_inline_space(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (inline-space? obj) → boolean
+pub fn prim_inline_space_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("inline-space? requires exactly 1 argument".to_string());
+    }
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (glyph-id name) → glyph-id
+pub fn prim_glyph_id(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (glyph-id? obj) → boolean
+pub fn prim_glyph_id_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("glyph-id? requires exactly 1 argument".to_string());
+    }
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (glyph-subst-table name) → glyph-subst-table
+pub fn prim_glyph_subst_table(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (glyph-subst-table? obj) → boolean
+pub fn prim_glyph_subst_table_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("glyph-subst-table? requires exactly 1 argument".to_string());
+    }
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (glyph-subst table glyph) → glyph
+pub fn prim_glyph_subst(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (current-node-address) → address
+pub fn prim_current_node_address(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (address-local? addr) → boolean
+pub fn prim_address_local_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("address-local? requires exactly 1 argument".to_string());
+    }
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (address-visited? addr) → boolean
+pub fn prim_address_visited_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("address-visited? requires exactly 1 argument".to_string());
+    }
+    Ok(Value::bool(false)) // Stub
+}
+
+// =============================================================================
+// Node-list Utility Stubs
+// =============================================================================
+
+/// (node-list node ...) → node-list
+pub fn prim_node_list(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))) // Stub
+}
+
+/// (node-list-map proc node-list) → list
+pub fn prim_node_list_map(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Nil) // Stub
+}
+
+/// (node-property prop-name node) → value
+pub fn prim_node_property(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (match-element? pattern node) → boolean
+pub fn prim_match_element_p(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (named-node-list? obj) → boolean
+pub fn prim_named_node_list_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("named-node-list? requires exactly 1 argument".to_string());
+    }
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (node-list=? nl1 nl2) → boolean
+pub fn prim_node_list_eq(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+// =============================================================================
+// Grove Extended Primitives - Stubs
+// =============================================================================
+
+/// (first-sibling? node) → boolean
+pub fn prim_first_sibling_p(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (last-sibling? node) → boolean
+pub fn prim_last_sibling_p(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (child-number node) → integer
+pub fn prim_child_number(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::integer(0)) // Stub
+}
+
+/// (element-number node) → integer
+pub fn prim_element_number(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::integer(0)) // Stub
+}
+
+/// (inherited-attribute-string name node) → string | #f
+pub fn prim_inherited_attribute_string(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (absolute-first-sibling? node) → boolean
+pub fn prim_absolute_first_sibling_p(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (absolute-last-sibling? node) → boolean
+pub fn prim_absolute_last_sibling_p(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (ancestor-child-number gi node) → integer
+pub fn prim_ancestor_child_number(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::integer(0)) // Stub
+}
+
+/// (element-number-list gi-list node) → list
+pub fn prim_element_number_list(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Nil) // Stub
+}
+
+/// (hierarchical-number gi-list node) → string
+pub fn prim_hierarchical_number(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::string("1".to_string())) // Stub
+}
+
+/// (hierarchical-number-recursive gi-list node) → string
+pub fn prim_hierarchical_number_recursive(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::string("1".to_string())) // Stub
+}
+
+/// (have-ancestor? gi node) → boolean
+pub fn prim_have_ancestor_p(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (all-element-number node) → integer
+pub fn prim_all_element_number(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::integer(0)) // Stub
+}
+
+// =============================================================================
+// Character and Language Primitives
+// =============================================================================
+
+/// (char-property prop-name char) → value
+pub fn prim_char_property(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (char-script-case char script-case-list) → char
+pub fn prim_char_script_case(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Char('a')) // Stub - return dummy char
+}
+
+/// (language name country) → language
+pub fn prim_language(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (with-language lang proc) → value
+pub fn prim_with_language(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+// =============================================================================
+// Basic Grove Extended
+// =============================================================================
+
+/// (first-child-gi node gi) → boolean
+pub fn prim_first_child_gi(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (inherited-element-attribute-string gi name node) → string | #f
+pub fn prim_inherited_element_attribute_string(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+// =============================================================================
+// Debug and External Procedures
+// =============================================================================
+
+/// (debug obj) → obj
+pub fn prim_debug(args: &[Value]) -> PrimitiveResult {
+    if args.is_empty() {
+        return Err("debug requires at least 1 argument".to_string());
+    }
+    // Print debug info to stderr
+    eprintln!("[DEBUG] {:?}", args[0]);
+    Ok(args[0].clone())
+}
+
+/// (external-procedure name) → procedure
+pub fn prim_external_procedure(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (read-entity name) → string
+pub fn prim_read_entity(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::string("".to_string())) // Stub
+}
+
+// =============================================================================
+// Entity/Notation Extended Stubs
+// =============================================================================
+
+/// (entity-address name) → address
+pub fn prim_entity_address(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (entity-attribute-string attr-name entity-name node) → string | #f
+pub fn prim_entity_attribute_string(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (entity-generated-system-id name node) → string | #f
+pub fn prim_entity_generated_system_id(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (entity-name-normalize name node) → string
+pub fn prim_entity_name_normalize(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::string("".to_string())) // Stub
+}
+
+/// (entity-notation name node) → string | #f
+pub fn prim_entity_notation(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (entity-text name node) → string | #f
+pub fn prim_entity_text(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (entity-type name node) → symbol
+pub fn prim_entity_type(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::symbol("unknown")) // Stub
+}
+
+/// (notation-generated-system-id name node) → string | #f
+pub fn prim_notation_generated_system_id(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (general-name-normalize name node) → string
+pub fn prim_general_name_normalize(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::string("".to_string())) // Stub
+}
+
+/// (sgml-document-address doc-name node-id) → address
+pub fn prim_sgml_document_address(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (declaration node) → node | #f
+pub fn prim_declaration(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (dtd node) → node | #f
+pub fn prim_dtd(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (sgml-declaration node) → node | #f
+pub fn prim_sgml_declaration(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (document-element node) → node | #f
+pub fn prim_document_element(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (prolog node) → node-list
+pub fn prim_prolog(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))) // Stub
+}
+
+/// (epilog node) → node-list
+pub fn prim_epilog(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))) // Stub
+}
+
+/// (origin-to-subnode-rel-forest-addr node subnode) → address
+pub fn prim_origin_to_subnode_rel_forest_addr(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+// =============================================================================
+// Node-list Extended Stubs
+// =============================================================================
+
+/// (named-node name named-node-list) → node | #f
+pub fn prim_named_node(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (named-node-list-names named-node-list) → list
+pub fn prim_named_node_list_names(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Nil) // Stub
+}
+
+/// (named-node-list-normalize named-node-list tree-root? node-list) → named-node-list
+pub fn prim_named_node_list_normalize(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (node-list-address node-list) → address
+pub fn prim_node_list_address(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (node-list-error msg node-list) → node-list
+pub fn prim_node_list_error(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))) // Stub
+}
+
+/// (node-list-no-order node-list) → node-list
+pub fn prim_node_list_no_order(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))) // Stub
+}
+
+/// (select-by-class class-name node-list) → node-list
+pub fn prim_select_by_class(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))) // Stub
+}
+
+/// (node-list-union nl1 nl2 ...) → node-list
+pub fn prim_node_list_union(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))) // Stub
+}
+
+/// (node-list-intersection nl1 nl2 ...) → node-list
+pub fn prim_node_list_intersection(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))) // Stub
+}
+
+/// (node-list-difference nl1 nl2 ...) → node-list
+pub fn prim_node_list_difference(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))) // Stub
+}
+
+/// (node-list-symmetrical-difference nl1 nl2) → node-list
+pub fn prim_node_list_symmetrical_difference(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))) // Stub
+}
+
+/// (node-list-union-map proc nl) → node-list
+pub fn prim_node_list_union_map(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))) // Stub
+}
+
+// =============================================================================
+// Processing Extended Stubs
+// =============================================================================
+
+/// (process-children-trim) → sosofo
+pub fn prim_process_children_trim(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Sosofo) // Stub
+}
+
+/// (process-element-with-id id) → sosofo
+pub fn prim_process_element_with_id(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Sosofo) // Stub
+}
+
+/// (process-first-descendant gi-list) → sosofo
+pub fn prim_process_first_descendant(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Sosofo) // Stub
+}
+
+/// (process-matching-children gi-list) → sosofo
+pub fn prim_process_matching_children(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Sosofo) // Stub
+}
+
+/// (merge-style styles...) → style
+pub fn prim_merge_style(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (map-constructor constructor-name) → procedure
+pub fn prim_map_constructor(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (with-mode mode proc) → sosofo
+pub fn prim_with_mode(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Sosofo) // Stub
+}
+
+/// (current-mode) → symbol | #f
+pub fn prim_current_mode(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+// =============================================================================
+// Sosofo/Page Layout Extended Stubs
+// =============================================================================
+
+/// (current-node-page-number-sosofo) → sosofo
+pub fn prim_current_node_page_number_sosofo(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Sosofo) // Stub
+}
+
+/// (page-number-sosofo) → sosofo
+pub fn prim_page_number_sosofo(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Sosofo) // Stub
+}
+
+/// (sosofo-discard-labeled label sosofo) → sosofo
+pub fn prim_sosofo_discard_labeled(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Sosofo) // Stub
+}
+
+/// (sosofo-label label sosofo) → sosofo
+pub fn prim_sosofo_label(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Sosofo) // Stub
+}
+
+/// (idref-address string node) → address
+pub fn prim_idref_address(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (hytime-linkend node) → string | #f
+pub fn prim_hytime_linkend(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (if-first-page then-sosofo else-sosofo) → sosofo
+pub fn prim_if_first_page(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Sosofo) // Stub
+}
+
+/// (if-front-page then-sosofo else-sosofo) → sosofo
+pub fn prim_if_front_page(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Sosofo) // Stub
+}
+
+/// (sosofo-contains-node? sosofo node) → boolean
+pub fn prim_sosofo_contains_node_p(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (set-visited! address) → unspecified
+pub fn prim_set_visited(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (label-length label) → length
+pub fn prim_label_length(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::integer(0)) // Stub
+}
+
+/// (label-distance label) → length
+pub fn prim_label_distance(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::integer(0)) // Stub
+}
+
+// =============================================================================
+// Quantity/Dimension Stubs
+// =============================================================================
+
+/// (quantity->number quantity) → number
+pub fn prim_quantity_to_number(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::integer(0)) // Stub
+}
+
+/// (number->quantity number [unit]) → quantity
+pub fn prim_number_to_quantity(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (quantity-convert quantity unit) → quantity
+pub fn prim_quantity_convert(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (device-length quantity) → number
+pub fn prim_device_length(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::integer(0)) // Stub
+}
+
+/// (quantity->string quantity) → string
+pub fn prim_quantity_to_string(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::string("0pt".to_string())) // Stub
+}
+
+/// (table-unit n) → length
+pub fn prim_table_unit(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+/// (display-size) → (width . height)
+pub fn prim_display_size(_args: &[Value]) -> PrimitiveResult {
+    // Return a cons pair (width . height)
+    Ok(Value::Unspecified) // Stub
+}
+
+// =============================================================================
+// SGML-specific Stubs
+// =============================================================================
+
+/// (sgml-parse system-id) → grove
+pub fn prim_sgml_parse(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Unspecified) // Stub
+}
+
+// =============================================================================
+// Time Utility Stubs
+// =============================================================================
+
+/// (time<? t1 t2) → boolean
+pub fn prim_time_lt(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (time<=? t1 t2) → boolean
+pub fn prim_time_le(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (time>? t1 t2) → boolean
+pub fn prim_time_gt(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (time>=? t1 t2) → boolean
+pub fn prim_time_ge(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+// =============================================================================
+// Processing and Sosofo Extended Stubs
+// =============================================================================
+
+/// (next-match) → sosofo
+pub fn prim_next_match(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Sosofo) // Stub
+}
+
+/// (style? obj) → boolean
+pub fn prim_style_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("style? requires exactly 1 argument".to_string());
+    }
+    Ok(Value::bool(false)) // Stub
 }
 
 // =============================================================================
@@ -3837,8 +4699,16 @@ pub fn register_number_primitives(env: &gc::Gc<crate::scheme::environment::Envir
     env.define("cos", Value::primitive("cos", prim_cos));
     env.define("tan", Value::primitive("tan", prim_tan));
     env.define("atan", Value::primitive("atan", prim_atan));
+    env.define("asin", Value::primitive("asin", prim_asin));
+    env.define("acos", Value::primitive("acos", prim_acos));
     env.define("log", Value::primitive("log", prim_log));
     env.define("exp", Value::primitive("exp", prim_exp));
+
+    // Number conversions
+    env.define("exact?", Value::primitive("exact?", prim_exact_p));
+    env.define("inexact?", Value::primitive("inexact?", prim_inexact_p));
+    env.define("exact->inexact", Value::primitive("exact->inexact", prim_exact_to_inexact));
+    env.define("inexact->exact", Value::primitive("inexact->exact", prim_inexact_to_exact));
 }
 
 /// Register all string primitives in an environment
@@ -3934,6 +4804,33 @@ pub fn register_dsssl_type_primitives(env: &gc::Gc<crate::scheme::environment::E
     env.define("quantity?", Value::primitive("quantity?", prim_quantity_p));
     env.define("color?", Value::primitive("color?", prim_color_p));
     env.define("address?", Value::primitive("address?", prim_address_p));
+
+    // Color and color-space stubs
+    env.define("color", Value::primitive("color", prim_color));
+    env.define("color-space", Value::primitive("color-space", prim_color_space));
+    env.define("color-space?", Value::primitive("color-space?", prim_color_space_p));
+
+    // Spacing stubs
+    env.define("display-space", Value::primitive("display-space", prim_display_space));
+    env.define("display-space?", Value::primitive("display-space?", prim_display_space_p));
+    env.define("inline-space", Value::primitive("inline-space", prim_inline_space));
+    env.define("inline-space?", Value::primitive("inline-space?", prim_inline_space_p));
+
+    // Glyph stubs
+    env.define("glyph-id", Value::primitive("glyph-id", prim_glyph_id));
+    env.define("glyph-id?", Value::primitive("glyph-id?", prim_glyph_id_p));
+    env.define("glyph-subst-table", Value::primitive("glyph-subst-table", prim_glyph_subst_table));
+    env.define("glyph-subst-table?", Value::primitive("glyph-subst-table?", prim_glyph_subst_table_p));
+    env.define("glyph-subst", Value::primitive("glyph-subst", prim_glyph_subst));
+
+    // Address stubs
+    env.define("address-local?", Value::primitive("address-local?", prim_address_local_p));
+
+    // Quantity/Dimension (stubs)
+    env.define("quantity->number", Value::primitive("quantity->number", prim_quantity_to_number));
+    env.define("number->quantity", Value::primitive("number->quantity", prim_number_to_quantity));
+    env.define("quantity-convert", Value::primitive("quantity-convert", prim_quantity_convert));
+    env.define("device-length", Value::primitive("device-length", prim_device_length));
 }
 
 /// Register format primitives in an environment
@@ -3956,6 +4853,15 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("children", Value::primitive("children", prim_children));
     env.define("parent", Value::primitive("parent", prim_parent));
 
+    // Node navigation (stubs for now)
+    env.define("ancestor", Value::primitive("ancestor", prim_ancestor));
+    env.define("descendants", Value::primitive("descendants", prim_descendants));
+    env.define("follow", Value::primitive("follow", prim_follow));
+    env.define("preced", Value::primitive("preced", prim_preced));
+    env.define("attributes", Value::primitive("attributes", prim_attributes));
+    env.define("select-elements", Value::primitive("select-elements", prim_select_elements));
+    env.define("element-with-id", Value::primitive("element-with-id", prim_element_with_id));
+
     // Node-list primitives
     env.define("node-list?", Value::primitive("node-list?", prim_node_list_p));
     env.define("empty-node-list", Value::primitive("empty-node-list", prim_empty_node_list));
@@ -3965,12 +4871,70 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("node-list-rest", Value::primitive("node-list-rest", prim_node_list_rest));
     env.define("node-list-ref", Value::primitive("node-list-ref", prim_node_list_ref));
     env.define("node-list-reverse", Value::primitive("node-list-reverse", prim_node_list_reverse));
+
+    // Node-list utilities (stubs)
+    env.define("node-list", Value::primitive("node-list", prim_node_list));
+    env.define("node-list-map", Value::primitive("node-list-map", prim_node_list_map));
+    env.define("node-property", Value::primitive("node-property", prim_node_property));
+    env.define("match-element?", Value::primitive("match-element?", prim_match_element_p));
+    env.define("named-node-list?", Value::primitive("named-node-list?", prim_named_node_list_p));
+    env.define("node-list=?", Value::primitive("node-list=?", prim_node_list_eq));
+
+    // Grove extended (stubs)
+    env.define("first-sibling?", Value::primitive("first-sibling?", prim_first_sibling_p));
+    env.define("last-sibling?", Value::primitive("last-sibling?", prim_last_sibling_p));
+    env.define("child-number", Value::primitive("child-number", prim_child_number));
+    env.define("element-number", Value::primitive("element-number", prim_element_number));
+    env.define("inherited-attribute-string", Value::primitive("inherited-attribute-string", prim_inherited_attribute_string));
+
+    // Entity and notation (stubs)
+    env.define("entity-system-id", Value::primitive("entity-system-id", prim_entity_system_id));
+    env.define("entity-public-id", Value::primitive("entity-public-id", prim_entity_public_id));
+    env.define("notation-system-id", Value::primitive("notation-system-id", prim_notation_system_id));
+    env.define("notation-public-id", Value::primitive("notation-public-id", prim_notation_public_id));
+
+    // Grove Position/Numbering (stubs)
+    env.define("absolute-first-sibling?", Value::primitive("absolute-first-sibling?", prim_absolute_first_sibling_p));
+    env.define("absolute-last-sibling?", Value::primitive("absolute-last-sibling?", prim_absolute_last_sibling_p));
+    env.define("ancestor-child-number", Value::primitive("ancestor-child-number", prim_ancestor_child_number));
+    env.define("element-number-list", Value::primitive("element-number-list", prim_element_number_list));
+    env.define("hierarchical-number", Value::primitive("hierarchical-number", prim_hierarchical_number));
+    env.define("hierarchical-number-recursive", Value::primitive("hierarchical-number-recursive", prim_hierarchical_number_recursive));
+    env.define("have-ancestor?", Value::primitive("have-ancestor?", prim_have_ancestor_p));
+    env.define("all-element-number", Value::primitive("all-element-number", prim_all_element_number));
+
+    // Basic Grove Extended (stubs)
+    env.define("first-child-gi", Value::primitive("first-child-gi", prim_first_child_gi));
+    env.define("inherited-element-attribute-string", Value::primitive("inherited-element-attribute-string", prim_inherited_element_attribute_string));
+
+    // Entity/Notation Extended (stubs)
+    env.define("entity-address", Value::primitive("entity-address", prim_entity_address));
+    env.define("entity-generated-system-id", Value::primitive("entity-generated-system-id", prim_entity_generated_system_id));
+    env.define("entity-type", Value::primitive("entity-type", prim_entity_type));
+    env.define("declaration", Value::primitive("declaration", prim_declaration));
+    env.define("dtd", Value::primitive("dtd", prim_dtd));
+    env.define("sgml-declaration", Value::primitive("sgml-declaration", prim_sgml_declaration));
+    env.define("document-element", Value::primitive("document-element", prim_document_element));
+    env.define("prolog", Value::primitive("prolog", prim_prolog));
+    env.define("epilog", Value::primitive("epilog", prim_epilog));
+    env.define("origin-to-subnode-rel-forest-addr", Value::primitive("origin-to-subnode-rel-forest-addr", prim_origin_to_subnode_rel_forest_addr));
+
+    // Node-list Extended (stubs)
+    env.define("named-node", Value::primitive("named-node", prim_named_node));
+    env.define("named-node-list-names", Value::primitive("named-node-list-names", prim_named_node_list_names));
+    env.define("node-list-union", Value::primitive("node-list-union", prim_node_list_union));
+    env.define("node-list-intersection", Value::primitive("node-list-intersection", prim_node_list_intersection));
+    env.define("node-list-difference", Value::primitive("node-list-difference", prim_node_list_difference));
+    env.define("node-list-symmetrical-difference", Value::primitive("node-list-symmetrical-difference", prim_node_list_symmetrical_difference));
+    env.define("node-list-union-map", Value::primitive("node-list-union-map", prim_node_list_union_map));
 }
 
 /// Register sosofo primitives in an environment
 pub fn register_sosofo_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
     // Sosofo construction
     env.define("sosofo?", Value::primitive("sosofo?", prim_sosofo_p));
+    env.define("style?", Value::primitive("style?", prim_style_p));
+    env.define("next-match", Value::primitive("next-match", prim_next_match));
     env.define("empty-sosofo", Value::primitive("empty-sosofo", prim_empty_sosofo));
     env.define("literal", Value::primitive("literal", prim_literal));
     env.define("sosofo-append", Value::primitive("sosofo-append", prim_sosofo_append));
@@ -3979,6 +4943,24 @@ pub fn register_sosofo_primitives(env: &gc::Gc<crate::scheme::environment::Envir
     env.define("process-children", Value::primitive("process-children", prim_process_children));
     env.define("process-node-list", Value::primitive("process-node-list", prim_process_node_list));
     env.define("make", Value::primitive("make", prim_make));
+
+    // Processing Extended (stubs)
+    env.define("process-children-trim", Value::primitive("process-children-trim", prim_process_children_trim));
+    env.define("process-first-descendant", Value::primitive("process-first-descendant", prim_process_first_descendant));
+    env.define("process-matching-children", Value::primitive("process-matching-children", prim_process_matching_children));
+    env.define("process-element-with-id", Value::primitive("process-element-with-id", prim_process_element_with_id));
+    env.define("with-mode", Value::primitive("with-mode", prim_with_mode));
+    env.define("current-mode", Value::primitive("current-mode", prim_current_mode));
+
+    // Sosofo/Page Layout Extended (stubs)
+    env.define("current-node-page-number-sosofo", Value::primitive("current-node-page-number-sosofo", prim_current_node_page_number_sosofo));
+    env.define("page-number-sosofo", Value::primitive("page-number-sosofo", prim_page_number_sosofo));
+    env.define("sosofo-contains-node?", Value::primitive("sosofo-contains-node?", prim_sosofo_contains_node_p));
+    env.define("current-node-address", Value::primitive("current-node-address", prim_current_node_address));
+    env.define("address-visited?", Value::primitive("address-visited?", prim_address_visited_p));
+    env.define("set-visited!", Value::primitive("set-visited!", prim_set_visited));
+    env.define("label-length", Value::primitive("label-length", prim_label_length));
+    env.define("label-distance", Value::primitive("label-distance", prim_label_distance));
 }
 
 /// Register utility primitives in an environment
@@ -3989,10 +4971,28 @@ pub fn register_utility_primitives(env: &gc::Gc<crate::scheme::environment::Envi
     // Time primitives (stubs)
     env.define("time", Value::primitive("time", prim_time));
     env.define("time->string", Value::primitive("time->string", prim_time_to_string));
+    env.define("time<?", Value::primitive("time<?", prim_time_lt));
+    env.define("time<=?", Value::primitive("time<=?", prim_time_le));
+    env.define("time>?", Value::primitive("time>?", prim_time_gt));
+    env.define("time>=?", Value::primitive("time>=?", prim_time_ge));
 
     // Language primitives (stubs)
     env.define("language?", Value::primitive("language?", prim_language_p));
     env.define("current-language", Value::primitive("current-language", prim_current_language));
+
+    // Character/Language Extended (stubs)
+    env.define("char-property", Value::primitive("char-property", prim_char_property));
+    env.define("char-script-case", Value::primitive("char-script-case", prim_char_script_case));
+    env.define("language", Value::primitive("language", prim_language));
+    env.define("with-language", Value::primitive("with-language", prim_with_language));
+
+    // Debug (actual implementation)
+    env.define("debug", Value::primitive("debug", prim_debug));
+    env.define("external-procedure", Value::primitive("external-procedure", prim_external_procedure));
+    env.define("read-entity", Value::primitive("read-entity", prim_read_entity));
+
+    // SGML-specific (stub)
+    env.define("sgml-parse", Value::primitive("sgml-parse", prim_sgml_parse));
 }
 
 /// Register all primitives in an environment
