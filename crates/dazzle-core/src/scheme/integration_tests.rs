@@ -1077,4 +1077,99 @@ mod tests {
         let result = eval_string(code);
         assert!(matches!(result, Value::Unspecified));
     }
+
+    // =========================================================================
+    // Load (File I/O)
+    // =========================================================================
+
+    #[test]
+    fn test_load_simple_file() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        // Create a temporary directory and file
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.scm");
+        fs::write(&file_path, "(+ 10 32)").unwrap();
+
+        // Load and evaluate the file
+        let code = format!(r#"(load "{}")"#, file_path.display());
+        let result = eval_string(&code);
+        assert!(matches!(result, Value::Integer(42)));
+    }
+
+    #[test]
+    fn test_load_multiple_expressions() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        // Create a file with multiple expressions
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("multi.scm");
+        let content = r#"
+            (define x 10)
+            (define y 20)
+            (+ x y)
+        "#;
+        fs::write(&file_path, content).unwrap();
+
+        // Load should return the result of the last expression
+        let code = format!(r#"(load "{}")"#, file_path.display());
+        let result = eval_string(&code);
+        assert!(matches!(result, Value::Integer(30)));
+    }
+
+    #[test]
+    fn test_load_with_definitions() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        // Create a file that defines a function
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("defs.scm");
+        let content = r#"
+            (define (square x) (* x x))
+            (square 7)
+        "#;
+        fs::write(&file_path, content).unwrap();
+
+        // Load and verify the result
+        let code = format!(r#"(load "{}")"#, file_path.display());
+        let result = eval_string(&code);
+        assert!(matches!(result, Value::Integer(49)));
+    }
+
+    #[test]
+    fn test_load_file_not_found() {
+        // Try to load a non-existent file
+        let result = std::panic::catch_unwind(|| {
+            eval_string(r#"(load "/nonexistent/file.scm")"#)
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_invalid_argument() {
+        // load requires a string argument
+        let result = std::panic::catch_unwind(|| {
+            eval_string("(load 123)")
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_empty_file() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        // Create an empty file
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("empty.scm");
+        fs::write(&file_path, "").unwrap();
+
+        // Load should return unspecified for empty file
+        let code = format!(r#"(load "{}")"#, file_path.display());
+        let result = eval_string(&code);
+        assert!(matches!(result, Value::Unspecified));
+    }
 }

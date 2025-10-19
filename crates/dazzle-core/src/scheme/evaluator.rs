@@ -245,6 +245,7 @@ impl Evaluator {
                 "apply" => self.eval_apply(args, env),
                 "map" => self.eval_map(args, env),
                 "for-each" => self.eval_for_each(args, env),
+                "load" => self.eval_load(args, env),
 
                 // Not a special form - evaluate as function call
                 _ => self.eval_application(operator, args, env),
@@ -812,6 +813,60 @@ impl Evaluator {
         }
 
         Ok(Value::Unspecified)
+    }
+
+    /// (load filename)
+    ///
+    /// Load and evaluate Scheme code from a file.
+    /// Returns the result of the last expression in the file.
+    fn eval_load(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+        if args_vec.len() != 1 {
+            return Err(EvalError::new(
+                "load requires exactly 1 argument".to_string(),
+            ));
+        }
+
+        // Evaluate the filename argument
+        let filename_val = self.eval_inner(args_vec[0].clone(), env.clone())?;
+
+        let filename = match filename_val {
+            Value::String(s) => s.to_string(),
+            _ => return Err(EvalError::new(
+                format!("load: filename must be a string, got {:?}", filename_val)
+            )),
+        };
+
+        // Read the file
+        let contents = std::fs::read_to_string(&filename)
+            .map_err(|e| EvalError::new(format!("load: cannot read file '{}': {}", filename, e)))?;
+
+        // Parse the file contents
+        let mut parser = crate::scheme::parser::Parser::new(&contents);
+        let mut result = Value::Unspecified;
+
+        // Evaluate each expression in sequence
+        loop {
+            match parser.parse() {
+                Ok(expr) => {
+                    result = self.eval_inner(expr, env.clone())?;
+                }
+                Err(e) => {
+                    // Check if we've reached end of input (not an error)
+                    let error_msg = e.to_string();
+                    if error_msg.contains("Unexpected end of input")
+                        || error_msg.contains("Expected")
+                        || error_msg.contains("EOF") {
+                        break;
+                    }
+                    return Err(EvalError::new(
+                        format!("load: parse error in '{}': {}", filename, e)
+                    ));
+                }
+            }
+        }
+
+        Ok(result)
     }
 
     // =========================================================================
