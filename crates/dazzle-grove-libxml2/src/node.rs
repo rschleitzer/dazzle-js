@@ -64,6 +64,7 @@ impl LibXml2Node {
     }
 
     /// Get the underlying libxml node (for internal use)
+    #[allow(dead_code)]
     pub(crate) fn inner(&self) -> &LibxmlNode {
         &self.node
     }

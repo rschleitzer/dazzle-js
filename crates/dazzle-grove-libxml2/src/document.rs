@@ -106,6 +106,7 @@ impl XmlDocument {
     /// Get the underlying libxml Document
     ///
     /// This is package-private - only used by LibXml2Node
+    #[allow(dead_code)]
     pub(crate) fn inner(&self) -> &Document {
         &self.doc
     }

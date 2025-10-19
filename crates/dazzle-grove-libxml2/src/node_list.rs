@@ -53,6 +53,7 @@ impl LibXml2NodeList {
     }
 
     /// Get the underlying Vec (for internal use)
+    #[allow(dead_code)]
     pub(crate) fn nodes(&self) -> &[LibXml2Node] {
         &self.nodes
     }
