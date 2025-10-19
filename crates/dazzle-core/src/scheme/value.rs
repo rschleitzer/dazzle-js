@@ -375,7 +375,13 @@ impl Value {
             (Value::Char(c1), Value::Char(c2)) => c1 == c2,
 
             // Symbols and keywords: compare by content
-            // TODO: Implement proper symbol interning in the evaluator
+            // NOTE: Currently uses string content comparison (O(n)).
+            // FUTURE OPTIMIZATION: Implement global symbol table (interner) to enable
+            // pointer-equality comparison (O(1)). This would require:
+            //   - SymbolTable in Evaluator to intern all symbols
+            //   - Parser and Environment using the interner
+            //   - Change to: Rc::ptr_eq(s1, s2)
+            // Current implementation is correct per R4RS, just not optimally fast.
             (Value::Symbol(s1), Value::Symbol(s2)) => **s1 == **s2,
             (Value::Keyword(k1), Value::Keyword(k2)) => **k1 == **k2,
 

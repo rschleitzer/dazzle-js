@@ -66,6 +66,45 @@ mod tests {
         assert!(!result.is_true());
     }
 
+    #[test]
+    fn test_eval_hex_numbers() {
+        let result = eval_string("#xff");
+        assert!(matches!(result, Value::Integer(255)));
+
+        let result = eval_string("#x10");
+        assert!(matches!(result, Value::Integer(16)));
+
+        // Can use in expressions
+        let result = eval_string("(+ #x10 #x20)");
+        assert!(matches!(result, Value::Integer(48))); // 16 + 32
+    }
+
+    #[test]
+    fn test_eval_octal_numbers() {
+        let result = eval_string("#o77");
+        assert!(matches!(result, Value::Integer(63)));
+
+        let result = eval_string("#o10");
+        assert!(matches!(result, Value::Integer(8)));
+
+        // Can use in expressions
+        let result = eval_string("(+ #o10 #o20)");
+        assert!(matches!(result, Value::Integer(24))); // 8 + 16
+    }
+
+    #[test]
+    fn test_eval_binary_numbers() {
+        let result = eval_string("#b1010");
+        assert!(matches!(result, Value::Integer(10)));
+
+        let result = eval_string("#b1111");
+        assert!(matches!(result, Value::Integer(15)));
+
+        // Can use in expressions
+        let result = eval_string("(+ #b10 #b100)");
+        assert!(matches!(result, Value::Integer(6))); // 2 + 4
+    }
+
     // =========================================================================
     // Quote
     // =========================================================================
@@ -217,6 +256,70 @@ mod tests {
         "#;
         let result = eval_string(code);
         assert!(matches!(result, Value::Integer(2)));
+    }
+
+    #[test]
+    fn test_eval_case() {
+        // Test basic case with symbols
+        let code = r#"
+            (case 'b
+              ((a) 1)
+              ((b) 2)
+              ((c) 3))
+        "#;
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(2)));
+
+        // Test case with multiple datums in a clause
+        let code = r#"
+            (case 3
+              ((1 2) 'first)
+              ((3 4) 'second)
+              ((5 6) 'third))
+        "#;
+        let result = eval_string(code);
+        if let Value::Symbol(ref sym) = result {
+            assert_eq!(&**sym, "second");
+        } else {
+            panic!("Expected symbol 'second");
+        }
+
+        // Test case with else clause
+        let code = r#"
+            (case 99
+              ((1 2) 'first)
+              ((3 4) 'second)
+              (else 'default))
+        "#;
+        let result = eval_string(code);
+        if let Value::Symbol(ref sym) = result {
+            assert_eq!(&**sym, "default");
+        } else {
+            panic!("Expected symbol 'default");
+        }
+
+        // Test case with no match and no else (returns unspecified)
+        let code = r#"
+            (case 99
+              ((1 2) 'first)
+              ((3 4) 'second))
+        "#;
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Unspecified));
+
+        // Test case with expression as key
+        let code = r#"
+            (case (car '(a b c))
+              ((x y) 'not-this)
+              ((a b) 'this-one)
+              (else 'fallback))
+        "#;
+        let result = eval_string(code);
+        if let Value::Symbol(ref sym) = result {
+            assert_eq!(&**sym, "this-one");
+        } else {
+            panic!("Expected symbol 'this-one");
+        }
     }
 
     // =========================================================================

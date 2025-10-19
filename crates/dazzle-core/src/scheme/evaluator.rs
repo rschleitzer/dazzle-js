@@ -521,9 +521,60 @@ impl Evaluator {
     }
 
     /// (case key ((datum...) expr...)...)
-    fn eval_case(&mut self, _args: Value, _env: Gc<Environment>) -> EvalResult {
-        // TODO: Implement case
-        Err(EvalError::new("case not yet implemented".to_string()))
+    ///
+    /// R4RS case statement:
+    /// ```scheme
+    /// (case expr
+    ///   ((datum1 datum2 ...) result1 result2 ...)
+    ///   ((datum3 datum4 ...) result3 result4 ...)
+    ///   ...
+    ///   [else resultN ...])
+    /// ```
+    ///
+    /// The key expression is evaluated and compared with each datum using eqv?.
+    /// The datums are NOT evaluated (they are literal constants).
+    fn eval_case(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+        if args_vec.is_empty() {
+            return Err(EvalError::new("case requires at least 1 argument".to_string()));
+        }
+
+        // Evaluate the key expression
+        let key = self.eval(args_vec[0].clone(), env.clone())?;
+
+        // Iterate through clauses
+        for clause in &args_vec[1..] {
+            let clause_vec = self.list_to_vec(clause.clone())?;
+            if clause_vec.is_empty() {
+                return Err(EvalError::new("Empty case clause".to_string()));
+            }
+
+            // Check for else clause
+            if let Value::Symbol(ref sym) = clause_vec[0] {
+                if &**sym == "else" {
+                    return self.eval_sequence(&clause_vec[1..], env);
+                }
+            }
+
+            // First element should be a list of datums
+            let datums = self.list_to_vec(clause_vec[0].clone())?;
+
+            // Check if key matches any datum using eqv?
+            for datum in datums {
+                if key.eqv(&datum) {
+                    // Match found - evaluate body expressions
+                    if clause_vec.len() == 1 {
+                        // No expressions in clause - return unspecified
+                        return Ok(Value::Unspecified);
+                    } else {
+                        return self.eval_sequence(&clause_vec[1..], env);
+                    }
+                }
+            }
+        }
+
+        // No match found
+        Ok(Value::Unspecified)
     }
 
     /// (and expr...)

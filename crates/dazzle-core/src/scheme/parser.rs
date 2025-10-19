@@ -349,6 +349,87 @@ impl Tokenizer {
         ))
     }
 
+    /// Parse a hexadecimal number (#x prefix)
+    fn parse_hex_number(&mut self, start_pos: Position) -> ParseResult<Token> {
+        let mut num_str = String::new();
+
+        while let Some(ch) = self.peek_char() {
+            if ch.is_ascii_hexdigit() {
+                num_str.push(ch);
+                self.next_char();
+            } else if Self::is_delimiter(ch) {
+                break;
+            } else {
+                return Err(ParseError::new(
+                    format!("Invalid character in hex number: {}", ch),
+                    start_pos,
+                ));
+            }
+        }
+
+        if num_str.is_empty() {
+            return Err(ParseError::new("Empty hex number".to_string(), start_pos));
+        }
+
+        i64::from_str_radix(&num_str, 16)
+            .map(Token::Integer)
+            .map_err(|_| ParseError::new(format!("Invalid hex number: {}", num_str), start_pos))
+    }
+
+    /// Parse an octal number (#o prefix)
+    fn parse_octal_number(&mut self, start_pos: Position) -> ParseResult<Token> {
+        let mut num_str = String::new();
+
+        while let Some(ch) = self.peek_char() {
+            if ch.is_digit(8) {
+                num_str.push(ch);
+                self.next_char();
+            } else if Self::is_delimiter(ch) {
+                break;
+            } else {
+                return Err(ParseError::new(
+                    format!("Invalid character in octal number: {}", ch),
+                    start_pos,
+                ));
+            }
+        }
+
+        if num_str.is_empty() {
+            return Err(ParseError::new("Empty octal number".to_string(), start_pos));
+        }
+
+        i64::from_str_radix(&num_str, 8)
+            .map(Token::Integer)
+            .map_err(|_| ParseError::new(format!("Invalid octal number: {}", num_str), start_pos))
+    }
+
+    /// Parse a binary number (#b prefix)
+    fn parse_binary_number(&mut self, start_pos: Position) -> ParseResult<Token> {
+        let mut num_str = String::new();
+
+        while let Some(ch) = self.peek_char() {
+            if matches!(ch, '0' | '1') {
+                num_str.push(ch);
+                self.next_char();
+            } else if Self::is_delimiter(ch) {
+                break;
+            } else {
+                return Err(ParseError::new(
+                    format!("Invalid character in binary number: {}", ch),
+                    start_pos,
+                ));
+            }
+        }
+
+        if num_str.is_empty() {
+            return Err(ParseError::new("Empty binary number".to_string(), start_pos));
+        }
+
+        i64::from_str_radix(&num_str, 2)
+            .map(Token::Integer)
+            .map_err(|_| ParseError::new(format!("Invalid binary number: {}", num_str), start_pos))
+    }
+
     /// Parse a symbol or keyword
     fn parse_symbol(&mut self) -> String {
         let mut sym = String::new();
@@ -533,7 +614,18 @@ impl Tokenizer {
                         let name = self.parse_symbol();
                         Ok(Token::Keyword(name))
                     }
-                    // TODO: #x (hex), #o (octal), #b (binary) numbers
+                    Some('x') | Some('X') => {
+                        self.next_char(); // Consume x
+                        self.parse_hex_number(start_pos)
+                    }
+                    Some('o') | Some('O') => {
+                        self.next_char(); // Consume o
+                        self.parse_octal_number(start_pos)
+                    }
+                    Some('b') | Some('B') => {
+                        self.next_char(); // Consume b
+                        self.parse_binary_number(start_pos)
+                    }
                     _ => Err(ParseError::new(
                         format!("Invalid # syntax: #{:?}", self.peek_char()),
                         start_pos,
@@ -886,6 +978,63 @@ mod tests {
         assert_eq!(tok.next_token().unwrap(), Token::Char('a'));
         assert_eq!(tok.next_token().unwrap(), Token::Char(' '));
         assert_eq!(tok.next_token().unwrap(), Token::Char('\n'));
+    }
+
+    #[test]
+    fn test_tokenize_hex_numbers() {
+        // Lowercase #x
+        let mut tok = Tokenizer::new("#xff");
+        assert_eq!(tok.next_token().unwrap(), Token::Integer(255));
+
+        // Uppercase #X
+        let mut tok = Tokenizer::new("#X10");
+        assert_eq!(tok.next_token().unwrap(), Token::Integer(16));
+
+        // Mixed case
+        let mut tok = Tokenizer::new("#xDEADBEEF");
+        assert_eq!(tok.next_token().unwrap(), Token::Integer(0xDEADBEEF));
+
+        // Zero
+        let mut tok = Tokenizer::new("#x0");
+        assert_eq!(tok.next_token().unwrap(), Token::Integer(0));
+    }
+
+    #[test]
+    fn test_tokenize_octal_numbers() {
+        // Lowercase #o
+        let mut tok = Tokenizer::new("#o77");
+        assert_eq!(tok.next_token().unwrap(), Token::Integer(63));
+
+        // Uppercase #O
+        let mut tok = Tokenizer::new("#O10");
+        assert_eq!(tok.next_token().unwrap(), Token::Integer(8));
+
+        // Zero
+        let mut tok = Tokenizer::new("#o0");
+        assert_eq!(tok.next_token().unwrap(), Token::Integer(0));
+
+        // Max valid octal digits
+        let mut tok = Tokenizer::new("#o777");
+        assert_eq!(tok.next_token().unwrap(), Token::Integer(511));
+    }
+
+    #[test]
+    fn test_tokenize_binary_numbers() {
+        // Lowercase #b
+        let mut tok = Tokenizer::new("#b1010");
+        assert_eq!(tok.next_token().unwrap(), Token::Integer(10));
+
+        // Uppercase #B
+        let mut tok = Tokenizer::new("#B1111");
+        assert_eq!(tok.next_token().unwrap(), Token::Integer(15));
+
+        // Zero
+        let mut tok = Tokenizer::new("#b0");
+        assert_eq!(tok.next_token().unwrap(), Token::Integer(0));
+
+        // All ones
+        let mut tok = Tokenizer::new("#b11111111");
+        assert_eq!(tok.next_token().unwrap(), Token::Integer(255));
     }
 
     #[test]

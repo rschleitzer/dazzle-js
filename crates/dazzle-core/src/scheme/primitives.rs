@@ -2752,7 +2752,7 @@ pub fn prim_last(args: &[Value]) -> PrimitiveResult {
                         drop(pair);
                         current = next;
                     }
-                    other => {
+                    _other => {
                         // Improper list - return the last element before the improper cdr
                         return Ok(pair.car.clone());
                     }
