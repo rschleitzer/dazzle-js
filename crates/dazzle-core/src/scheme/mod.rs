@@ -25,8 +25,10 @@
 //! Total: ~12,200 lines C++ → estimated ~10,000 lines Rust
 
 pub mod environment;
+pub mod parser;
 pub mod value;
 
 // Re-export key types for convenience
 pub use environment::Environment;
+pub use parser::{ParseError, Parser, Position, Tokenizer};
 pub use value::{PairData, Procedure, Value};
