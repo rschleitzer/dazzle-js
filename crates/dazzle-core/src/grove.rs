@@ -167,14 +167,64 @@ pub trait Grove: Debug {
     fn element_with_id(&self, id: &str) -> Option<Box<dyn Node>>;
 }
 
+/// An empty node list implementation
+///
+/// This is a concrete implementation of NodeList that represents
+/// an empty list. It's used by primitives like `empty-node-list`.
+#[derive(Debug, Clone)]
+pub struct EmptyNodeList;
+
+impl EmptyNodeList {
+    pub fn new() -> Self {
+        EmptyNodeList
+    }
+}
+
+impl Default for EmptyNodeList {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl NodeList for EmptyNodeList {
+    fn is_empty(&self) -> bool {
+        true
+    }
+
+    fn first(&self) -> Option<Box<dyn Node>> {
+        None
+    }
+
+    fn rest(&self) -> Box<dyn NodeList> {
+        Box::new(EmptyNodeList::new())
+    }
+
+    fn length(&self) -> usize {
+        0
+    }
+
+    fn get(&self, _index: usize) -> Option<Box<dyn Node>> {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    // These tests will be implemented once we have a concrete grove implementation
-    // For now, they serve as documentation of expected behavior
+    use super::*;
 
     #[test]
     fn test_traits_defined() {
         // This test just ensures the traits compile
         // Actual tests will be in dazzle-grove-libxml2
+    }
+
+    #[test]
+    fn test_empty_node_list() {
+        let empty = EmptyNodeList::new();
+        assert!(empty.is_empty());
+        assert_eq!(empty.length(), 0);
+        assert!(empty.first().is_none());
+        assert!(empty.get(0).is_none());
+        assert!(empty.rest().is_empty());
     }
 }
