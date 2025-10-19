@@ -946,6 +946,92 @@ pub fn prim_min(args: &[Value]) -> PrimitiveResult {
     }
 }
 
+/// (gcd n1 n2 ...) → integer
+///
+/// Returns the greatest common divisor of its arguments.
+/// If called with no arguments, returns 0.
+///
+/// **R4RS**: Required procedure
+pub fn prim_gcd(args: &[Value]) -> PrimitiveResult {
+    if args.is_empty() {
+        return Ok(Value::integer(0));
+    }
+
+    // Helper function for Euclidean algorithm
+    fn gcd_two(a: i64, b: i64) -> i64 {
+        let mut a = a.abs();
+        let mut b = b.abs();
+        while b != 0 {
+            let temp = b;
+            b = a % b;
+            a = temp;
+        }
+        a
+    }
+
+    let mut result = match args[0] {
+        Value::Integer(n) => n,
+        _ => return Err(format!("gcd: not an integer: {:?}", args[0])),
+    };
+
+    for arg in &args[1..] {
+        let n = match arg {
+            Value::Integer(n) => *n,
+            _ => return Err(format!("gcd: not an integer: {:?}", arg)),
+        };
+        result = gcd_two(result, n);
+    }
+
+    Ok(Value::integer(result))
+}
+
+/// (lcm n1 n2 ...) → integer
+///
+/// Returns the least common multiple of its arguments.
+/// If called with no arguments, returns 1.
+///
+/// **R4RS**: Required procedure
+pub fn prim_lcm(args: &[Value]) -> PrimitiveResult {
+    if args.is_empty() {
+        return Ok(Value::integer(1));
+    }
+
+    // Helper function for gcd (Euclidean algorithm)
+    fn gcd_two(a: i64, b: i64) -> i64 {
+        let mut a = a.abs();
+        let mut b = b.abs();
+        while b != 0 {
+            let temp = b;
+            b = a % b;
+            a = temp;
+        }
+        a
+    }
+
+    // Helper function for lcm of two numbers
+    fn lcm_two(a: i64, b: i64) -> i64 {
+        if a == 0 || b == 0 {
+            return 0;
+        }
+        (a.abs() / gcd_two(a, b)) * b.abs()
+    }
+
+    let mut result = match args[0] {
+        Value::Integer(n) => n,
+        _ => return Err(format!("lcm: not an integer: {:?}", args[0])),
+    };
+
+    for arg in &args[1..] {
+        let n = match arg {
+            Value::Integer(n) => *n,
+            _ => return Err(format!("lcm: not an integer: {:?}", arg)),
+        };
+        result = lcm_two(result, n);
+    }
+
+    Ok(Value::integer(result))
+}
+
 /// (floor number) → integer
 ///
 /// Returns the largest integer not greater than number.
@@ -1754,6 +1840,121 @@ pub fn prim_char_whitespace_p(args: &[Value]) -> PrimitiveResult {
         Value::Char(c) => Ok(Value::bool(c.is_whitespace())),
         _ => Err(format!("char-whitespace?: not a character: {:?}", args[0])),
     }
+}
+
+/// (char-ci=? char1 char2) → boolean
+///
+/// Returns #t if the two characters are equal ignoring case, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_ci_eq(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("char-ci=? requires exactly 2 arguments".to_string());
+    }
+
+    let c1 = match args[0] {
+        Value::Char(c) => c.to_ascii_lowercase(),
+        _ => return Err(format!("char-ci=?: not a character: {:?}", args[0])),
+    };
+
+    let c2 = match args[1] {
+        Value::Char(c) => c.to_ascii_lowercase(),
+        _ => return Err(format!("char-ci=?: not a character: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(c1 == c2))
+}
+
+/// (char-ci<? char1 char2) → boolean
+///
+/// Returns #t if char1 is less than char2 ignoring case, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_ci_lt(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("char-ci<? requires exactly 2 arguments".to_string());
+    }
+
+    let c1 = match args[0] {
+        Value::Char(c) => c.to_ascii_lowercase(),
+        _ => return Err(format!("char-ci<?: not a character: {:?}", args[0])),
+    };
+
+    let c2 = match args[1] {
+        Value::Char(c) => c.to_ascii_lowercase(),
+        _ => return Err(format!("char-ci<?: not a character: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(c1 < c2))
+}
+
+/// (char-ci>? char1 char2) → boolean
+///
+/// Returns #t if char1 is greater than char2 ignoring case, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_ci_gt(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("char-ci>? requires exactly 2 arguments".to_string());
+    }
+
+    let c1 = match args[0] {
+        Value::Char(c) => c.to_ascii_lowercase(),
+        _ => return Err(format!("char-ci>?: not a character: {:?}", args[0])),
+    };
+
+    let c2 = match args[1] {
+        Value::Char(c) => c.to_ascii_lowercase(),
+        _ => return Err(format!("char-ci>?: not a character: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(c1 > c2))
+}
+
+/// (char-ci<=? char1 char2) → boolean
+///
+/// Returns #t if char1 is less than or equal to char2 ignoring case, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_ci_le(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("char-ci<=? requires exactly 2 arguments".to_string());
+    }
+
+    let c1 = match args[0] {
+        Value::Char(c) => c.to_ascii_lowercase(),
+        _ => return Err(format!("char-ci<=?: not a character: {:?}", args[0])),
+    };
+
+    let c2 = match args[1] {
+        Value::Char(c) => c.to_ascii_lowercase(),
+        _ => return Err(format!("char-ci<=?: not a character: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(c1 <= c2))
+}
+
+/// (char-ci>=? char1 char2) → boolean
+///
+/// Returns #t if char1 is greater than or equal to char2 ignoring case, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_char_ci_ge(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("char-ci>=? requires exactly 2 arguments".to_string());
+    }
+
+    let c1 = match args[0] {
+        Value::Char(c) => c.to_ascii_lowercase(),
+        _ => return Err(format!("char-ci>=?: not a character: {:?}", args[0])),
+    };
+
+    let c2 = match args[1] {
+        Value::Char(c) => c.to_ascii_lowercase(),
+        _ => return Err(format!("char-ci>=?: not a character: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(c1 >= c2))
 }
 
 // =============================================================================
@@ -3314,6 +3515,8 @@ pub fn register_number_primitives(env: &gc::Gc<crate::scheme::environment::Envir
     env.define("abs", Value::primitive("abs", prim_abs));
     env.define("max", Value::primitive("max", prim_max));
     env.define("min", Value::primitive("min", prim_min));
+    env.define("gcd", Value::primitive("gcd", prim_gcd));
+    env.define("lcm", Value::primitive("lcm", prim_lcm));
     env.define("floor", Value::primitive("floor", prim_floor));
     env.define("ceiling", Value::primitive("ceiling", prim_ceiling));
     env.define("truncate", Value::primitive("truncate", prim_truncate));
@@ -3378,6 +3581,13 @@ pub fn register_string_primitives(env: &gc::Gc<crate::scheme::environment::Envir
     env.define("char-alphabetic?", Value::primitive("char-alphabetic?", prim_char_alphabetic_p));
     env.define("char-numeric?", Value::primitive("char-numeric?", prim_char_numeric_p));
     env.define("char-whitespace?", Value::primitive("char-whitespace?", prim_char_whitespace_p));
+
+    // Case-insensitive character operations
+    env.define("char-ci=?", Value::primitive("char-ci=?", prim_char_ci_eq));
+    env.define("char-ci<?", Value::primitive("char-ci<?", prim_char_ci_lt));
+    env.define("char-ci>?", Value::primitive("char-ci>?", prim_char_ci_gt));
+    env.define("char-ci<=?", Value::primitive("char-ci<=?", prim_char_ci_le));
+    env.define("char-ci>=?", Value::primitive("char-ci>=?", prim_char_ci_ge));
 }
 
 /// Register all boolean and equality primitives in an environment
@@ -3772,6 +3982,58 @@ mod tests {
 
         let result = prim_min(&[Value::integer(5), Value::real(0.5), Value::integer(3)]).unwrap();
         assert!(matches!(result, Value::Real(r) if (r - 0.5).abs() < f64::EPSILON));
+    }
+
+    #[test]
+    fn test_gcd() {
+        // gcd of two numbers
+        let result = prim_gcd(&[Value::integer(12), Value::integer(8)]).unwrap();
+        assert!(matches!(result, Value::Integer(4)));
+
+        // gcd of multiple numbers
+        let result = prim_gcd(&[Value::integer(12), Value::integer(18), Value::integer(24)]).unwrap();
+        assert!(matches!(result, Value::Integer(6)));
+
+        // gcd with negative numbers
+        let result = prim_gcd(&[Value::integer(-12), Value::integer(8)]).unwrap();
+        assert!(matches!(result, Value::Integer(4)));
+
+        // gcd with zero
+        let result = prim_gcd(&[Value::integer(0), Value::integer(5)]).unwrap();
+        assert!(matches!(result, Value::Integer(5)));
+
+        // gcd with no arguments
+        let result = prim_gcd(&[]).unwrap();
+        assert!(matches!(result, Value::Integer(0)));
+
+        // Non-integer should error
+        assert!(prim_gcd(&[Value::real(12.5), Value::integer(8)]).is_err());
+    }
+
+    #[test]
+    fn test_lcm() {
+        // lcm of two numbers
+        let result = prim_lcm(&[Value::integer(4), Value::integer(6)]).unwrap();
+        assert!(matches!(result, Value::Integer(12)));
+
+        // lcm of multiple numbers
+        let result = prim_lcm(&[Value::integer(2), Value::integer(3), Value::integer(4)]).unwrap();
+        assert!(matches!(result, Value::Integer(12)));
+
+        // lcm with negative numbers
+        let result = prim_lcm(&[Value::integer(-4), Value::integer(6)]).unwrap();
+        assert!(matches!(result, Value::Integer(12)));
+
+        // lcm with zero
+        let result = prim_lcm(&[Value::integer(0), Value::integer(5)]).unwrap();
+        assert!(matches!(result, Value::Integer(0)));
+
+        // lcm with no arguments
+        let result = prim_lcm(&[]).unwrap();
+        assert!(matches!(result, Value::Integer(1)));
+
+        // Non-integer should error
+        assert!(prim_lcm(&[Value::real(4.5), Value::integer(6)]).is_err());
     }
 
     #[test]
@@ -4231,6 +4493,80 @@ mod tests {
 
         // Non-char should error
         assert!(prim_char_whitespace_p(&[Value::integer(32)]).is_err());
+    }
+
+    #[test]
+    fn test_char_ci_eq() {
+        // Case-insensitive equal
+        let result = prim_char_ci_eq(&[Value::char('a'), Value::char('A')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_ci_eq(&[Value::char('Z'), Value::char('z')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_ci_eq(&[Value::char('a'), Value::char('b')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        // Non-char should error
+        assert!(prim_char_ci_eq(&[Value::integer(97), Value::char('a')]).is_err());
+    }
+
+    #[test]
+    fn test_char_ci_lt() {
+        // Case-insensitive less than
+        let result = prim_char_ci_lt(&[Value::char('A'), Value::char('b')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_ci_lt(&[Value::char('a'), Value::char('B')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_ci_lt(&[Value::char('B'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        let result = prim_char_ci_lt(&[Value::char('A'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_char_ci_gt() {
+        // Case-insensitive greater than
+        let result = prim_char_ci_gt(&[Value::char('B'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_ci_gt(&[Value::char('b'), Value::char('A')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_ci_gt(&[Value::char('A'), Value::char('b')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        let result = prim_char_ci_gt(&[Value::char('A'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_char_ci_le() {
+        // Case-insensitive less than or equal
+        let result = prim_char_ci_le(&[Value::char('A'), Value::char('b')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_ci_le(&[Value::char('A'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_ci_le(&[Value::char('B'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_char_ci_ge() {
+        // Case-insensitive greater than or equal
+        let result = prim_char_ci_ge(&[Value::char('B'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_ci_ge(&[Value::char('A'), Value::char('a')]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_char_ci_ge(&[Value::char('A'), Value::char('b')]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
     }
 
     // =========================================================================
