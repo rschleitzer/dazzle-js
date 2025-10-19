@@ -2405,6 +2405,182 @@ pub fn prim_node_list_length(args: &[Value]) -> PrimitiveResult {
 }
 
 // =============================================================================
+// Sosofo Primitives (DSSSL)
+// =============================================================================
+//
+// Sosofo = Specification Of a Sequence Of Flow Objects
+// Core abstraction for document transformation in DSSSL.
+//
+// **Implementation Status**: Basic API defined. Full implementation will
+// generate actual output when connected to backends.
+
+/// (sosofo? obj) → boolean
+///
+/// Returns #t if obj is a sosofo.
+///
+/// **DSSSL**: Processing primitive
+pub fn prim_sosofo_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("sosofo? requires exactly 1 argument".to_string());
+    }
+
+    Ok(Value::bool(matches!(args[0], Value::Sosofo)))
+}
+
+/// (empty-sosofo) → sosofo
+///
+/// Returns an empty sosofo (generates no output).
+///
+/// **DSSSL**: Processing primitive
+pub fn prim_empty_sosofo(args: &[Value]) -> PrimitiveResult {
+    if !args.is_empty() {
+        return Err("empty-sosofo requires no arguments".to_string());
+    }
+
+    Ok(Value::Sosofo)
+}
+
+/// (literal str) → sosofo
+///
+/// Creates a sosofo that outputs the given string.
+/// This is a placeholder - full implementation will generate actual output.
+///
+/// **DSSSL**: Processing primitive
+pub fn prim_literal(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("literal requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::String(_) => {
+            // For now, just return a sosofo placeholder
+            // Real implementation will store the string for output
+            Ok(Value::Sosofo)
+        }
+        _ => Err(format!("literal: not a string: {:?}", args[0])),
+    }
+}
+
+/// (sosofo-append sosofo ...) → sosofo
+///
+/// Concatenates multiple sosofos into a single sosofo.
+///
+/// **DSSSL**: Processing primitive
+pub fn prim_sosofo_append(args: &[Value]) -> PrimitiveResult {
+    // Check all arguments are sosofos
+    for arg in args {
+        if !matches!(arg, Value::Sosofo) {
+            return Err(format!("sosofo-append: not a sosofo: {:?}", arg));
+        }
+    }
+
+    // Return a sosofo (placeholder for now)
+    Ok(Value::Sosofo)
+}
+
+// =============================================================================
+// String Utility Primitives (DSSSL Extensions)
+// =============================================================================
+
+/// (string-equiv? str1 str2) → boolean
+///
+/// Case-insensitive string comparison.
+/// Returns #t if strings are equal ignoring case.
+///
+/// **DSSSL**: Extension primitive
+pub fn prim_string_equiv_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("string-equiv? requires exactly 2 arguments".to_string());
+    }
+
+    let s1 = match &args[0] {
+        Value::String(s) => s.to_lowercase(),
+        _ => return Err(format!("string-equiv?: not a string: {:?}", args[0])),
+    };
+
+    let s2 = match &args[1] {
+        Value::String(s) => s.to_lowercase(),
+        _ => return Err(format!("string-equiv?: not a string: {:?}", args[1])),
+    };
+
+    Ok(Value::bool(s1 == s2))
+}
+
+// =============================================================================
+// Time Primitives (DSSSL Extensions)
+// =============================================================================
+//
+// Time values represent points in time. For now, these are stubs.
+
+/// (time) → time
+///
+/// Returns the current time.
+/// Stub implementation - returns unspecified for now.
+///
+/// **DSSSL**: Extension primitive
+pub fn prim_time(args: &[Value]) -> PrimitiveResult {
+    if !args.is_empty() {
+        return Err("time requires no arguments".to_string());
+    }
+
+    // Stub: return unspecified
+    // Real implementation would return a time object
+    Ok(Value::Unspecified)
+}
+
+/// (time->string t format) → string
+///
+/// Converts time to string according to format.
+/// Stub implementation.
+///
+/// **DSSSL**: Extension primitive
+pub fn prim_time_to_string(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("time->string requires exactly 2 arguments".to_string());
+    }
+
+    // Stub: return empty string
+    Ok(Value::string("".to_string()))
+}
+
+// =============================================================================
+// Language Primitives (DSSSL)
+// =============================================================================
+//
+// Language objects represent natural languages (for i18n).
+// Stub implementations for now.
+
+/// (language? obj) → boolean
+///
+/// Returns #t if obj is a language.
+/// Stub - no language type yet.
+///
+/// **DSSSL**: Type predicate
+pub fn prim_language_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("language? requires exactly 1 argument".to_string());
+    }
+
+    // Stub: no language type, always return #f
+    Ok(Value::bool(false))
+}
+
+/// (current-language) → language
+///
+/// Returns the current language.
+/// Stub implementation.
+///
+/// **DSSSL**: Extension primitive
+pub fn prim_current_language(args: &[Value]) -> PrimitiveResult {
+    if !args.is_empty() {
+        return Err("current-language requires no arguments".to_string());
+    }
+
+    // Stub: return unspecified
+    Ok(Value::Unspecified)
+}
+
+// =============================================================================
 // Registration
 // =============================================================================
 
@@ -2560,6 +2736,28 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("empty-node-list", Value::primitive("empty-node-list", prim_empty_node_list));
     env.define("node-list-empty?", Value::primitive("node-list-empty?", prim_node_list_empty_p));
     env.define("node-list-length", Value::primitive("node-list-length", prim_node_list_length));
+}
+
+/// Register sosofo primitives in an environment
+pub fn register_sosofo_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
+    env.define("sosofo?", Value::primitive("sosofo?", prim_sosofo_p));
+    env.define("empty-sosofo", Value::primitive("empty-sosofo", prim_empty_sosofo));
+    env.define("literal", Value::primitive("literal", prim_literal));
+    env.define("sosofo-append", Value::primitive("sosofo-append", prim_sosofo_append));
+}
+
+/// Register utility primitives in an environment
+pub fn register_utility_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
+    // String utilities
+    env.define("string-equiv?", Value::primitive("string-equiv?", prim_string_equiv_p));
+
+    // Time primitives (stubs)
+    env.define("time", Value::primitive("time", prim_time));
+    env.define("time->string", Value::primitive("time->string", prim_time_to_string));
+
+    // Language primitives (stubs)
+    env.define("language?", Value::primitive("language?", prim_language_p));
+    env.define("current-language", Value::primitive("current-language", prim_current_language));
 }
 
 // =============================================================================
@@ -3647,5 +3845,119 @@ mod tests {
 
         // Non-node-list should error
         assert!(prim_node_list_length(&[Value::integer(1)]).is_err());
+    }
+
+    // =========================================================================
+    // Sosofo primitive tests
+    // =========================================================================
+
+    #[test]
+    fn test_sosofo_p() {
+        // Sosofo is a sosofo
+        assert!(matches!(prim_sosofo_p(&[Value::Sosofo]).unwrap(), Value::Bool(true)));
+
+        // Other types are not sosofos
+        assert!(matches!(prim_sosofo_p(&[Value::integer(1)]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_sosofo_p(&[Value::string("test".to_string())]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_sosofo_p(&[Value::NodeList]).unwrap(), Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_empty_sosofo() {
+        let result = prim_empty_sosofo(&[]).unwrap();
+        assert!(matches!(result, Value::Sosofo));
+    }
+
+    #[test]
+    fn test_literal() {
+        let result = prim_literal(&[Value::string("hello".to_string())]).unwrap();
+        assert!(matches!(result, Value::Sosofo));
+
+        // Non-string should error
+        assert!(prim_literal(&[Value::integer(1)]).is_err());
+    }
+
+    #[test]
+    fn test_sosofo_append() {
+        // Append sosofos
+        let s1 = prim_empty_sosofo(&[]).unwrap();
+        let s2 = prim_empty_sosofo(&[]).unwrap();
+        let result = prim_sosofo_append(&[s1, s2]).unwrap();
+        assert!(matches!(result, Value::Sosofo));
+
+        // Non-sosofo should error
+        assert!(prim_sosofo_append(&[Value::Sosofo, Value::integer(1)]).is_err());
+    }
+
+    // =========================================================================
+    // String utility tests
+    // =========================================================================
+
+    #[test]
+    fn test_string_equiv_p() {
+        // Case-insensitive comparison
+        let result = prim_string_equiv_p(&[
+            Value::string("Hello".to_string()),
+            Value::string("hello".to_string()),
+        ])
+        .unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_equiv_p(&[
+            Value::string("HELLO".to_string()),
+            Value::string("hello".to_string()),
+        ])
+        .unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_string_equiv_p(&[
+            Value::string("hello".to_string()),
+            Value::string("world".to_string()),
+        ])
+        .unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        // Non-string should error
+        assert!(prim_string_equiv_p(&[Value::integer(1), Value::string("test".to_string())]).is_err());
+    }
+
+    // =========================================================================
+    // Time primitive tests
+    // =========================================================================
+
+    #[test]
+    fn test_time() {
+        // Stub: returns unspecified
+        let result = prim_time(&[]).unwrap();
+        assert!(matches!(result, Value::Unspecified));
+    }
+
+    #[test]
+    fn test_time_to_string() {
+        // Stub: returns empty string
+        let result = prim_time_to_string(&[Value::Unspecified, Value::string("".to_string())]).unwrap();
+        if let Value::String(ref s) = result {
+            assert_eq!(&***s, "");
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    // =========================================================================
+    // Language primitive tests
+    // =========================================================================
+
+    #[test]
+    fn test_language_p() {
+        // Stub: no language type, always returns #f
+        assert!(matches!(prim_language_p(&[Value::Unspecified]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_language_p(&[Value::string("en".to_string())]).unwrap(), Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_current_language() {
+        // Stub: returns unspecified
+        let result = prim_current_language(&[]).unwrap();
+        assert!(matches!(result, Value::Unspecified));
     }
 }
