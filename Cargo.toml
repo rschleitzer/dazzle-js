@@ -1,7 +1,8 @@
 [workspace]
 members = [
     "crates/dazzle-core",
-    "crates/dazzle-template",
+    "crates/dazzle-grove-libxml2",
+    "crates/dazzle-backend-sgml",
     "crates/dazzle-cli",
 ]
 resolver = "2"
@@ -19,8 +20,8 @@ keywords = ["code-generation", "template", "scheme", "dsssl", "xml"]
 categories = ["command-line-utilities", "development-tools", "template-engine"]
 
 [workspace.dependencies]
-# Core Scheme interpreter
-steel-core = "0.7"
+# Garbage collection for Scheme interpreter
+gc = "0.5"
 
 # XML parsing with DTD validation
 libxml = "0.3"

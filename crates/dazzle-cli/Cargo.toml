@@ -15,7 +15,8 @@ path = "src/main.rs"
 [dependencies]
 # Core Dazzle functionality
 dazzle-core = { path = "../dazzle-core" }
-dazzle-template = { path = "../dazzle-template" }
+dazzle-grove-libxml2 = { path = "../dazzle-grove-libxml2" }
+dazzle-backend-sgml = { path = "../dazzle-backend-sgml" }
 
 # CLI argument parsing
 clap = { workspace = true }

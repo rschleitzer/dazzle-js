@@ -6,14 +6,11 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Core library for Dazzle: Steel Scheme interpreter + libxml2 integration + DSSSL primitives"
+description = "Core library for Dazzle: Scheme interpreter (ported from OpenJade) + DSSSL primitives + Grove/FOT traits"
 
 [dependencies]
-# Steel Scheme interpreter
-steel-core = { workspace = true }
-
-# XML parsing with DTD validation
-libxml = { workspace = true }
+# Garbage collection for Scheme interpreter
+gc = { workspace = true }
 
 # Error handling
 anyhow = { workspace = true }

@@ -1,0 +1,14 @@
+[package]
+name = "dazzle-backend-sgml"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "SGML backend for Dazzle (code generation via file I/O)"
+
+[dependencies]
+dazzle-core = { path = "../dazzle-core" }
+thiserror = { workspace = true }
+
+[dev-dependencies]

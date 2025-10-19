@@ -1,253 +1,179 @@
-//! Grove model: representation of XML document trees
+//! Grove trait definitions
 //!
-//! This module implements the DSSSL grove model, which is an abstract
-//! representation of document structure independent of the actual markup.
+//! This module defines the abstract interface for document trees (groves),
+//! following OpenJade's grove/ architecture.
 //!
-//! ## Key Types
+//! The grove model is defined by the DSSSL standard (ISO/IEC 10179:1996) as an
+//! abstract representation of document structure, independent of markup syntax.
 //!
-//! - `Grove`: The document grove (keeps XML document alive)
-//! - `Node`: A single node in the grove (element, text, etc.)
+//! ## Architecture
+//!
+//! Like OpenJade's separation between `grove/` (abstract interface) and `spgrove/`
+//! (OpenSP implementation), Dazzle defines:
+//!
+//! - **This module (`dazzle-core/grove`)**: Abstract traits (`Node`, `NodeList`, `Grove`)
+//! - **`dazzle-grove-libxml2`**: Concrete implementation using libxml2 (XML + DTD)
+//! - **`dazzle-grove-opensp` (future)**: Concrete implementation using OpenSP (full SGML)
+//!
+//! This allows the Scheme interpreter to work with any grove implementation
+//! without coupling to a specific parser.
+//!
+//! ## Key Traits
+//!
+//! - `Node`: A single node in the document tree (element, text, attribute, etc.)
 //! - `NodeList`: An ordered collection of nodes
-//! - `NodeProperty`: Grove node properties (GI, ID, attributes, etc.)
+//! - `Grove`: The complete document grove (root + global operations)
 
-use crate::dtd::DtdDefaults;
-use libxml::tree::{Document, Node as XmlNode};
-use steel::rvals::Custom;
-use std::sync::Arc;
+use std::fmt::Debug;
 
-/// A grove - the complete document tree
+/// A node in the document tree
 ///
-/// This holds the XML Document to keep it alive while nodes are in use.
-#[derive(Clone)]
-pub struct Grove {
-    /// The underlying XML document (kept alive)
-    /// This field is intentionally not accessed directly - its purpose is to keep the Document alive
-    #[allow(dead_code)]
-    document: Arc<Document>,
-    /// DTD attribute defaults
-    dtd_defaults: Arc<DtdDefaults>,
-    /// The root node
-    root: Node,
-}
-
-impl std::fmt::Debug for Grove {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Grove")
-            .field("root", &self.root)
-            .finish()
-    }
-}
-
-impl Grove {
-    /// Create a new grove from a Document
-    pub fn from_document(doc: Document) -> Option<Self> {
-        // Parse DTD defaults
-        let dtd_defaults = Arc::new(
-            DtdDefaults::from_document(&doc)
-                .unwrap_or_else(|_| DtdDefaults::empty())
-        );
-
-        let root_elem = doc.get_root_element()?;
-        let root = Node::from_xml_node_with_dtd(root_elem, Arc::clone(&dtd_defaults));
-
-        Some(Grove {
-            document: Arc::new(doc),
-            dtd_defaults,
-            root,
-        })
-    }
-
-    /// Get the root node
-    pub fn root(&self) -> &Node {
-        &self.root
-    }
-
-    /// Get DTD defaults
-    pub fn dtd_defaults(&self) -> &DtdDefaults {
-        &self.dtd_defaults
-    }
-}
-
-// Implement Steel's Custom trait for Grove
-impl Custom for Grove {}
-
-/// A node in the grove (document tree)
+/// Corresponds to OpenJade's `GroveImpl::NodeImpl` interface.
 ///
-/// Wraps libxml::tree::Node and provides DSSSL grove semantics
-#[derive(Debug, Clone)]
-pub struct Node {
-    /// The underlying libxml2 node
-    inner: XmlNode,
-    /// DTD attribute defaults (shared across all nodes in the grove)
-    dtd_defaults: Arc<DtdDefaults>,
-}
-
-impl Node {
-    /// Create a Node from a libxml Node (without DTD defaults)
-    /// For compatibility - prefer from_xml_node_with_dtd
-    pub fn from_xml_node(xml_node: XmlNode) -> Self {
-        Node {
-            inner: xml_node,
-            dtd_defaults: Arc::new(DtdDefaults::empty()),
-        }
-    }
-
-    /// Create a Node from a libxml Node with DTD defaults
-    pub fn from_xml_node_with_dtd(xml_node: XmlNode, dtd_defaults: Arc<DtdDefaults>) -> Self {
-        Node {
-            inner: xml_node,
-            dtd_defaults,
-        }
-    }
-
-    /// Get the underlying libxml Node
-    pub fn xml_node(&self) -> &XmlNode {
-        &self.inner
-    }
-
+/// ## DSSSL Node Properties
+///
+/// DSSSL defines numerous node properties. The core ones are:
+///
+/// - **gi**: Generic identifier (element name)
+/// - **id**: ID attribute value
+/// - **data**: Text content (for text nodes)
+/// - **attributes**: Attribute nodes
+/// - **children**: Child nodes (elements only, not text)
+/// - **parent**: Parent node
+///
+/// See DSSSL spec Section 8 for complete property list.
+pub trait Node: Debug {
     /// Get the generic identifier (element name)
-    pub fn gi(&self) -> String {
-        self.inner.get_name()
-    }
-
-    /// Get the ID attribute
-    pub fn id(&self) -> Option<String> {
-        self.attribute("id")
-    }
-
-    /// Get child nodes (DSSSL: only element nodes, not text/comment nodes)
-    pub fn children(&self) -> NodeList {
-        let child_nodes = self.inner.get_child_nodes();
-        let dtd = Arc::clone(&self.dtd_defaults);
-        NodeList::from_vec(
-            child_nodes
-                .into_iter()
-                .filter(|n| n.is_element_node())  // DSSSL children() returns only element nodes
-                .map(|n| Node::from_xml_node_with_dtd(n, Arc::clone(&dtd)))
-                .collect()
-        )
-    }
-
-    /// Get parent node
-    pub fn parent(&self) -> Option<Node> {
-        self.inner
-            .get_parent()
-            .map(|n| Node::from_xml_node_with_dtd(n, Arc::clone(&self.dtd_defaults)))
-    }
-
-    /// Get attribute value (with DTD default support)
     ///
-    /// Returns the attribute value if present in the XML, otherwise
-    /// returns the DTD default value if one is defined.
-    pub fn attribute(&self, name: &str) -> Option<String> {
-        // First check if attribute is explicitly set
-        if let Some(value) = self.inner.get_attribute(name) {
-            return Some(value);
-        }
+    /// Returns `None` for non-element nodes.
+    ///
+    /// DSSSL: `gi` property
+    fn gi(&self) -> Option<&str>;
 
-        // If not, check DTD defaults
-        let element_name = self.gi();
-        self.dtd_defaults
-            .get_default(&element_name, name)
-            .map(|s| s.to_string())
-    }
+    /// Get the ID attribute value
+    ///
+    /// Returns `None` if node has no ID attribute.
+    ///
+    /// DSSSL: `id` property
+    fn id(&self) -> Option<&str>;
 
     /// Get text content
-    pub fn data(&self) -> String {
-        self.inner.get_content()
-    }
+    ///
+    /// For text nodes, returns the text. For elements, returns
+    /// concatenated descendant text.
+    ///
+    /// DSSSL: `data` property
+    fn data(&self) -> Option<&str>;
+
+    /// Get child nodes
+    ///
+    /// **Important**: In DSSSL, `children` returns only element nodes,
+    /// not text nodes. Text is accessed via `data` property.
+    ///
+    /// DSSSL: `children` property
+    fn children(&self) -> Box<dyn NodeList>;
+
+    /// Get parent node
+    ///
+    /// Returns `None` for the root node.
+    ///
+    /// DSSSL: `parent` property
+    fn parent(&self) -> Option<Box<dyn Node>>;
+
+    /// Get attribute value
+    ///
+    /// Includes DTD default values if defined.
+    ///
+    /// DSSSL: `attribute-string` primitive
+    fn attribute_string(&self, name: &str) -> Option<String>;
 
     /// Check if this is an element node
-    pub fn is_element(&self) -> bool {
-        self.inner.is_element_node()
-    }
+    fn is_element(&self) -> bool;
 
     /// Check if this is a text node
-    pub fn is_text(&self) -> bool {
-        self.inner.is_text_node()
-    }
+    fn is_text(&self) -> bool;
 
-    /// Check pointer equality (same node in memory)
-    pub fn ptr_eq(&self, other: &Node) -> bool {
-        // Compare underlying xmlNode pointers
-        std::ptr::eq(
-            self.inner.node_ptr() as *const (),
-            other.inner.node_ptr() as *const ()
-        )
-    }
+    /// Check node equality (same node in document tree)
+    ///
+    /// Two node references are equal if they refer to the same
+    /// node in the document, not just structurally similar nodes.
+    fn node_eq(&self, other: &dyn Node) -> bool;
 }
-
-// Implement Steel's Custom trait for Node
-impl Custom for Node {}
 
 /// An ordered collection of nodes
-#[derive(Debug, Clone)]
-pub struct NodeList {
-    nodes: Vec<Node>,
-}
-
-impl NodeList {
-    /// Create an empty node list
-    pub fn empty() -> Self {
-        Self { nodes: Vec::new() }
-    }
-
-    /// Create a node list from a vector of nodes
-    pub fn from_vec(nodes: Vec<Node>) -> Self {
-        Self { nodes }
-    }
-
+///
+/// Corresponds to OpenJade's `GroveImpl::NodeListImpl` interface.
+///
+/// ## Lazy Evaluation
+///
+/// Like OpenJade, node lists should support lazy evaluation - they don't
+/// need to materialize all nodes immediately. Operations like `first()`
+/// and `rest()` can be implemented efficiently as iterators.
+///
+/// DSSSL node lists are immutable and functional (cons-list style).
+pub trait NodeList: Debug {
     /// Check if the node list is empty
-    pub fn is_empty(&self) -> bool {
-        self.nodes.is_empty()
-    }
+    ///
+    /// DSSSL: `node-list-empty?`
+    fn is_empty(&self) -> bool;
 
     /// Get the first node
-    pub fn first(&self) -> Option<Node> {
-        self.nodes.first().cloned()
-    }
+    ///
+    /// Returns `None` if the list is empty.
+    ///
+    /// DSSSL: `node-list-first`
+    fn first(&self) -> Option<Box<dyn Node>>;
 
     /// Get the rest of the node list (all but first)
-    pub fn rest(&self) -> NodeList {
-        if self.nodes.is_empty() {
-            NodeList::empty()
-        } else {
-            NodeList::from_vec(self.nodes[1..].to_vec())
-        }
-    }
+    ///
+    /// Returns an empty node list if this list has 0 or 1 elements.
+    ///
+    /// DSSSL: `node-list-rest`
+    fn rest(&self) -> Box<dyn NodeList>;
 
-    /// Get the length
-    pub fn len(&self) -> usize {
-        self.nodes.len()
-    }
+    /// Get the length of the node list
+    ///
+    /// DSSSL: `node-list-length`
+    fn length(&self) -> usize;
 
     /// Get node at index
-    pub fn get(&self, index: usize) -> Option<Node> {
-        self.nodes.get(index).cloned()
-    }
-
-    /// Iterate over the nodes
-    pub fn iter(&self) -> impl Iterator<Item = &Node> {
-        self.nodes.iter()
-    }
-
-    /// Create a singleton node list
-    pub fn singleton(node: Node) -> Self {
-        NodeList { nodes: vec![node] }
-    }
+    ///
+    /// Returns `None` if index is out of bounds.
+    ///
+    /// DSSSL: `node-list-ref`
+    fn get(&self, index: usize) -> Option<Box<dyn Node>>;
 }
 
-// Implement Steel's Custom trait for NodeList
-impl Custom for NodeList {}
+/// The complete document grove
+///
+/// Corresponds to OpenJade's `GroveImpl::Grove` interface.
+///
+/// A grove holds the entire document tree and provides global operations
+/// like `element-with-id`.
+pub trait Grove: Debug {
+    /// Get the root node
+    ///
+    /// DSSSL: `grove-root` (or implicit root access)
+    fn root(&self) -> Box<dyn Node>;
+
+    /// Find element by ID
+    ///
+    /// Returns `None` if no element with the given ID exists.
+    ///
+    /// DSSSL: `element-with-id`
+    fn element_with_id(&self, id: &str) -> Option<Box<dyn Node>>;
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // These tests will be implemented once we have a concrete grove implementation
+    // For now, they serve as documentation of expected behavior
+
     #[test]
-    fn test_node_list_empty() {
-        let nl = NodeList::empty();
-        assert!(nl.is_empty());
-        assert_eq!(nl.len(), 0);
+    fn test_traits_defined() {
+        // This test just ensures the traits compile
+        // Actual tests will be in dazzle-grove-libxml2
     }
 }
