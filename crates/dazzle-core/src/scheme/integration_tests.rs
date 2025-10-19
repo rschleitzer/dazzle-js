@@ -28,6 +28,8 @@ mod tests {
         primitives::register_string_primitives(&env);
         primitives::register_boolean_primitives(&env);
         primitives::register_io_primitives(&env);
+        primitives::register_conversion_primitives(&env);
+        primitives::register_keyword_primitives(&env);
 
         // Eval
         let mut evaluator = Evaluator::new();

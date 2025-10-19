@@ -1720,6 +1720,322 @@ pub fn prim_write(args: &[Value]) -> PrimitiveResult {
 }
 
 // =============================================================================
+// Conversion Primitives (R4RS)
+// =============================================================================
+
+/// (number->string number) → string
+///
+/// Returns a string representation of number.
+///
+/// **R4RS**: Required procedure
+pub fn prim_number_to_string(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("number->string requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::Integer(n) => Ok(Value::string(n.to_string())),
+        Value::Real(r) => Ok(Value::string(r.to_string())),
+        _ => Err(format!("number->string: not a number: {:?}", args[0])),
+    }
+}
+
+/// (string->number string) → number or #f
+///
+/// Returns a number parsed from string, or #f if the string is not a valid number.
+///
+/// **R4RS**: Required procedure
+pub fn prim_string_to_number(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("string->number requires exactly 1 argument".to_string());
+    }
+
+    let s = match &args[0] {
+        Value::String(s) => s,
+        _ => return Err(format!("string->number: not a string: {:?}", args[0])),
+    };
+
+    // Try parsing as integer first
+    if let Ok(n) = s.parse::<i64>() {
+        return Ok(Value::integer(n));
+    }
+
+    // Try parsing as real
+    if let Ok(r) = s.parse::<f64>() {
+        return Ok(Value::real(r));
+    }
+
+    // Return #f if not a valid number
+    Ok(Value::bool(false))
+}
+
+// =============================================================================
+// Keyword Primitives (DSSSL Extension)
+// =============================================================================
+
+/// (keyword? obj) → boolean
+///
+/// Returns #t if obj is a keyword, otherwise #f.
+///
+/// **DSSSL**: Extension (OpenJade primitive)
+pub fn prim_keyword_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("keyword? requires exactly 1 argument".to_string());
+    }
+
+    Ok(Value::bool(matches!(args[0], Value::Keyword(_))))
+}
+
+/// (keyword->string keyword) → string
+///
+/// Returns the name of keyword as a string.
+///
+/// **DSSSL**: Extension (OpenJade primitive)
+pub fn prim_keyword_to_string(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("keyword->string requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::Keyword(k) => Ok(Value::string(k.to_string())),
+        _ => Err(format!("keyword->string: not a keyword: {:?}", args[0])),
+    }
+}
+
+/// (string->keyword string) → keyword
+///
+/// Returns the keyword whose name is string.
+///
+/// **DSSSL**: Extension (OpenJade primitive)
+pub fn prim_string_to_keyword(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("string->keyword requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::String(s) => Ok(Value::keyword(s)),
+        _ => Err(format!("string->keyword: not a string: {:?}", args[0])),
+    }
+}
+
+// =============================================================================
+// Additional List Utilities (R4RS)
+// =============================================================================
+
+/// (memq obj list) → list or #f
+///
+/// Returns the first sublist of list whose car is eq? to obj.
+/// If obj does not occur in list, returns #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_memq(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("memq requires exactly 2 arguments".to_string());
+    }
+
+    let obj = &args[0];
+    let mut current = args[1].clone();
+
+    loop {
+        match current {
+            Value::Nil => return Ok(Value::bool(false)),
+            Value::Pair(ref p) => {
+                let pair = p.borrow();
+                // Use eq? comparison
+                if obj.eq(&pair.car) {
+                    drop(pair);
+                    return Ok(current);
+                }
+                let cdr = pair.cdr.clone();
+                drop(pair);
+                current = cdr;
+            }
+            _ => return Err("memq: not a proper list".to_string()),
+        }
+    }
+}
+
+/// (memv obj list) → list or #f
+///
+/// Returns the first sublist of list whose car is eqv? to obj.
+/// If obj does not occur in list, returns #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_memv(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("memv requires exactly 2 arguments".to_string());
+    }
+
+    let obj = &args[0];
+    let mut current = args[1].clone();
+
+    loop {
+        match current {
+            Value::Nil => return Ok(Value::bool(false)),
+            Value::Pair(ref p) => {
+                let pair = p.borrow();
+                // Use eqv? comparison
+                if obj.eqv(&pair.car) {
+                    drop(pair);
+                    return Ok(current);
+                }
+                let cdr = pair.cdr.clone();
+                drop(pair);
+                current = cdr;
+            }
+            _ => return Err("memv: not a proper list".to_string()),
+        }
+    }
+}
+
+/// (member obj list) → list or #f
+///
+/// Returns the first sublist of list whose car is equal? to obj.
+/// If obj does not occur in list, returns #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_member(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("member requires exactly 2 arguments".to_string());
+    }
+
+    let obj = &args[0];
+    let mut current = args[1].clone();
+
+    loop {
+        match current {
+            Value::Nil => return Ok(Value::bool(false)),
+            Value::Pair(ref p) => {
+                let pair = p.borrow();
+                // Use equal? comparison
+                if obj.equal(&pair.car) {
+                    drop(pair);
+                    return Ok(current);
+                }
+                let cdr = pair.cdr.clone();
+                drop(pair);
+                current = cdr;
+            }
+            _ => return Err("member: not a proper list".to_string()),
+        }
+    }
+}
+
+/// (assq obj alist) → pair or #f
+///
+/// Returns the first pair in alist whose car is eq? to obj.
+/// If no pair is found, returns #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_assq(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("assq requires exactly 2 arguments".to_string());
+    }
+
+    let obj = &args[0];
+    let mut current = args[1].clone();
+
+    loop {
+        match current {
+            Value::Nil => return Ok(Value::bool(false)),
+            Value::Pair(ref p) => {
+                let pair = p.borrow();
+                // Check if car is a pair
+                if let Value::Pair(ref inner_p) = pair.car {
+                    let inner_pair = inner_p.borrow();
+                    if obj.eq(&inner_pair.car) {
+                        drop(inner_pair);
+                        let result = pair.car.clone();
+                        drop(pair);
+                        return Ok(result);
+                    }
+                }
+                let cdr = pair.cdr.clone();
+                drop(pair);
+                current = cdr;
+            }
+            _ => return Err("assq: not a proper list".to_string()),
+        }
+    }
+}
+
+/// (assv obj alist) → pair or #f
+///
+/// Returns the first pair in alist whose car is eqv? to obj.
+/// If no pair is found, returns #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_assv(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("assv requires exactly 2 arguments".to_string());
+    }
+
+    let obj = &args[0];
+    let mut current = args[1].clone();
+
+    loop {
+        match current {
+            Value::Nil => return Ok(Value::bool(false)),
+            Value::Pair(ref p) => {
+                let pair = p.borrow();
+                // Check if car is a pair
+                if let Value::Pair(ref inner_p) = pair.car {
+                    let inner_pair = inner_p.borrow();
+                    if obj.eqv(&inner_pair.car) {
+                        drop(inner_pair);
+                        let result = pair.car.clone();
+                        drop(pair);
+                        return Ok(result);
+                    }
+                }
+                let cdr = pair.cdr.clone();
+                drop(pair);
+                current = cdr;
+            }
+            _ => return Err("assv: not a proper list".to_string()),
+        }
+    }
+}
+
+/// (assoc obj alist) → pair or #f
+///
+/// Returns the first pair in alist whose car is equal? to obj.
+/// If no pair is found, returns #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_assoc(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("assoc requires exactly 2 arguments".to_string());
+    }
+
+    let obj = &args[0];
+    let mut current = args[1].clone();
+
+    loop {
+        match current {
+            Value::Nil => return Ok(Value::bool(false)),
+            Value::Pair(ref p) => {
+                let pair = p.borrow();
+                // Check if car is a pair
+                if let Value::Pair(ref inner_p) = pair.car {
+                    let inner_pair = inner_p.borrow();
+                    if obj.equal(&inner_pair.car) {
+                        drop(inner_pair);
+                        let result = pair.car.clone();
+                        drop(pair);
+                        return Ok(result);
+                    }
+                }
+                let cdr = pair.cdr.clone();
+                drop(pair);
+                current = cdr;
+            }
+            _ => return Err("assoc: not a proper list".to_string()),
+        }
+    }
+}
+
+// =============================================================================
 // Registration
 // =============================================================================
 
@@ -1737,6 +2053,12 @@ pub fn register_list_primitives(env: &gc::Gc<crate::scheme::environment::Environ
     env.define("reverse", Value::primitive("reverse", prim_reverse));
     env.define("list-tail", Value::primitive("list-tail", prim_list_tail));
     env.define("list-ref", Value::primitive("list-ref", prim_list_ref));
+    env.define("memq", Value::primitive("memq", prim_memq));
+    env.define("memv", Value::primitive("memv", prim_memv));
+    env.define("member", Value::primitive("member", prim_member));
+    env.define("assq", Value::primitive("assq", prim_assq));
+    env.define("assv", Value::primitive("assv", prim_assv));
+    env.define("assoc", Value::primitive("assoc", prim_assoc));
 }
 
 /// Register all number primitives in an environment
@@ -1829,6 +2151,19 @@ pub fn register_io_primitives(env: &gc::Gc<crate::scheme::environment::Environme
     env.define("display", Value::primitive("display", prim_display));
     env.define("newline", Value::primitive("newline", prim_newline));
     env.define("write", Value::primitive("write", prim_write));
+}
+
+/// Register all conversion primitives in an environment
+pub fn register_conversion_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
+    env.define("number->string", Value::primitive("number->string", prim_number_to_string));
+    env.define("string->number", Value::primitive("string->number", prim_string_to_number));
+}
+
+/// Register all keyword primitives in an environment
+pub fn register_keyword_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
+    env.define("keyword?", Value::primitive("keyword?", prim_keyword_p));
+    env.define("keyword->string", Value::primitive("keyword->string", prim_keyword_to_string));
+    env.define("string->keyword", Value::primitive("string->keyword", prim_string_to_keyword));
 }
 
 // =============================================================================
@@ -2530,5 +2865,159 @@ mod tests {
 
         let result = prim_write(&[Value::integer(42)]).unwrap();
         assert!(matches!(result, Value::Unspecified));
+    }
+
+    // =========================================================================
+    // Conversion primitive tests
+    // =========================================================================
+
+    #[test]
+    fn test_number_to_string() {
+        let result = prim_number_to_string(&[Value::integer(42)]).unwrap();
+        if let Value::String(ref s) = result {
+            assert_eq!(&***s, "42");
+        } else {
+            panic!("Expected string");
+        }
+
+        let result = prim_number_to_string(&[Value::real(3.14)]).unwrap();
+        if let Value::String(ref s) = result {
+            assert!(s.starts_with("3.14"));
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    #[test]
+    fn test_string_to_number() {
+        let result = prim_string_to_number(&[Value::string("42".to_string())]).unwrap();
+        assert!(matches!(result, Value::Integer(42)));
+
+        let result = prim_string_to_number(&[Value::string("3.14".to_string())]).unwrap();
+        assert!(matches!(result, Value::Real(_)));
+
+        // Invalid number returns #f
+        let result = prim_string_to_number(&[Value::string("not-a-number".to_string())]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    // =========================================================================
+    // Keyword primitive tests
+    // =========================================================================
+
+    #[test]
+    fn test_keyword_p() {
+        let kw = Value::keyword("test");
+        assert!(matches!(prim_keyword_p(&[kw]).unwrap(), Value::Bool(true)));
+
+        assert!(matches!(prim_keyword_p(&[Value::symbol("test")]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_keyword_p(&[Value::string("test".to_string())]).unwrap(), Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_keyword_to_string() {
+        let kw = Value::keyword("test");
+        let result = prim_keyword_to_string(&[kw]).unwrap();
+        if let Value::String(ref s) = result {
+            assert_eq!(&***s, "test");
+        } else {
+            panic!("Expected string");
+        }
+    }
+
+    #[test]
+    fn test_string_to_keyword() {
+        let result = prim_string_to_keyword(&[Value::string("test".to_string())]).unwrap();
+        assert!(matches!(result, Value::Keyword(_)));
+    }
+
+    // =========================================================================
+    // List utility primitive tests
+    // =========================================================================
+
+    #[test]
+    fn test_memq() {
+        let list = prim_list(&[Value::integer(1), Value::integer(2), Value::integer(3)]).unwrap();
+        let result = prim_memq(&[Value::integer(2), list.clone()]).unwrap();
+        assert!(result.is_list());
+
+        // Not found
+        let result = prim_memq(&[Value::integer(99), list]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_memv() {
+        let list = prim_list(&[Value::integer(1), Value::integer(2), Value::integer(3)]).unwrap();
+        let result = prim_memv(&[Value::integer(2), list.clone()]).unwrap();
+        assert!(result.is_list());
+
+        // Not found
+        let result = prim_memv(&[Value::integer(99), list]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_member() {
+        let list = prim_list(&[
+            Value::string("a".to_string()),
+            Value::string("b".to_string()),
+            Value::string("c".to_string()),
+        ])
+        .unwrap();
+        let result = prim_member(&[Value::string("b".to_string()), list.clone()]).unwrap();
+        assert!(result.is_list());
+
+        // Not found
+        let result = prim_member(&[Value::string("z".to_string()), list]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_assq() {
+        // Create association list: ((a . 1) (b . 2) (c . 3))
+        let pair1 = Value::cons(Value::symbol("a"), Value::integer(1));
+        let pair2 = Value::cons(Value::symbol("b"), Value::integer(2));
+        let pair3 = Value::cons(Value::symbol("c"), Value::integer(3));
+        let alist = prim_list(&[pair1, pair2, pair3]).unwrap();
+
+        let result = prim_assq(&[Value::symbol("b"), alist.clone()]).unwrap();
+        assert!(result.is_pair());
+
+        // Not found
+        let result = prim_assq(&[Value::symbol("z"), alist]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_assv() {
+        // Create association list: ((1 . a) (2 . b) (3 . c))
+        let pair1 = Value::cons(Value::integer(1), Value::symbol("a"));
+        let pair2 = Value::cons(Value::integer(2), Value::symbol("b"));
+        let pair3 = Value::cons(Value::integer(3), Value::symbol("c"));
+        let alist = prim_list(&[pair1, pair2, pair3]).unwrap();
+
+        let result = prim_assv(&[Value::integer(2), alist.clone()]).unwrap();
+        assert!(result.is_pair());
+
+        // Not found
+        let result = prim_assv(&[Value::integer(99), alist]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_assoc() {
+        // Create association list: (("a" . 1) ("b" . 2) ("c" . 3))
+        let pair1 = Value::cons(Value::string("a".to_string()), Value::integer(1));
+        let pair2 = Value::cons(Value::string("b".to_string()), Value::integer(2));
+        let pair3 = Value::cons(Value::string("c".to_string()), Value::integer(3));
+        let alist = prim_list(&[pair1, pair2, pair3]).unwrap();
+
+        let result = prim_assoc(&[Value::string("b".to_string()), alist.clone()]).unwrap();
+        assert!(result.is_pair());
+
+        // Not found
+        let result = prim_assoc(&[Value::string("z".to_string()), alist]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
     }
 }
