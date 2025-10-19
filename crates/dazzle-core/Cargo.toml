@@ -22,3 +22,5 @@ tracing = { workspace = true }
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
 dazzle-grove-libxml2 = { path = "../dazzle-grove-libxml2" }
+dazzle-backend-sgml = { path = "../dazzle-backend-sgml" }
+tempfile = "3"

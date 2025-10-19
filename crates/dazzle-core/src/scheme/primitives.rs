@@ -3532,6 +3532,123 @@ pub fn prim_sosofo_append(args: &[Value]) -> PrimitiveResult {
 }
 
 // =============================================================================
+// Processing Primitives (DSSSL)
+// =============================================================================
+//
+// These primitives handle document tree traversal and template application.
+// They are central to DSSSL's processing model.
+
+/// (process-children) → sosofo
+///
+/// Processes the children of the current node.
+///
+/// In DSSSL, this looks up the appropriate rule for each child node
+/// and evaluates it, then appends all the resulting sosofos.
+///
+/// **Implementation Note**: This is a simplified stub implementation.
+/// Full DSSSL requires rule/mode matching which will be added later.
+/// For now, this returns empty-sosofo.
+///
+/// **DSSSL**: Processing primitive
+pub fn prim_process_children(args: &[Value]) -> PrimitiveResult {
+    if !args.is_empty() {
+        return Err("process-children requires no arguments".to_string());
+    }
+
+    // TODO: Implement full processing model
+    // This should:
+    // 1. Get children of current node
+    // 2. For each child, find matching rule/mode
+    // 3. Evaluate the rule with child as current-node
+    // 4. Append all resulting sosofos
+
+    // For now, return empty sosofo
+    Ok(Value::Sosofo)
+}
+
+/// (process-node-list node-list) → sosofo
+///
+/// Processes each node in the given node-list.
+///
+/// Similar to process-children, but processes an explicit node-list
+/// rather than the current node's children.
+///
+/// **Implementation Note**: This is a simplified stub implementation.
+/// Full DSSSL requires rule/mode matching which will be added later.
+/// For now, this returns empty-sosofo.
+///
+/// **DSSSL**: Processing primitive
+pub fn prim_process_node_list(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("process-node-list requires exactly 1 argument".to_string());
+    }
+
+    // Verify argument is a node-list
+    if !matches!(args[0], Value::NodeList(_)) {
+        return Err(format!("process-node-list: not a node-list: {:?}", args[0]));
+    }
+
+    // TODO: Implement full processing model
+    // This should:
+    // 1. For each node in the list
+    // 2. Find matching rule/mode
+    // 3. Evaluate the rule with node as current-node
+    // 4. Append all resulting sosofos
+
+    // For now, return empty sosofo
+    Ok(Value::Sosofo)
+}
+
+/// (make flow-object-type ...) → sosofo
+///
+/// Creates a flow object (output element).
+///
+/// This is the primary way templates generate output. Common flow objects:
+/// - `entity` - Creates an output file (system-id:, content)
+/// - `formatting-instruction` - Outputs raw text (data:)
+/// - `sequence` - Groups flow objects
+/// - `literal` - Outputs text (handled separately as a function)
+///
+/// **Implementation Note**: This is a stub implementation.
+/// Full implementation requires FotBuilder integration in the evaluator.
+/// For now, this returns a sosofo marker.
+///
+/// **DSSSL**: Flow object construction primitive
+///
+/// **Example**:
+/// ```scheme
+/// (make entity
+///   system-id: "Output.java"
+///   (literal "public class Foo { }"))
+/// ```
+pub fn prim_make(args: &[Value]) -> PrimitiveResult {
+    if args.is_empty() {
+        return Err("make requires at least a flow object type".to_string());
+    }
+
+    // First argument should be a symbol (flow object type)
+    match &args[0] {
+        Value::Symbol(fo_type) => {
+            // TODO: Implement actual flow object creation
+            // This should:
+            // 1. Parse keyword arguments (system-id:, data:, etc.)
+            // 2. Evaluate body sosofo
+            // 3. Call appropriate FotBuilder method
+            // 4. Return sosofo
+
+            // For now, just validate it's a known type and return sosofo
+            match fo_type.as_ref() {
+                "entity" | "formatting-instruction" | "sequence" | "paragraph" => {
+                    Ok(Value::Sosofo)
+                }
+                _ => Err(format!("make: unknown flow object type: {}", fo_type)),
+            }
+        }
+        _ => Err(format!("make: first argument must be a symbol: {:?}", args[0])),
+    }
+}
+
+// =============================================================================
 // String Utility Primitives (DSSSL Extensions)
 // =============================================================================
 
@@ -3852,10 +3969,16 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
 
 /// Register sosofo primitives in an environment
 pub fn register_sosofo_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
+    // Sosofo construction
     env.define("sosofo?", Value::primitive("sosofo?", prim_sosofo_p));
     env.define("empty-sosofo", Value::primitive("empty-sosofo", prim_empty_sosofo));
     env.define("literal", Value::primitive("literal", prim_literal));
     env.define("sosofo-append", Value::primitive("sosofo-append", prim_sosofo_append));
+
+    // Processing primitives
+    env.define("process-children", Value::primitive("process-children", prim_process_children));
+    env.define("process-node-list", Value::primitive("process-node-list", prim_process_node_list));
+    env.define("make", Value::primitive("make", prim_make));
 }
 
 /// Register utility primitives in an environment
