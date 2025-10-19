@@ -5,10 +5,19 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "SGML backend for Dazzle (code generation via file I/O)"
+homepage.workspace = true
+description = "SGML backend for Dazzle: Code generation output engine"
 
 [dependencies]
 dazzle-core = { path = "../dazzle-core" }
+
+# Error handling
+anyhow = { workspace = true }
 thiserror = { workspace = true }
 
+# Logging
+tracing = { workspace = true }
+
 [dev-dependencies]
+tracing-subscriber = { workspace = true }
+tempfile = "3"
