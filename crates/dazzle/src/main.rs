@@ -4,8 +4,8 @@
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use dazzle::Args;
 use dazzle_backend_sgml::SgmlBackend;
-use dazzle_cli::Args;
 use dazzle_core::fot::FotBuilder;
 use dazzle_core::grove::Grove;
 use dazzle_core::scheme::environment::Environment;
