@@ -26,6 +26,7 @@ mod tests {
         primitives::register_list_primitives(&env);
         primitives::register_number_primitives(&env);
         primitives::register_string_primitives(&env);
+        primitives::register_boolean_primitives(&env);
 
         // Eval
         let mut evaluator = Evaluator::new();
@@ -756,5 +757,172 @@ mod tests {
         "#;
         let result = eval_string(code);
         assert!(matches!(result, Value::Integer(4)));
+    }
+
+    // =========================================================================
+    // Boolean and equality primitives
+    // =========================================================================
+
+    #[test]
+    fn test_eval_not() {
+        let result = eval_string("(not #t)");
+        assert!(!result.is_true());
+
+        let result = eval_string("(not #f)");
+        assert!(result.is_true());
+
+        // Only #f is false in Scheme
+        let result = eval_string("(not 0)");
+        assert!(!result.is_true());
+
+        let result = eval_string(r#"(not "")"#);
+        assert!(!result.is_true());
+
+        let result = eval_string("(not '())");
+        assert!(!result.is_true());
+    }
+
+    #[test]
+    fn test_eval_boolean_p() {
+        let result = eval_string("(boolean? #t)");
+        assert!(result.is_true());
+
+        let result = eval_string("(boolean? #f)");
+        assert!(result.is_true());
+
+        let result = eval_string("(boolean? 42)");
+        assert!(!result.is_true());
+
+        let result = eval_string(r#"(boolean? "hello")"#);
+        assert!(!result.is_true());
+
+        let result = eval_string("(boolean? '())");
+        assert!(!result.is_true());
+    }
+
+    #[test]
+    fn test_eval_equal_p() {
+        // Numbers
+        let result = eval_string("(equal? 42 42)");
+        assert!(result.is_true());
+
+        let result = eval_string("(equal? 42 43)");
+        assert!(!result.is_true());
+
+        // Strings - deep comparison
+        let result = eval_string(r#"(equal? "hello" "hello")"#);
+        assert!(result.is_true());
+
+        let result = eval_string(r#"(equal? "hello" "world")"#);
+        assert!(!result.is_true());
+
+        // Lists - deep structural comparison
+        let result = eval_string("(equal? '(1 2 3) '(1 2 3))");
+        assert!(result.is_true());
+
+        let result = eval_string("(equal? '(1 2 3) '(1 2 4))");
+        assert!(!result.is_true());
+
+        // Nested lists
+        let result = eval_string("(equal? '(1 (2 3) 4) '(1 (2 3) 4))");
+        assert!(result.is_true());
+
+        let result = eval_string("(equal? '(1 (2 3) 4) '(1 (2 4) 4))");
+        assert!(!result.is_true());
+    }
+
+    #[test]
+    fn test_eval_eqv_p() {
+        // Numbers - value equality
+        let result = eval_string("(eqv? 42 42)");
+        assert!(result.is_true());
+
+        let result = eval_string("(eqv? 42 43)");
+        assert!(!result.is_true());
+
+        // Symbols - value equality
+        let result = eval_string("(eqv? 'foo 'foo)");
+        assert!(result.is_true());
+
+        let result = eval_string("(eqv? 'foo 'bar)");
+        assert!(!result.is_true());
+
+        // Booleans
+        let result = eval_string("(eqv? #t #t)");
+        assert!(result.is_true());
+
+        let result = eval_string("(eqv? #t #f)");
+        assert!(!result.is_true());
+
+        // Different types
+        let result = eval_string(r#"(eqv? 42 "42")"#);
+        assert!(!result.is_true());
+    }
+
+    #[test]
+    fn test_eval_eq_p() {
+        // Numbers - value equality
+        let result = eval_string("(eq? 42 42)");
+        assert!(result.is_true());
+
+        // Symbols
+        let result = eval_string("(eq? 'foo 'foo)");
+        assert!(result.is_true());
+
+        // Same pair should be eq?
+        let result = eval_string(r#"
+            (let ((x '(1 2 3)))
+              (eq? x x))
+        "#);
+        assert!(result.is_true());
+
+        // Different pairs with same values are not eq?
+        let result = eval_string("(eq? '(1 2 3) '(1 2 3))");
+        assert!(!result.is_true());
+    }
+
+    #[test]
+    fn test_eval_procedure_p() {
+        // Primitive procedure
+        let result = eval_string("(procedure? +)");
+        assert!(result.is_true());
+
+        let result = eval_string("(procedure? car)");
+        assert!(result.is_true());
+
+        // Lambda
+        let result = eval_string("(procedure? (lambda (x) x))");
+        assert!(result.is_true());
+
+        // Not procedures
+        let result = eval_string("(procedure? 42)");
+        assert!(!result.is_true());
+
+        let result = eval_string(r#"(procedure? "hello")"#);
+        assert!(!result.is_true());
+
+        let result = eval_string("(procedure? '(1 2 3))");
+        assert!(!result.is_true());
+    }
+
+    #[test]
+    fn test_eval_boolean_logic_combinations() {
+        // not with comparisons
+        let result = eval_string("(not (< 5 3))");
+        assert!(result.is_true());
+
+        // equal? with computation
+        let result = eval_string("(equal? (+ 2 2) (* 2 2))");
+        assert!(result.is_true());
+
+        // Complex boolean logic
+        let code = r#"
+            (if (and (not (null? '(1 2 3)))
+                     (equal? (car '(1 2 3)) 1))
+                "yes"
+                "no")
+        "#;
+        let result = eval_string(code);
+        assert!(result.is_string());
     }
 }

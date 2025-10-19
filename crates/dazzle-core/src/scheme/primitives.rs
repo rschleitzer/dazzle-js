@@ -1508,6 +1508,139 @@ pub fn prim_char_downcase(args: &[Value]) -> PrimitiveResult {
 }
 
 // =============================================================================
+// Boolean and Equality Primitives (R4RS)
+// =============================================================================
+
+/// (not obj) → boolean
+///
+/// Returns #t if obj is false, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_not(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("not requires exactly 1 argument".to_string());
+    }
+
+    Ok(Value::bool(!args[0].is_true()))
+}
+
+/// (boolean? obj) → boolean
+///
+/// Returns #t if obj is a boolean, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_boolean_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("boolean? requires exactly 1 argument".to_string());
+    }
+
+    Ok(Value::bool(matches!(args[0], Value::Bool(_))))
+}
+
+/// (equal? obj1 obj2) → boolean
+///
+/// Returns #t if obj1 and obj2 are structurally equal, otherwise #f.
+/// This is a deep comparison that recursively compares pairs and other structures.
+///
+/// **R4RS**: Required procedure
+pub fn prim_equal_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("equal? requires exactly 2 arguments".to_string());
+    }
+
+    Ok(Value::bool(values_equal(&args[0], &args[1])))
+}
+
+/// Helper function for deep structural equality
+fn values_equal(v1: &Value, v2: &Value) -> bool {
+    match (v1, v2) {
+        (Value::Nil, Value::Nil) => true,
+        (Value::Bool(b1), Value::Bool(b2)) => b1 == b2,
+        (Value::Integer(n1), Value::Integer(n2)) => n1 == n2,
+        (Value::Real(r1), Value::Real(r2)) => (r1 - r2).abs() < f64::EPSILON,
+        (Value::Integer(n), Value::Real(r)) | (Value::Real(r), Value::Integer(n)) => {
+            (*n as f64 - r).abs() < f64::EPSILON
+        }
+        (Value::Char(c1), Value::Char(c2)) => c1 == c2,
+        (Value::String(s1), Value::String(s2)) => s1 == s2,
+        (Value::Symbol(s1), Value::Symbol(s2)) => s1 == s2,
+        (Value::Pair(p1), Value::Pair(p2)) => {
+            let pair1 = p1.borrow();
+            let pair2 = p2.borrow();
+            values_equal(&pair1.car, &pair2.car) && values_equal(&pair1.cdr, &pair2.cdr)
+        }
+        _ => false,
+    }
+}
+
+/// (eqv? obj1 obj2) → boolean
+///
+/// Returns #t if obj1 and obj2 are equivalent, otherwise #f.
+/// For most types, this is the same as equal?, but symbols are compared by identity.
+///
+/// **R4RS**: Required procedure
+pub fn prim_eqv_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("eqv? requires exactly 2 arguments".to_string());
+    }
+
+    let result = match (&args[0], &args[1]) {
+        (Value::Nil, Value::Nil) => true,
+        (Value::Bool(b1), Value::Bool(b2)) => b1 == b2,
+        (Value::Integer(n1), Value::Integer(n2)) => n1 == n2,
+        (Value::Real(r1), Value::Real(r2)) => (r1 - r2).abs() < f64::EPSILON,
+        (Value::Char(c1), Value::Char(c2)) => c1 == c2,
+        (Value::Symbol(s1), Value::Symbol(s2)) => s1 == s2,
+        // For pairs, strings, and procedures, eqv? checks object identity
+        (Value::Pair(p1), Value::Pair(p2)) => gc::Gc::ptr_eq(p1, p2),
+        (Value::String(s1), Value::String(s2)) => gc::Gc::ptr_eq(s1, s2),
+        (Value::Procedure(pr1), Value::Procedure(pr2)) => gc::Gc::ptr_eq(pr1, pr2),
+        _ => false,
+    };
+
+    Ok(Value::bool(result))
+}
+
+/// (eq? obj1 obj2) → boolean
+///
+/// Returns #t if obj1 and obj2 are the same object (pointer equality), otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_eq_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("eq? requires exactly 2 arguments".to_string());
+    }
+
+    let result = match (&args[0], &args[1]) {
+        (Value::Nil, Value::Nil) => true,
+        (Value::Bool(b1), Value::Bool(b2)) => b1 == b2,
+        (Value::Integer(n1), Value::Integer(n2)) => n1 == n2,
+        (Value::Char(c1), Value::Char(c2)) => c1 == c2,
+        (Value::Symbol(s1), Value::Symbol(s2)) => s1 == s2,
+        // For heap-allocated objects, check pointer equality
+        (Value::Pair(p1), Value::Pair(p2)) => gc::Gc::ptr_eq(p1, p2),
+        (Value::String(s1), Value::String(s2)) => gc::Gc::ptr_eq(s1, s2),
+        (Value::Procedure(pr1), Value::Procedure(pr2)) => gc::Gc::ptr_eq(pr1, pr2),
+        _ => false,
+    };
+
+    Ok(Value::bool(result))
+}
+
+/// (procedure? obj) → boolean
+///
+/// Returns #t if obj is a procedure, otherwise #f.
+///
+/// **R4RS**: Required procedure
+pub fn prim_procedure_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("procedure? requires exactly 1 argument".to_string());
+    }
+
+    Ok(Value::bool(matches!(args[0], Value::Procedure(_))))
+}
+
+// =============================================================================
 // Registration
 // =============================================================================
 
@@ -1599,6 +1732,16 @@ pub fn register_string_primitives(env: &gc::Gc<crate::scheme::environment::Envir
     env.define("char>?", Value::primitive("char>?", prim_char_gt));
     env.define("char-upcase", Value::primitive("char-upcase", prim_char_upcase));
     env.define("char-downcase", Value::primitive("char-downcase", prim_char_downcase));
+}
+
+/// Register all boolean and equality primitives in an environment
+pub fn register_boolean_primitives(env: &gc::Gc<crate::scheme::environment::Environment>) {
+    env.define("not", Value::primitive("not", prim_not));
+    env.define("boolean?", Value::primitive("boolean?", prim_boolean_p));
+    env.define("equal?", Value::primitive("equal?", prim_equal_p));
+    env.define("eqv?", Value::primitive("eqv?", prim_eqv_p));
+    env.define("eq?", Value::primitive("eq?", prim_eq_p));
+    env.define("procedure?", Value::primitive("procedure?", prim_procedure_p));
 }
 
 // =============================================================================
@@ -2149,5 +2292,96 @@ mod tests {
     fn test_char_downcase() {
         let result = prim_char_downcase(&[Value::char('Z')]).unwrap();
         assert!(matches!(result, Value::Char('z')));
+    }
+
+    // =========================================================================
+    // Boolean and equality primitive tests
+    // =========================================================================
+
+    #[test]
+    fn test_not() {
+        let result = prim_not(&[Value::bool(true)]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        let result = prim_not(&[Value::bool(false)]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        // #f is the only false value in Scheme
+        let result = prim_not(&[Value::integer(0)]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_boolean_p() {
+        assert!(matches!(prim_boolean_p(&[Value::bool(true)]).unwrap(), Value::Bool(true)));
+        assert!(matches!(prim_boolean_p(&[Value::bool(false)]).unwrap(), Value::Bool(true)));
+        assert!(matches!(prim_boolean_p(&[Value::integer(1)]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_boolean_p(&[Value::Nil]).unwrap(), Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_equal_p() {
+        // Numbers
+        let result = prim_equal_p(&[Value::integer(42), Value::integer(42)]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        let result = prim_equal_p(&[Value::integer(42), Value::integer(43)]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+
+        // Strings
+        let result = prim_equal_p(&[Value::string("hello".to_string()), Value::string("hello".to_string())]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        // Lists
+        let list1 = prim_list(&[Value::integer(1), Value::integer(2)]).unwrap();
+        let list2 = prim_list(&[Value::integer(1), Value::integer(2)]).unwrap();
+        let result = prim_equal_p(&[list1, list2]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_eqv_p() {
+        // Numbers
+        let result = prim_eqv_p(&[Value::integer(42), Value::integer(42)]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        // Symbols
+        let sym1 = Value::symbol("foo");
+        let sym2 = Value::symbol("foo");
+        let result = prim_eqv_p(&[sym1, sym2]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        // Different types
+        let result = prim_eqv_p(&[Value::integer(42), Value::string("42".to_string())]).unwrap();
+        assert!(matches!(result, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_eq_p() {
+        // Numbers
+        let result = prim_eq_p(&[Value::integer(42), Value::integer(42)]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        // Symbols
+        let sym1 = Value::symbol("foo");
+        let sym2 = Value::symbol("foo");
+        let result = prim_eq_p(&[sym1, sym2]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+
+        // Same pair should be eq?
+        let pair = Value::cons(Value::integer(1), Value::integer(2));
+        let result = prim_eq_p(&[pair.clone(), pair]).unwrap();
+        assert!(matches!(result, Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_procedure_p() {
+        // Primitives are procedures
+        let proc = Value::primitive("+", prim_add);
+        assert!(matches!(prim_procedure_p(&[proc]).unwrap(), Value::Bool(true)));
+
+        // Non-procedures
+        assert!(matches!(prim_procedure_p(&[Value::integer(42)]).unwrap(), Value::Bool(false)));
+        assert!(matches!(prim_procedure_p(&[Value::string("hello".to_string())]).unwrap(), Value::Bool(false)));
     }
 }
