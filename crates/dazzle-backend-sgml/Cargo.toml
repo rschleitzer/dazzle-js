@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "SGML backend for Dazzle: Code generation output engine"
 
 [dependencies]
-dazzle-core = { path = "../dazzle-core" }
+dazzle-core = { version = "0.1.0", path = "../dazzle-core" }
 
 # Error handling
 anyhow = { workspace = true }
