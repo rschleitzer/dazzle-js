@@ -247,6 +247,10 @@ impl Evaluator {
                 "for-each" => self.eval_for_each(args, env),
                 "load" => self.eval_load(args, env),
 
+                // DSSSL special forms
+                "define-language" => self.eval_define_language(args, env),
+                "declare-flow-object-class" => self.eval_declare_flow_object_class(args, env),
+
                 // Not a special form - evaluate as function call
                 _ => self.eval_application(operator, args, env),
             }
@@ -383,6 +387,54 @@ impl Evaluator {
             _ => Err(EvalError::new(
                 "First argument to define must be symbol or list".to_string(),
             )),
+        }
+    }
+
+    /// Evaluate (define-language name props...)
+    /// DSSSL language definition - defines the language name as a symbol
+    fn eval_define_language(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+
+        if args_vec.is_empty() {
+            return Err(EvalError::new(
+                "define-language requires at least 1 argument".to_string(),
+            ));
+        }
+
+        // First argument must be a symbol (language name)
+        if let Value::Symbol(ref name) = args_vec[0] {
+            // Define the language name as a symbol bound to itself
+            // This allows it to be used in (declare-default-language name)
+            env.define(name, args_vec[0].clone());
+            Ok(Value::Unspecified)
+        } else {
+            Err(EvalError::new(
+                "First argument to define-language must be a symbol".to_string(),
+            ))
+        }
+    }
+
+    /// Evaluate (declare-flow-object-class name public-id)
+    /// DSSSL flow object class declaration - defines the class name as a symbol
+    fn eval_declare_flow_object_class(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+
+        if args_vec.is_empty() {
+            return Err(EvalError::new(
+                "declare-flow-object-class requires at least 1 argument".to_string(),
+            ));
+        }
+
+        // First argument must be a symbol (flow object class name)
+        if let Value::Symbol(ref name) = args_vec[0] {
+            // Define the class name as a symbol bound to itself
+            // This allows it to be used in (make name ...) constructs
+            env.define(name, args_vec[0].clone());
+            Ok(Value::Unspecified)
+        } else {
+            Err(EvalError::new(
+                "First argument to declare-flow-object-class must be a symbol".to_string(),
+            ))
         }
     }
 
