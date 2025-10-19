@@ -608,4 +608,153 @@ mod tests {
         let result = eval_string(code);
         assert!(matches!(result, Value::Integer(120)));
     }
+
+    // =========================================================================
+    // letrec (recursive bindings)
+    // =========================================================================
+
+    #[test]
+    fn test_eval_letrec_simple() {
+        // Simple letrec with recursive function
+        let code = r#"
+            (letrec ((fact (lambda (n)
+                             (if (<= n 1)
+                                 1
+                                 (* n (fact (- n 1)))))))
+              (fact 5))
+        "#;
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(120)));
+    }
+
+    #[test]
+    fn test_eval_letrec_mutually_recursive() {
+        // Mutually recursive functions (even?/odd?)
+        let code = r#"
+            (letrec ((even? (lambda (n)
+                              (if (= n 0)
+                                  #t
+                                  (odd? (- n 1)))))
+                     (odd? (lambda (n)
+                             (if (= n 0)
+                                 #f
+                                 (even? (- n 1))))))
+              (even? 10))
+        "#;
+        let result = eval_string(code);
+        assert!(result.is_true());
+    }
+
+    // =========================================================================
+    // Higher-order functions (map, for-each, apply)
+    // =========================================================================
+
+    #[test]
+    fn test_eval_map_simple() {
+        // Map with lambda doubling each element
+        let code = "(map (lambda (x) (* x 2)) '(1 2 3))";
+        let result = eval_string(code);
+        assert!(result.is_list());
+
+        // Check first element is 2
+        let code = "(car (map (lambda (x) (* x 2)) '(1 2 3)))";
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(2)));
+    }
+
+    #[test]
+    fn test_eval_map_with_defined_function() {
+        // Map with defined function
+        let code = r#"
+            (begin
+              (define (square x) (* x x))
+              (map square '(1 2 3 4)))
+        "#;
+        let result = eval_string(code);
+        assert!(result.is_list());
+
+        // Check length is 4
+        let code = r#"
+            (begin
+              (define (square x) (* x x))
+              (length (map square '(1 2 3 4))))
+        "#;
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(4)));
+    }
+
+    #[test]
+    fn test_eval_apply_with_list() {
+        // Apply + to a list
+        let code = "(apply + '(1 2 3 4 5))";
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(15)));
+    }
+
+    #[test]
+    fn test_eval_apply_with_lambda() {
+        // Apply a lambda to a list
+        let code = "(apply (lambda (x y) (+ x y)) '(10 20))";
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(30)));
+    }
+
+    #[test]
+    fn test_eval_for_each() {
+        // for-each returns unspecified
+        // We can't easily test side effects, but we can verify it runs without error
+        let code = "(for-each (lambda (x) (+ x 1)) '(1 2 3))";
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Unspecified));
+    }
+
+    #[test]
+    fn test_eval_map_nested() {
+        // Nested map operations
+        let code = r#"
+            (map (lambda (x) (+ x 1))
+                 (map (lambda (x) (* x 2))
+                      '(1 2 3)))
+        "#;
+        let result = eval_string(code);
+        assert!(result.is_list());
+
+        // First element should be (1*2)+1 = 3
+        let code = r#"
+            (car (map (lambda (x) (+ x 1))
+                      (map (lambda (x) (* x 2))
+                           '(1 2 3))))
+        "#;
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(3)));
+    }
+
+    #[test]
+    fn test_eval_complex_higher_order() {
+        // Complex use of higher-order functions
+        let code = r#"
+            (begin
+              (define (compose f g)
+                (lambda (x) (f (g x))))
+              (define (inc x) (+ x 1))
+              (define (double x) (* x 2))
+              (define inc-then-double (compose double inc))
+              (map inc-then-double '(1 2 3)))
+        "#;
+        let result = eval_string(code);
+        assert!(result.is_list());
+
+        // First element: (1+1)*2 = 4
+        let code = r#"
+            (begin
+              (define (compose f g)
+                (lambda (x) (f (g x))))
+              (define (inc x) (+ x 1))
+              (define (double x) (* x 2))
+              (define inc-then-double (compose double inc))
+              (car (map inc-then-double '(1 2 3))))
+        "#;
+        let result = eval_string(code);
+        assert!(matches!(result, Value::Integer(4)));
+    }
 }

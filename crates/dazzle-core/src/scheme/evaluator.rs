@@ -141,6 +141,9 @@ impl Evaluator {
                 "case" => self.eval_case(args, env),
                 "and" => self.eval_and(args, env),
                 "or" => self.eval_or(args, env),
+                "apply" => self.eval_apply(args, env),
+                "map" => self.eval_map(args, env),
+                "for-each" => self.eval_for_each(args, env),
 
                 // Not a special form - evaluate as function call
                 _ => self.eval_application(operator, args, env),
@@ -422,9 +425,62 @@ impl Evaluator {
     }
 
     /// (letrec ((var val)...) body...)
-    fn eval_letrec(&mut self, _args: Value, _env: Gc<Environment>) -> EvalResult {
-        // TODO: Implement letrec (needs special handling for recursive definitions)
-        Err(EvalError::new("letrec not yet implemented".to_string()))
+    ///
+    /// letrec allows recursive definitions - all bindings can refer to each other.
+    /// Implementation:
+    /// 1. Create new environment
+    /// 2. Bind all variables to Unspecified first
+    /// 3. Evaluate all values in the new environment
+    /// 4. Update bindings with evaluated values
+    /// 5. Evaluate body in the new environment
+    fn eval_letrec(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+        if args_vec.len() < 2 {
+            return Err(EvalError::new(
+                "letrec requires at least 2 arguments".to_string(),
+            ));
+        }
+
+        // Parse bindings
+        let bindings_list = &args_vec[0];
+        let bindings = self.list_to_vec(bindings_list.clone())?;
+
+        // Create new environment extending current
+        let new_env = Environment::extend(env);
+
+        // First pass: bind all variables to Unspecified
+        let mut var_names = Vec::new();
+        for binding in &bindings {
+            let binding_vec = self.list_to_vec(binding.clone())?;
+            if binding_vec.len() != 2 {
+                return Err(EvalError::new(
+                    "letrec binding must have exactly 2 elements".to_string(),
+                ));
+            }
+
+            if let Value::Symbol(ref name) = binding_vec[0] {
+                var_names.push(name.to_string());
+                new_env.define(name, Value::Unspecified);
+            } else {
+                return Err(EvalError::new(
+                    "Binding variable must be a symbol".to_string(),
+                ));
+            }
+        }
+
+        // Second pass: evaluate all values in the new environment and update bindings
+        for (i, binding) in bindings.iter().enumerate() {
+            let binding_vec = self.list_to_vec(binding.clone())?;
+            let value = self.eval(binding_vec[1].clone(), new_env.clone())?;
+
+            // Update the binding (set! will work since we already defined it)
+            new_env.set(&var_names[i], value)
+                .map_err(|e| EvalError::new(e))?;
+        }
+
+        // Evaluate body in new environment
+        let body = &args_vec[1..];
+        self.eval_sequence(body, new_env)
     }
 
     /// (begin expr...)
@@ -515,6 +571,95 @@ impl Evaluator {
         }
 
         Ok(result)
+    }
+
+    /// (apply proc args)
+    ///
+    /// Apply a procedure to a list of arguments.
+    /// Example: (apply + '(1 2 3)) → 6
+    fn eval_apply(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+        if args_vec.len() != 2 {
+            return Err(EvalError::new(
+                "apply requires exactly 2 arguments".to_string(),
+            ));
+        }
+
+        // Evaluate the procedure
+        let proc = self.eval(args_vec[0].clone(), env.clone())?;
+
+        // Evaluate the argument list
+        let arg_list = self.eval(args_vec[1].clone(), env)?;
+
+        // Convert argument list to vector
+        let arg_values = self.list_to_vec(arg_list)?;
+
+        // Apply the procedure
+        self.apply(proc, arg_values)
+    }
+
+    /// (map proc list)
+    ///
+    /// Apply procedure to each element of list, return list of results.
+    /// Example: (map (lambda (x) (* x 2)) '(1 2 3)) → '(2 4 6)
+    fn eval_map(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+        if args_vec.len() != 2 {
+            return Err(EvalError::new("map requires exactly 2 arguments".to_string()));
+        }
+
+        // Evaluate the procedure
+        let proc = self.eval(args_vec[0].clone(), env.clone())?;
+
+        // Evaluate the list
+        let list = self.eval(args_vec[1].clone(), env)?;
+
+        // Convert list to vector
+        let list_vec = self.list_to_vec(list)?;
+
+        // Apply procedure to each element
+        let mut result_vec = Vec::new();
+        for elem in list_vec {
+            let result = self.apply(proc.clone(), vec![elem])?;
+            result_vec.push(result);
+        }
+
+        // Convert result vector back to list
+        let mut result_list = Value::Nil;
+        for elem in result_vec.into_iter().rev() {
+            result_list = Value::cons(elem, result_list);
+        }
+
+        Ok(result_list)
+    }
+
+    /// (for-each proc list)
+    ///
+    /// Apply procedure to each element of list for side effects, return unspecified.
+    /// Example: (for-each display '("a" "b" "c"))
+    fn eval_for_each(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+        if args_vec.len() != 2 {
+            return Err(EvalError::new(
+                "for-each requires exactly 2 arguments".to_string(),
+            ));
+        }
+
+        // Evaluate the procedure
+        let proc = self.eval(args_vec[0].clone(), env.clone())?;
+
+        // Evaluate the list
+        let list = self.eval(args_vec[1].clone(), env)?;
+
+        // Convert list to vector
+        let list_vec = self.list_to_vec(list)?;
+
+        // Apply procedure to each element (for side effects)
+        for elem in list_vec {
+            self.apply(proc.clone(), vec![elem])?;
+        }
+
+        Ok(Value::Unspecified)
     }
 
     // =========================================================================
