@@ -3157,6 +3157,57 @@ pub fn prim_node_list_reverse(args: &[Value]) -> PrimitiveResult {
     }
 }
 
+/// (node-list-remove-duplicates nl) → node-list
+///
+/// Returns a node-list with duplicate nodes removed.
+/// Node identity is based on the underlying document node, not object equality.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_node_list_remove_duplicates(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("node-list-remove-duplicates requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::NodeList(nl) => {
+            let mut unique_nodes = Vec::new();
+
+            // Iterate through the node-list and collect unique nodes
+            let mut index = 0;
+            loop {
+                if let Some(node) = nl.get(index) {
+                    // Check if this node is already in unique_nodes
+                    let is_duplicate = unique_nodes.iter().any(|existing: &Box<dyn crate::grove::Node>| {
+                        existing.node_eq(node.as_ref())
+                    });
+
+                    if !is_duplicate {
+                        unique_nodes.push(node);
+                    }
+                    index += 1;
+                } else {
+                    break;
+                }
+            }
+
+            Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(unique_nodes))))
+        }
+        _ => Err(format!("node-list-remove-duplicates: not a node-list: {:?}", args[0])),
+    }
+}
+
+/// (node-list-count nl) → integer
+///
+/// Returns the number of unique nodes in the node-list.
+/// Equivalent to (node-list-length (node-list-remove-duplicates nl))
+///
+/// **DSSSL**: Grove primitive (defined in DSSSL spec)
+pub fn prim_node_list_count(args: &[Value]) -> PrimitiveResult {
+    // Implementation: node-list-length(node-list-remove-duplicates(nl))
+    let unique_nl = prim_node_list_remove_duplicates(args)?;
+    prim_node_list_length(&[unique_nl])
+}
+
 /// (node? obj) → boolean
 ///
 /// Returns #t if obj is a node.
@@ -4954,6 +5005,7 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("empty-node-list", Value::primitive("empty-node-list", prim_empty_node_list));
     env.define("node-list-empty?", Value::primitive("node-list-empty?", prim_node_list_empty_p));
     env.define("node-list-length", Value::primitive("node-list-length", prim_node_list_length));
+    env.define("node-list-remove-duplicates", Value::primitive("node-list-remove-duplicates", prim_node_list_remove_duplicates));
     env.define("node-list-first", Value::primitive("node-list-first", prim_node_list_first));
     env.define("node-list-rest", Value::primitive("node-list-rest", prim_node_list_rest));
     env.define("node-list-ref", Value::primitive("node-list-ref", prim_node_list_ref));
@@ -5019,6 +5071,9 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("node-list-difference", Value::primitive("node-list-difference", prim_node_list_difference));
     env.define("node-list-symmetrical-difference", Value::primitive("node-list-symmetrical-difference", prim_node_list_symmetrical_difference));
     env.define("node-list-union-map", Value::primitive("node-list-union-map", prim_node_list_union_map));
+
+    // DSSSL: node-list-count = node-list-length(node-list-remove-duplicates(nl))
+    env.define("node-list-count", Value::primitive("node-list-count", prim_node_list_count));
 }
 
 /// Register sosofo primitives in an environment
