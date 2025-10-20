@@ -3264,7 +3264,18 @@ pub fn prim_children(args: &[Value]) -> PrimitiveResult {
             let children = node.children();
             Ok(Value::node_list(children))
         }
-        _ => Err(format!("children: not a node: {:?}", args[0])),
+        Value::NodeList(nl) => {
+            // DSSSL: node property functions can be called on node-lists
+            // Operates on the first node of the list
+            if let Some(node) = nl.first() {
+                let children = node.children();
+                Ok(Value::node_list(children))
+            } else {
+                // Empty node-list -> empty children
+                Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+            }
+        }
+        _ => Err(format!("children: not a node or node-list: {:?}", args[0])),
     }
 }
 
@@ -3400,9 +3411,37 @@ pub fn prim_select_elements(args: &[Value]) -> PrimitiveResult {
         return Err("select-elements requires exactly 2 arguments".to_string());
     }
 
-    // TODO: Implement filtering by gi
-    // For now, return empty node-list (stub)
-    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+    let node_list = match &args[0] {
+        Value::NodeList(nl) => nl,
+        _ => return Err(format!("select-elements: first argument not a node-list: {:?}", args[0])),
+    };
+
+    let gi_name = match &args[1] {
+        Value::String(s) => s.as_str(),
+        _ => return Err(format!("select-elements: second argument not a string: {:?}", args[1])),
+    };
+
+    // Filter the node-list to only include elements with the specified gi
+    let mut result_nodes = Vec::new();
+
+    // Iterate through the node list and collect matching nodes
+    let mut index = 0;
+    loop {
+        if let Some(node) = node_list.get(index) {
+            // Check if this node has the matching gi
+            if let Some(node_gi) = node.gi() {
+                if node_gi == gi_name {
+                    result_nodes.push(node);
+                }
+            }
+            index += 1;
+        } else {
+            break;
+        }
+    }
+
+    // Return filtered node-list
+    Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(result_nodes))))
 }
 
 /// (element-with-id id) → node | #f

@@ -71,6 +71,10 @@ impl LibXml2Node {
 }
 
 impl Node for LibXml2Node {
+    fn clone_node(&self) -> Box<dyn Node> {
+        Box::new(self.clone())
+    }
+
     fn gi(&self) -> Option<String> {
         // Only element nodes have a generic identifier
         if self.is_element() {
