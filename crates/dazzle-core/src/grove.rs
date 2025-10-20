@@ -43,6 +43,12 @@ use std::fmt::Debug;
 ///
 /// See DSSSL spec Section 8 for complete property list.
 pub trait Node: Debug {
+    /// Clone this node into a new Box
+    ///
+    /// This is required because trait objects (Box<dyn Node>) cannot implement Clone directly.
+    /// Each Node implementation must provide its own cloning logic.
+    fn clone_node(&self) -> Box<dyn Node>;
+
     /// Get the generic identifier (element name)
     ///
     /// Returns `None` for non-element nodes.
@@ -205,6 +211,55 @@ impl NodeList for EmptyNodeList {
 
     fn get(&self, _index: usize) -> Option<Box<dyn Node>> {
         None
+    }
+}
+
+/// A node list backed by a vector with shared ownership
+///
+/// Used for creating filtered node lists (e.g., from select-elements).
+/// Uses Rc to share the vector without cloning nodes.
+#[derive(Debug)]
+pub struct VecNodeList {
+    nodes: std::rc::Rc<Vec<Box<dyn Node>>>,
+    offset: usize,
+}
+
+impl VecNodeList {
+    pub fn new(nodes: Vec<Box<dyn Node>>) -> Self {
+        VecNodeList {
+            nodes: std::rc::Rc::new(nodes),
+            offset: 0,
+        }
+    }
+
+    fn from_rc(nodes: std::rc::Rc<Vec<Box<dyn Node>>>, offset: usize) -> Self {
+        VecNodeList { nodes, offset }
+    }
+}
+
+impl NodeList for VecNodeList {
+    fn is_empty(&self) -> bool {
+        self.offset >= self.nodes.len()
+    }
+
+    fn first(&self) -> Option<Box<dyn Node>> {
+        self.nodes.get(self.offset).map(|n| n.clone_node())
+    }
+
+    fn rest(&self) -> Box<dyn NodeList> {
+        if self.offset + 1 >= self.nodes.len() {
+            Box::new(EmptyNodeList::new())
+        } else {
+            Box::new(VecNodeList::from_rc(self.nodes.clone(), self.offset + 1))
+        }
+    }
+
+    fn length(&self) -> usize {
+        self.nodes.len().saturating_sub(self.offset)
+    }
+
+    fn get(&self, index: usize) -> Option<Box<dyn Node>> {
+        self.nodes.get(self.offset + index).map(|n| n.clone_node())
     }
 }
 
