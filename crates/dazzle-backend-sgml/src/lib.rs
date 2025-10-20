@@ -85,20 +85,6 @@ impl SgmlBackend {
         }
     }
 
-    /// Get the current output buffer contents
-    ///
-    /// This returns the accumulated text from `formatting_instruction` calls.
-    pub fn current_output(&self) -> &str {
-        &self.current_buffer
-    }
-
-    /// Clear the current output buffer
-    ///
-    /// Typically called after writing a file with `entity()`.
-    pub fn clear_buffer(&mut self) {
-        self.current_buffer.clear();
-    }
-
     /// Get the list of files that have been written
     pub fn written_files(&self) -> &HashSet<PathBuf> {
         &self.written_files
@@ -169,6 +155,20 @@ impl FotBuilder for SgmlBackend {
     fn formatting_instruction(&mut self, data: &str) -> Result<()> {
         self.current_buffer.push_str(data);
         Ok(())
+    }
+
+    /// Get the current output buffer contents
+    ///
+    /// This returns the accumulated text from `formatting_instruction` calls.
+    fn current_output(&self) -> &str {
+        &self.current_buffer
+    }
+
+    /// Clear the current output buffer
+    ///
+    /// Typically called after writing a file with `entity()`.
+    fn clear_buffer(&mut self) {
+        self.current_buffer.clear();
     }
 }
 

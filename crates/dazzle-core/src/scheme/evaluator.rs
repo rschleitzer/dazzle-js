@@ -29,6 +29,7 @@
 use crate::scheme::environment::Environment;
 use crate::scheme::value::{Procedure, Value};
 use crate::grove::{Grove, Node};
+use crate::fot::FotBuilder;
 use gc::Gc;
 use std::rc::Rc;
 use std::cell::RefCell;
@@ -96,6 +97,56 @@ impl std::error::Error for EvalError {}
 pub type EvalResult = Result<Value, EvalError>;
 
 // =============================================================================
+// DSSSL Processing Mode (OpenJade ProcessingMode.h/ProcessingMode.cxx)
+// =============================================================================
+
+/// Construction rule for DSSSL processing
+///
+/// Corresponds to OpenJade's `ElementRule` + `Rule` + `Action`.
+/// Stores the pattern (element name) and action (expression to evaluate).
+#[derive(Clone)]
+pub struct ConstructionRule {
+    /// Element name pattern (GI)
+    pub element_name: String,
+
+    /// Construction expression (returns sosofo when evaluated)
+    pub expr: Value,
+}
+
+/// Processing mode containing construction rules
+///
+/// Corresponds to OpenJade's `ProcessingMode` class.
+/// Stores all element construction rules defined in the template.
+pub struct ProcessingMode {
+    /// Construction rules indexed by element name
+    /// In OpenJade, rules are stored in intrusive linked lists and indexed lazily.
+    /// We use a simple Vec for now - can optimize later with HashMap if needed.
+    pub rules: Vec<ConstructionRule>,
+}
+
+impl ProcessingMode {
+    /// Create a new empty processing mode
+    pub fn new() -> Self {
+        ProcessingMode {
+            rules: Vec::new(),
+        }
+    }
+
+    /// Add a construction rule
+    pub fn add_rule(&mut self, element_name: String, expr: Value) {
+        self.rules.push(ConstructionRule { element_name, expr });
+    }
+
+    /// Find matching rule for an element
+    ///
+    /// Corresponds to OpenJade's `ProcessingMode::findMatch()`.
+    /// Returns the first rule matching the given element name.
+    pub fn find_match(&self, gi: &str) -> Option<&ConstructionRule> {
+        self.rules.iter().find(|rule| rule.element_name == gi)
+    }
+}
+
+// =============================================================================
 // Evaluator
 // =============================================================================
 
@@ -119,6 +170,18 @@ pub struct Evaluator {
     /// When evaluating a template, this starts as the root node.
     /// When processing children, it changes to each child node.
     current_node: Option<Rc<Box<dyn Node>>>,
+
+    /// Processing mode containing construction rules
+    ///
+    /// Corresponds to OpenJade's `Interpreter::initialProcessingMode_`.
+    /// Rules are stored here during template loading, then used during processing.
+    processing_mode: ProcessingMode,
+
+    /// Backend for output generation (FotBuilder)
+    ///
+    /// This is used by the `make` special form to write flow objects to output.
+    /// Wrapped in Rc<RefCell<>> to allow shared mutable access.
+    backend: Option<Rc<RefCell<dyn FotBuilder>>>,
 }
 
 impl Evaluator {
@@ -127,6 +190,8 @@ impl Evaluator {
         Evaluator {
             grove: None,
             current_node: None,
+            processing_mode: ProcessingMode::new(),
+            backend: None,
         }
     }
 
@@ -135,7 +200,14 @@ impl Evaluator {
         Evaluator {
             grove: Some(grove),
             current_node: None,
+            processing_mode: ProcessingMode::new(),
+            backend: None,
         }
+    }
+
+    /// Set the backend
+    pub fn set_backend(&mut self, backend: Rc<RefCell<dyn FotBuilder>>) {
+        self.backend = Some(backend);
     }
 
     /// Set the grove
@@ -161,6 +233,67 @@ impl Evaluator {
     /// Clear the current node
     pub fn clear_current_node(&mut self) {
         self.current_node = None;
+    }
+
+    // =========================================================================
+    // DSSSL Processing (OpenJade ProcessContext.cxx)
+    // =========================================================================
+
+    /// Start DSSSL processing from the root node
+    ///
+    /// Corresponds to OpenJade's `ProcessContext::process()`.
+    /// After template loading, this triggers automatic tree processing.
+    pub fn process_root(&mut self, env: Gc<Environment>) -> EvalResult {
+        // Get the root node from the grove
+        let root_node = match &self.grove {
+            Some(grove) => grove.root(),
+            None => return Err(EvalError::new("No grove set".to_string())),
+        };
+
+        // Set as current node and start processing
+        self.current_node = Some(Rc::new(root_node));
+        self.process_node(env)
+    }
+
+    /// Process the current node
+    ///
+    /// Corresponds to OpenJade's `ProcessContext::processNode()`.
+    ///
+    /// ## Algorithm (from OpenJade):
+    /// 1. If character data node, output directly
+    /// 2. If element node:
+    ///    a. Find matching construction rule by GI
+    ///    b. If rule found, evaluate it (returns sosofo)
+    ///    c. If no rule, default behavior: process-children
+    pub fn process_node(&mut self, env: Gc<Environment>) -> EvalResult {
+        let node = match &self.current_node {
+            Some(n) => n.clone(),
+            None => return Err(EvalError::new("No current node".to_string())),
+        };
+
+        // Get element name (GI)
+        let gi = match node.gi() {
+            Some(gi) => gi,
+            None => {
+                // Not an element (e.g., text node, comment, etc.)
+                // For code generation, we typically ignore non-elements
+                return Ok(Value::Unspecified);
+            }
+        };
+
+        // Find matching construction rule
+        let rule = self.processing_mode.find_match(&gi);
+
+        if let Some(rule) = rule {
+            // Rule found - evaluate the construction expression
+            // The expression should return a sosofo (in practice, it evaluates to a string or calls primitives)
+            self.eval(rule.expr.clone(), env)
+        } else {
+            // No rule found - default behavior is to process children
+            // This is implemented by the process-children primitive
+            // For now, return Unspecified (template should call process-children explicitly)
+            Ok(Value::Unspecified)
+        }
     }
 
     /// Evaluate an expression in an environment
@@ -250,6 +383,10 @@ impl Evaluator {
                 // DSSSL special forms
                 "define-language" => self.eval_define_language(args, env),
                 "declare-flow-object-class" => self.eval_declare_flow_object_class(args, env),
+                "declare-characteristic" => self.eval_declare_characteristic(args, env),
+                "element" => self.eval_element(args, env),
+                "process-children" => self.eval_process_children(env),
+                "make" => self.eval_make(args, env),
 
                 // Not a special form - evaluate as function call
                 _ => self.eval_application(operator, args, env),
@@ -436,6 +573,219 @@ impl Evaluator {
                 "First argument to declare-flow-object-class must be a symbol".to_string(),
             ))
         }
+    }
+
+    /// Evaluate (declare-characteristic name public-id default-value)
+    /// DSSSL characteristic declaration - defines the characteristic with its default value
+    fn eval_declare_characteristic(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+
+        if args_vec.len() < 3 {
+            return Err(EvalError::new(
+                "declare-characteristic requires at least 3 arguments (name, public-id, default-value)".to_string(),
+            ));
+        }
+
+        // First argument must be a symbol (characteristic name)
+        if let Value::Symbol(ref name) = args_vec[0] {
+            // Third argument is the default value - evaluate it
+            let default_value = self.eval(args_vec[2].clone(), env.clone())?;
+
+            // Define the characteristic name as a variable with its default value
+            env.define(name, default_value);
+            Ok(Value::Unspecified)
+        } else {
+            Err(EvalError::new(
+                "First argument to declare-characteristic must be a symbol".to_string(),
+            ))
+        }
+    }
+
+    /// DSSSL element construction rule (OpenJade SchemeParser::doElement)
+    /// Syntax: (element element-name construction-expression)
+    ///
+    /// Stores the rule in processing mode WITHOUT evaluating the body.
+    /// The body will be evaluated later during tree processing when a matching element is found.
+    fn eval_element(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+
+        if args_vec.len() < 2 {
+            return Err(EvalError::new(
+                "element requires at least 2 arguments (element-name and construction-expression)".to_string(),
+            ));
+        }
+
+        // First argument is the element name (symbol)
+        let element_name = if let Value::Symbol(ref name) = args_vec[0] {
+            name.clone()
+        } else {
+            return Err(EvalError::new(
+                "First argument to element must be a symbol".to_string(),
+            ));
+        };
+
+        // Second argument is the construction expression (NOT evaluated yet!)
+        // Store it for later evaluation during processing
+        self.processing_mode.add_rule(element_name.to_string(), args_vec[1].clone());
+
+        Ok(Value::Unspecified)
+    }
+
+    /// DSSSL process-children (OpenJade ProcessContext::processChildren)
+    /// Syntax: (process-children)
+    ///
+    /// Processes all children of the current node.
+    /// For each child, matches construction rules and evaluates them.
+    fn eval_process_children(&mut self, env: Gc<Environment>) -> EvalResult {
+        // Get current node
+        let current_node = match &self.current_node {
+            Some(node) => node.clone(),
+            None => return Err(EvalError::new("No current node".to_string())),
+        };
+
+        // Get children
+        let mut children = current_node.children();
+
+        // Process each child (using DSSSL node-list iteration pattern)
+        let mut result = Value::Unspecified;
+        while !children.is_empty() {
+            // Get first child
+            if let Some(child_node) = children.first() {
+                // Save current node
+                let saved_node = self.current_node.clone();
+
+                // Set child as current node
+                self.current_node = Some(Rc::new(child_node));
+
+                // Process the child node
+                result = self.process_node(env.clone())?;
+
+                // Restore current node
+                self.current_node = saved_node;
+            }
+
+            // Move to rest of children
+            children = children.rest();
+        }
+
+        Ok(result)
+    }
+
+    /// DSSSL make flow object (OpenJade FotBuilder)
+    /// Syntax: (make flow-object-type keyword: value ... body-sosofo)
+    ///
+    /// Creates flow objects and writes them to the backend.
+    /// Supports: entity, formatting-instruction
+    fn eval_make(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+
+        if args_vec.is_empty() {
+            return Err(EvalError::new(
+                "make requires at least a flow object type".to_string(),
+            ));
+        }
+
+        // First argument is the flow object type (symbol)
+        let fo_type = match &args_vec[0] {
+            Value::Symbol(s) => s.as_ref(),
+            _ => return Err(EvalError::new(
+                "make: first argument must be a flow object type symbol".to_string(),
+            )),
+        };
+
+        // Parse keyword arguments and body
+        let mut i = 1;
+        let mut system_id = None;
+        let mut data = None;
+
+        while i < args_vec.len() {
+            match &args_vec[i] {
+                Value::Keyword(kw) => {
+                    // Next argument is the keyword value
+                    if i + 1 >= args_vec.len() {
+                        return Err(EvalError::new(
+                            format!("make: keyword {} requires a value", kw),
+                        ));
+                    }
+                    let value = self.eval(args_vec[i + 1].clone(), env.clone())?;
+
+                    match kw.as_ref() {
+                        "system-id" => {
+                            if let Value::String(s) = value {
+                                system_id = Some(s);
+                            } else {
+                                return Err(EvalError::new(
+                                    "make: system-id must be a string".to_string(),
+                                ));
+                            }
+                        }
+                        "data" => {
+                            if let Value::String(s) = value {
+                                data = Some(s);
+                            } else {
+                                return Err(EvalError::new(
+                                    "make: data must be a string".to_string(),
+                                ));
+                            }
+                        }
+                        _ => {
+                            // Ignore unknown keywords for now
+                        }
+                    }
+                    i += 2;
+                }
+                _ => {
+                    // Non-keyword argument - evaluate as body sosofo
+                    // Nested make calls will append to backend buffer
+                    let _result = self.eval(args_vec[i].clone(), env.clone())?;
+                    i += 1;
+                }
+            }
+        }
+
+        // Call backend method based on flow object type
+        match self.backend {
+            Some(ref backend) => {
+                match fo_type {
+                    "entity" => {
+                        if let Some(sid) = system_id {
+                            // Get current buffer content and write to file
+                            let content = backend.borrow().current_output().to_string();
+                            backend.borrow_mut().entity(&sid, &content)
+                                .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+                            // Clear buffer after writing file
+                            backend.borrow_mut().clear_buffer();
+                        } else {
+                            return Err(EvalError::new(
+                                "make entity requires system-id: keyword".to_string(),
+                            ));
+                        }
+                    }
+                    "formatting-instruction" => {
+                        if let Some(d) = data {
+                            // Append to current buffer
+                            backend.borrow_mut().formatting_instruction(&d)
+                                .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+                        } else {
+                            return Err(EvalError::new(
+                                "make formatting-instruction requires data: keyword".to_string(),
+                            ));
+                        }
+                    }
+                    _ => {
+                        // Unknown flow object type - just return unspecified for now
+                        return Ok(Value::Unspecified);
+                    }
+                }
+            }
+            None => {
+                return Err(EvalError::new(
+                    "make: no backend available".to_string(),
+                ));
+            }
+        }
+
+        Ok(Value::Unspecified)
     }
 
     /// (set! name value)
@@ -865,25 +1215,57 @@ impl Evaluator {
     ///
     /// Apply procedure to each element of list, return list of results.
     /// Example: (map (lambda (x) (* x 2)) '(1 2 3)) → '(2 4 6)
+    /// (map proc list1 list2 ...)
+    ///
+    /// R4RS: Apply procedure to corresponding elements of lists.
+    /// All lists must have the same length.
+    /// Returns a list of results.
+    ///
+    /// Examples:
+    /// - (map + '(1 2 3) '(4 5 6)) => (5 7 9)
+    /// - (map list '(1 2) '(a b) '(x y)) => ((1 a x) (2 b y))
     fn eval_map(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
         let args_vec = self.list_to_vec(args)?;
-        if args_vec.len() != 2 {
-            return Err(EvalError::new("map requires exactly 2 arguments".to_string()));
+        if args_vec.len() < 2 {
+            return Err(EvalError::new("map requires at least 2 arguments".to_string()));
         }
 
         // Evaluate the procedure
         let proc = self.eval_inner(args_vec[0].clone(), env.clone())?;
 
-        // Evaluate the list
-        let list = self.eval_inner(args_vec[1].clone(), env)?;
+        // Evaluate all lists
+        let mut lists = Vec::new();
+        for i in 1..args_vec.len() {
+            let list = self.eval_inner(args_vec[i].clone(), env.clone())?;
+            let list_vec = self.list_to_vec(list)?;
+            lists.push(list_vec);
+        }
 
-        // Convert list to vector
-        let list_vec = self.list_to_vec(list)?;
+        // Check all lists have the same length
+        if lists.is_empty() {
+            return Ok(Value::Nil);
+        }
 
-        // Apply procedure to each element
+        let length = lists[0].len();
+        for list in &lists[1..] {
+            if list.len() != length {
+                return Err(EvalError::new(
+                    "map: all lists must have the same length".to_string(),
+                ));
+            }
+        }
+
+        // Apply procedure to corresponding elements
         let mut result_vec = Vec::new();
-        for elem in list_vec {
-            let result = self.apply(proc.clone(), vec![elem])?;
+        for i in 0..length {
+            // Gather i-th element from each list
+            let mut proc_args = Vec::new();
+            for list in &lists {
+                proc_args.push(list[i].clone());
+            }
+
+            // Apply procedure
+            let result = self.apply(proc.clone(), proc_args)?;
             result_vec.push(result);
         }
 
@@ -896,30 +1278,56 @@ impl Evaluator {
         Ok(result_list)
     }
 
-    /// (for-each proc list)
+    /// (for-each proc list1 list2 ...)
     ///
-    /// Apply procedure to each element of list for side effects, return unspecified.
+    /// R4RS: Apply procedure to corresponding elements of lists for side effects.
+    /// All lists must have the same length.
+    /// Returns unspecified.
+    ///
     /// Example: (for-each display '("a" "b" "c"))
     fn eval_for_each(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
         let args_vec = self.list_to_vec(args)?;
-        if args_vec.len() != 2 {
+        if args_vec.len() < 2 {
             return Err(EvalError::new(
-                "for-each requires exactly 2 arguments".to_string(),
+                "for-each requires at least 2 arguments".to_string(),
             ));
         }
 
         // Evaluate the procedure
         let proc = self.eval_inner(args_vec[0].clone(), env.clone())?;
 
-        // Evaluate the list
-        let list = self.eval_inner(args_vec[1].clone(), env)?;
+        // Evaluate all lists
+        let mut lists = Vec::new();
+        for i in 1..args_vec.len() {
+            let list = self.eval_inner(args_vec[i].clone(), env.clone())?;
+            let list_vec = self.list_to_vec(list)?;
+            lists.push(list_vec);
+        }
 
-        // Convert list to vector
-        let list_vec = self.list_to_vec(list)?;
+        // Check all lists have the same length
+        if lists.is_empty() {
+            return Ok(Value::Unspecified);
+        }
 
-        // Apply procedure to each element (for side effects)
-        for elem in list_vec {
-            self.apply(proc.clone(), vec![elem])?;
+        let length = lists[0].len();
+        for list in &lists[1..] {
+            if list.len() != length {
+                return Err(EvalError::new(
+                    "for-each: all lists must have the same length".to_string(),
+                ));
+            }
+        }
+
+        // Apply procedure to corresponding elements (for side effects)
+        for i in 0..length {
+            // Gather i-th element from each list
+            let mut proc_args = Vec::new();
+            for list in &lists {
+                proc_args.push(list[i].clone());
+            }
+
+            // Apply procedure for side effects
+            self.apply(proc.clone(), proc_args)?;
         }
 
         Ok(Value::Unspecified)

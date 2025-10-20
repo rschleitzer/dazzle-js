@@ -84,6 +84,21 @@ pub trait FotBuilder: Debug {
     /// ```
     fn formatting_instruction(&mut self, data: &str) -> Result<()>;
 
+    /// Get the current output buffer contents
+    ///
+    /// **Usage**: Retrieve accumulated text from `formatting_instruction` calls.
+    ///
+    /// This is used by the `entity` flow object to get buffer content before
+    /// writing to a file.
+    fn current_output(&self) -> &str;
+
+    /// Clear the current output buffer
+    ///
+    /// **Usage**: Reset the buffer after writing an entity.
+    ///
+    /// Typically called after `entity()` writes a file.
+    fn clear_buffer(&mut self);
+
     // ============================================================================
     // Document Formatting Primitives (future backends)
     // ============================================================================

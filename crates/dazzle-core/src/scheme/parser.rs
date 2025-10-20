@@ -666,9 +666,16 @@ impl Tokenizer {
             }
 
             Some(_) => {
-                // Symbol
+                // Symbol or DSSSL keyword (trailing colon)
                 let sym = self.parse_symbol();
-                Ok(Token::Symbol(sym))
+
+                // DSSSL uses trailing colon for keywords: name:
+                if sym.ends_with(':') {
+                    let keyword_name = sym[..sym.len()-1].to_string();
+                    Ok(Token::Keyword(keyword_name))
+                } else {
+                    Ok(Token::Symbol(sym))
+                }
             }
         }
     }

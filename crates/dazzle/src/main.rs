@@ -62,15 +62,16 @@ fn run(args: Args) -> Result<()> {
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."));
 
-    // 3. Initialize SGML backend
-    let mut backend = SgmlBackend::new(&output_dir);
+    // 3. Initialize SGML backend (wrapped in Rc<RefCell> for shared mutable access)
+    let backend = std::rc::Rc::new(std::cell::RefCell::new(SgmlBackend::new(&output_dir)));
     debug!("Backend initialized: output_dir={}", output_dir.display());
 
     // 4. Create evaluator with grove
     let mut evaluator = Evaluator::with_grove(grove_rc.clone());
     let root = grove_rc.root();
     evaluator.set_current_node(root);
-    debug!("Evaluator initialized with grove root");
+    evaluator.set_backend(backend.clone());
+    debug!("Evaluator initialized with grove root and backend");
 
     // 5. Create environment and register all primitives
     let env = Environment::new_global();
@@ -103,13 +104,38 @@ fn run(args: Args) -> Result<()> {
     let template_content = fs::read_to_string(&template_path)
         .with_context(|| format!("Failed to read template: {}", template_path.display()))?;
 
+    // Check if this is an XML template wrapper (.dsl format)
+    let scheme_code = if template_content.trim_start().starts_with("<!DOCTYPE")
+        || template_content.trim_start().starts_with("<?xml") {
+        info!("Detected XML template wrapper, resolving entities...");
+        resolve_xml_template(&template_content, &template_path, &args.search_dirs)?
+    } else {
+        template_content
+    };
+
     debug!("Template loaded, evaluating...");
-    evaluate_template(&mut evaluator, env.clone(), &template_content, &mut backend)?;
+    evaluate_template(&mut evaluator, env.clone(), &scheme_code)?;
+
+    // 9. Start DSSSL processing from root (OpenJade's ProcessContext::process)
+    // After template loading, construction rules are defined.
+    // Now trigger automatic tree processing from the root node.
+    info!("Starting DSSSL processing from root...");
+    let processing_result = evaluator
+        .process_root(env.clone())
+        .map_err(|e| anyhow::anyhow!("Processing error: {}", e))?;
+
+    // If processing returned a string, write it to backend
+    if let dazzle_core::scheme::value::Value::String(s) = processing_result {
+        backend
+            .borrow_mut()
+            .formatting_instruction(&s)
+            .context("Failed to write processing result to backend")?;
+    }
 
     // If there's accumulated output but no files were written, write to stdout
-    let num_files = backend.written_files().len();
-    if num_files == 0 && !backend.current_output().is_empty() {
-        println!("{}", backend.current_output());
+    let num_files = backend.borrow().written_files().len();
+    if num_files == 0 && !backend.borrow().current_output().is_empty() {
+        println!("{}", backend.borrow().current_output());
         info!("Output written to stdout");
     } else {
         info!("Code generation complete!");
@@ -147,7 +173,6 @@ fn evaluate_template(
     evaluator: &mut Evaluator,
     env: gc::Gc<Environment>,
     template: &str,
-    backend: &mut SgmlBackend,
 ) -> Result<()> {
     let mut parser = SchemeParser::new(template);
 
@@ -155,16 +180,12 @@ fn evaluate_template(
     loop {
         match parser.parse() {
             Ok(expr) => {
-                let result = evaluator
+                let _result = evaluator
                     .eval(expr, env.clone())
                     .map_err(|e| anyhow::anyhow!("Evaluation error: {}", e))?;
 
-                // If result is a string, write it to backend
-                if let dazzle_core::scheme::value::Value::String(s) = result {
-                    backend
-                        .formatting_instruction(&s)
-                        .context("Failed to write to backend")?;
-                }
+                // Results are now handled by `make` flow objects directly
+                // No need to write strings to backend here
             }
             Err(e) => {
                 // Check if we've reached end of input
@@ -178,4 +199,87 @@ fn evaluate_template(
     }
 
     Ok(())
+}
+
+/// Resolve XML template wrapper (.dsl format) to plain Scheme code
+///
+/// Parses entity declarations from DOCTYPE and resolves entity references
+/// by loading external .scm files, then concatenates all Scheme code.
+fn resolve_xml_template(
+    xml_content: &str,
+    template_path: &PathBuf,
+    _search_dirs: &[PathBuf],
+) -> Result<String> {
+    use std::collections::HashMap;
+
+    // Extract entity declarations from DOCTYPE
+    // Format: <!ENTITY name SYSTEM "file.scm">
+    let mut entities = HashMap::new();
+
+    for line in xml_content.lines() {
+        let line = line.trim();
+        if line.starts_with("<!ENTITY") && line.contains("SYSTEM") {
+            // Parse: <!ENTITY syntax SYSTEM "syntax.scm">
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 4 {
+                let entity_name = parts[1];
+                // Extract filename from quotes
+                if let Some(start) = line.find('"') {
+                    if let Some(end) = line[start + 1..].find('"') {
+                        let filename = &line[start + 1..start + 1 + end];
+                        entities.insert(entity_name.to_string(), filename.to_string());
+                        debug!("Found entity: {} -> {}", entity_name, filename);
+                    }
+                }
+            }
+        }
+    }
+
+    // Find the template's directory for resolving relative paths
+    let template_dir = template_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
+
+    // Build result by resolving entity references
+    let mut result = String::new();
+
+    for line in xml_content.lines() {
+        let line = line.trim();
+
+        // Skip XML/DOCTYPE lines
+        if line.starts_with("<!") || line.starts_with("<?") || line.starts_with("<") {
+            continue;
+        }
+
+        // Check for entity reference: &name;
+        if line.starts_with('&') && line.ends_with(';') {
+            let entity_name = &line[1..line.len() - 1];
+
+            if let Some(filename) = entities.get(entity_name) {
+                // Try to load the entity file
+                let entity_path = template_dir.join(filename);
+
+                match fs::read_to_string(&entity_path) {
+                    Ok(content) => {
+                        info!("Resolved entity &{};  from {}", entity_name, entity_path.display());
+                        result.push_str(&content);
+                        result.push('\n');
+                    }
+                    Err(e) => {
+                        return Err(anyhow::anyhow!(
+                            "Failed to load entity file {}: {}",
+                            entity_path.display(),
+                            e
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    if result.is_empty() {
+        anyhow::bail!("No Scheme code extracted from XML template");
+    }
+
+    Ok(result)
 }
