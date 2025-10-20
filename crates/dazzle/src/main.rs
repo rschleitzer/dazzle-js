@@ -49,7 +49,10 @@ fn run(args: Args) -> Result<()> {
     let xml_content = fs::read_to_string(&args.input)
         .with_context(|| format!("Failed to read input file: {}", args.input.display()))?;
 
-    let grove = LibXml2Grove::parse(&xml_content, true)
+    // Parse with base URL so libxml2 can resolve relative DTD paths (e.g., model.dtd)
+    // This is CRITICAL for DTD attribute defaults to work
+    let base_url = args.input.to_str().ok_or_else(|| anyhow::anyhow!("Invalid input path"))?;
+    let grove = LibXml2Grove::parse_with_base_url(&xml_content, base_url, true)
         .map_err(|e| anyhow::anyhow!("Failed to parse XML: {}", e))?;
     let grove_rc = Rc::new(grove);
 
@@ -259,9 +262,32 @@ fn resolve_xml_template(
                 // Try to load the entity file
                 let entity_path = template_dir.join(filename);
 
-                match fs::read_to_string(&entity_path) {
-                    Ok(content) => {
+                // Read file, trying UTF-8 first, then Latin-1 (ISO-8859-1)
+                let content_result = fs::read(&entity_path).and_then(|bytes| {
+                    // Try UTF-8 first
+                    if let Ok(utf8_str) = String::from_utf8(bytes.clone()) {
+                        Ok(utf8_str)
+                    } else {
+                        // Fall back to Latin-1 (ISO-8859-1) - never fails
+                        // OpenJade uses Latin-1 for character literals in define-language
+                        Ok(bytes.iter().map(|&b| b as char).collect())
+                    }
+                });
+
+                match content_result {
+                    Ok(mut content) => {
                         info!("Resolved entity &{};  from {}", entity_name, entity_path.display());
+
+                        // Strip CDATA wrappers if present
+                        // Some .scm files are wrapped in <![CDATA[...]]> for XML embedding
+                        let trimmed = content.trim();
+                        if trimmed.starts_with("<![CDATA[") {
+                            content = trimmed[9..].to_string(); // Strip "<![CDATA["
+                            if content.ends_with("]]>") {
+                                content = content[..content.len() - 3].to_string(); // Strip "]]>"
+                            }
+                        }
+
                         result.push_str(&content);
                         result.push('\n');
                     }

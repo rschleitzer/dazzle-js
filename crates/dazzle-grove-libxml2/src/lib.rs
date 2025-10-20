@@ -84,7 +84,31 @@ impl LibXml2Grove {
     ///
     /// Returns error if XML is malformed or DTD validation fails.
     pub fn parse(xml: &str, validate_dtd: bool) -> Result<Self, String> {
-        let document = XmlDocument::parse_string(xml, validate_dtd)?;
+        let document = XmlDocument::parse_string(xml, None, validate_dtd)?;
+        let doc_rc = Rc::new(document);
+
+        // Build ID map by traversing tree
+        let id_map = Self::build_id_map(&doc_rc);
+
+        Ok(LibXml2Grove {
+            document: doc_rc,
+            id_map,
+        })
+    }
+
+    /// Parse XML string into a Grove with a base URL for resolving relative DTD paths
+    ///
+    /// # Arguments
+    ///
+    /// * `xml` - XML string to parse
+    /// * `base_url` - Base URL/path for resolving relative DTD references
+    /// * `validate_dtd` - If true, validate against DTD (if present in DOCTYPE)
+    ///
+    /// # Errors
+    ///
+    /// Returns error if XML is malformed or DTD validation fails.
+    pub fn parse_with_base_url(xml: &str, base_url: &str, validate_dtd: bool) -> Result<Self, String> {
+        let document = XmlDocument::parse_string(xml, Some(base_url), validate_dtd)?;
         let doc_rc = Rc::new(document);
 
         // Build ID map by traversing tree

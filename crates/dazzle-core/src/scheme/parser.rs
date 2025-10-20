@@ -521,7 +521,9 @@ impl Tokenizer {
             "newline" => Ok('\n'),
             "tab" => Ok('\t'),
             "return" => Ok('\r'),
-            s if s.len() == 1 => Ok(s.chars().next().unwrap()),
+            // Accept any single Unicode character (handles UTF-8 multi-byte sequences)
+            // OpenJade accepts UTF-8 characters in character literals for define-language
+            s if s.chars().count() == 1 => Ok(s.chars().next().unwrap()),
             _ => Err(ParseError::new(
                 format!("Invalid character literal: #\\{}", name),
                 start_pos,

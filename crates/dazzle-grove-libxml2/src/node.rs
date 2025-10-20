@@ -211,7 +211,7 @@ mod tests {
     #[test]
     fn test_node_gi() {
         let xml = r#"<?xml version="1.0"?><root><child/></root>"#;
-        let doc = XmlDocument::parse_string(xml, false).unwrap();
+        let doc = XmlDocument::parse_string(xml, None, false).unwrap();
         let root = doc.root_element().unwrap();
 
         assert_eq!(root.gi(), Some("root".to_string()));
@@ -221,7 +221,7 @@ mod tests {
     fn test_node_children_only_elements() {
         // CRITICAL TEST: children should only return elements, not text!
         let xml = r#"<?xml version="1.0"?><root>text1<child/>text2</root>"#;
-        let doc = XmlDocument::parse_string(xml, false).unwrap();
+        let doc = XmlDocument::parse_string(xml, None, false).unwrap();
         let root = doc.root_element().unwrap();
 
         let children = root.children();
@@ -237,7 +237,7 @@ mod tests {
     #[test]
     fn test_node_data() {
         let xml = r#"<?xml version="1.0"?><root><child>Hello World</child></root>"#;
-        let doc = XmlDocument::parse_string(xml, false).unwrap();
+        let doc = XmlDocument::parse_string(xml, None, false).unwrap();
         let root = doc.root_element().unwrap();
 
         let children = root.children();
@@ -251,7 +251,7 @@ mod tests {
     #[test]
     fn test_node_attributes() {
         let xml = r#"<?xml version="1.0"?><root id="r1" name="test"/>"#;
-        let doc = XmlDocument::parse_string(xml, false).unwrap();
+        let doc = XmlDocument::parse_string(xml, None, false).unwrap();
         let root = doc.root_element().unwrap();
 
         assert_eq!(root.id(), Some("r1".to_string()));
@@ -262,7 +262,7 @@ mod tests {
     #[test]
     fn test_node_parent() {
         let xml = r#"<?xml version="1.0"?><root><child/></root>"#;
-        let doc = XmlDocument::parse_string(xml, false).unwrap();
+        let doc = XmlDocument::parse_string(xml, None, false).unwrap();
         let root = doc.root_element().unwrap();
 
         let children = root.children();
