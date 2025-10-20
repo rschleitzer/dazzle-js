@@ -1119,6 +1119,10 @@ pub fn prim_string_length(args: &[Value]) -> PrimitiveResult {
 
     match &args[0] {
         Value::String(s) => Ok(Value::integer(s.chars().count() as i64)),
+        Value::Bool(false) => {
+            // Provide helpful error message for #f
+            Err("string-length: received #f (false) instead of a string. This usually means an attribute or function returned #f when a string was expected. Check your template for missing attributes or failed lookups.".to_string())
+        }
         _ => Err(format!("string-length: not a string: {:?}", args[0])),
     }
 }
