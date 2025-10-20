@@ -1121,7 +1121,13 @@ pub fn prim_string_length(args: &[Value]) -> PrimitiveResult {
         Value::String(s) => Ok(Value::integer(s.chars().count() as i64)),
         Value::Bool(false) => {
             // Provide helpful error message for #f
+            eprintln!("DEBUG: string-length received #f");
+            eprintln!("RUST_BACKTRACE=1 to see call stack");
             Err("string-length: received #f (false) instead of a string. This usually means an attribute or function returned #f when a string was expected. Check your template for missing attributes or failed lookups.".to_string())
+        }
+        Value::Unspecified => {
+            // Provide helpful error message for unspecified
+            Err("string-length: received #<unspecified> instead of a string. This usually happens when a 'case' expression has no matching clause and no 'else'. Add an 'else' clause to your 'case' expression or ensure all possible values are covered.".to_string())
         }
         _ => Err(format!("string-length: not a string: {:?}", args[0])),
     }
@@ -1186,6 +1192,10 @@ pub fn prim_substring(args: &[Value]) -> PrimitiveResult {
 
     let s = match &args[0] {
         Value::String(s) => s,
+        Value::Bool(false) => {
+            eprintln!("DEBUG: substring called with #f as first argument");
+            return Err("substring: first argument is #f (expected string)".to_string());
+        }
         _ => return Err(format!("substring: not a string: {:?}", args[0])),
     };
 
@@ -2964,6 +2974,7 @@ pub fn prim_current_node(args: &[Value]) -> PrimitiveResult {
         .current_node
         .ok_or_else(|| "current-node: no current node set".to_string())?;
 
+    eprintln!("DEBUG: current-node returning node with gi={:?}", node.gi());
     Ok(Value::Node(node))
 }
 
@@ -3244,6 +3255,7 @@ pub fn prim_gi(args: &[Value]) -> PrimitiveResult {
                 Ok(Value::bool(false))
             }
         }
+        Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
         _ => Err(format!("gi: not a node: {:?}", args[0])),
     }
 }
@@ -3268,6 +3280,7 @@ pub fn prim_data(args: &[Value]) -> PrimitiveResult {
                 Ok(Value::bool(false))
             }
         }
+        Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
         _ => Err(format!("data: not a node: {:?}", args[0])),
     }
 }
@@ -3295,6 +3308,10 @@ pub fn prim_attribute_string(args: &[Value]) -> PrimitiveResult {
             if let Some(value) = node.attribute_string(name) {
                 Ok(Value::string(value))
             } else {
+                if name == "name" {
+                    eprintln!("DEBUG: attribute-string called for 'name' but node has no 'name' attribute");
+                    eprintln!("  Node gi: {:?}", node.gi());
+                }
                 Ok(Value::bool(false))
             }
         }
@@ -3334,6 +3351,64 @@ pub fn prim_children(args: &[Value]) -> PrimitiveResult {
     }
 }
 
+/// (select-children gi-string node) → node-list
+///
+/// Returns all child elements of node whose gi matches gi-string.
+/// This is a filtered version of children that only returns elements with a specific tag name.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_select_children(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("select-children requires exactly 2 arguments".to_string());
+    }
+
+    let gi_name = match &args[0] {
+        Value::String(s) => s.as_str(),
+        _ => return Err(format!("select-children: first argument not a string: {:?}", args[0])),
+    };
+
+    match &args[1] {
+        Value::Node(node) => {
+            // Get all children
+            let children = node.children();
+
+            // Filter by gi
+            let mut matching = Vec::new();
+            let mut current = children;
+            while !current.is_empty() {
+                if let Some(child) = current.first() {
+                    if let Some(child_gi) = child.gi() {
+                        if child_gi == gi_name {
+                            matching.push(child);
+                        }
+                    }
+                    current = current.rest();
+                } else {
+                    break;
+                }
+            }
+
+            Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(matching))))
+        }
+        Value::NodeList(nl) => {
+            // DSSSL: node property functions can be called on node-lists
+            // Operates on the first node of the list
+            if let Some(node) = nl.first() {
+                // Recurse with the first node
+                prim_select_children(&[args[0].clone(), Value::node(node)])
+            } else {
+                // Empty node-list -> empty result
+                Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+            }
+        }
+        Value::Bool(false) => {
+            // #f → empty node-list (graceful handling)
+            Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+        }
+        _ => Err(format!("select-children: second argument not a node or node-list: {:?}", args[1])),
+    }
+}
+
 /// (parent node) → node | #f
 ///
 /// Returns the parent node of a node.
@@ -3353,6 +3428,7 @@ pub fn prim_parent(args: &[Value]) -> PrimitiveResult {
                 Ok(Value::bool(false))
             }
         }
+        Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
         _ => Err(format!("parent: not a node: {:?}", args[0])),
     }
 }
@@ -3409,6 +3485,7 @@ pub fn prim_ancestor(args: &[Value]) -> PrimitiveResult {
                 return Ok(Value::bool(false)); // Empty node-list -> #f
             }
         }
+        Value::Bool(false) => return Ok(Value::bool(false)), // #f → #f (graceful handling)
         _ => return Err(format!("ancestor: second argument not a node or node-list: {:?}", args[1])),
     };
 
@@ -3582,6 +3659,7 @@ pub fn prim_element_with_id(args: &[Value]) -> PrimitiveResult {
     // First argument is the ID string
     let id = match &args[0] {
         Value::String(s) => s.as_str(),
+        Value::Bool(false) => return Ok(Value::bool(false)), // #f → #f (graceful handling)
         _ => return Err(format!("element-with-id: first argument not a string: {:?}", args[0])),
     };
 
@@ -5095,6 +5173,7 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("id", Value::primitive("id", prim_id));
     env.define("attribute-string", Value::primitive("attribute-string", prim_attribute_string));
     env.define("children", Value::primitive("children", prim_children));
+    env.define("select-children", Value::primitive("select-children", prim_select_children));
     env.define("parent", Value::primitive("parent", prim_parent));
 
     // Node navigation (stubs for now)
