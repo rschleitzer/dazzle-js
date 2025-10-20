@@ -15,7 +15,11 @@
 //! - OpenJade: Builds grove from OpenSP parse events (complex)
 //! - Dazzle: Uses libxml2's DOM (already built by parser)
 
+use libxml::bindings;
 use libxml::tree::Document;
+use std::ffi::CString;
+use std::os::raw::c_char;
+use std::ptr;
 
 use crate::node::LibXml2Node;
 
@@ -39,6 +43,7 @@ impl XmlDocument {
     /// # Arguments
     ///
     /// * `xml` - XML string to parse
+    /// * `base_url` - Optional base URL/path for resolving relative DTD references (e.g., "/path/to/file.xml")
     /// * `validate_dtd` - If true, validate against DTD (if DOCTYPE present)
     ///
     /// # Returns
@@ -48,24 +53,56 @@ impl XmlDocument {
     /// # DSSSL Notes
     ///
     /// - DTD validation is optional but recommended for code generation
-    /// - Attribute defaults from DTD are automatically applied by libxml2
+    /// - **Attribute defaults from DTD are automatically applied** (XML_PARSE_DTDATTR)
     /// - Entity references are resolved automatically
-    pub fn parse_string(xml: &str, validate_dtd: bool) -> Result<Self, String> {
-        // Use libxml crate's parser
-        let parser = libxml::parser::Parser::default();
+    /// - **External DTD is loaded** (XML_PARSE_DTDLOAD)
+    /// - **Base URL is required** for resolving relative DTD paths (e.g., `model.dtd`)
+    ///
+    /// # Implementation
+    ///
+    /// We call libxml2's `xmlReadMemory` directly because the `libxml` crate's
+    /// `ParserOptions` doesn't expose `XML_PARSE_DTDATTR` (apply DTD defaults).
+    /// This is **critical for OpenJade compatibility** - templates rely on DTD defaults.
+    pub fn parse_string(xml: &str, base_url: Option<&str>, validate_dtd: bool) -> Result<Self, String> {
+        // libxml2 parser option flags
+        const XML_PARSE_DTDLOAD: i32 = 4;    // Load external DTD
+        const XML_PARSE_DTDATTR: i32 = 8;    // Apply DTD default attributes (CRITICAL!)
+        const XML_PARSE_NONET: i32 = 2048;   // Forbid network access (security)
+        const XML_PARSE_DTDVALID: i32 = 16;  // Validate with DTD
+        const XML_PARSE_RECOVER: i32 = 1;    // Relaxed parsing (recover from errors)
 
-        let doc = parser
-            .parse_string(xml)
-            .map_err(|e| format!("XML parse error: {}", e))?;
-
-        // TODO: DTD validation
-        // libxml2 provides xmlValidateDocument() for post-parse validation
-        // The libxml crate may not expose this directly - we might need to add it
+        // Build parser flags
+        // ALWAYS load DTD and apply defaults (required for DSSSL/OpenJade compatibility)
+        // NOTE: Removed XML_PARSE_NONET to allow local DTD file access
+        let mut flags = XML_PARSE_DTDLOAD | XML_PARSE_DTDATTR | XML_PARSE_RECOVER;
 
         if validate_dtd {
-            // Placeholder: validation will be added
-            // For now, just parse successfully
+            flags |= XML_PARSE_DTDVALID;
         }
+
+        // Prepare C strings
+        let xml_cstring = CString::new(xml).map_err(|e| format!("Invalid XML string: {}", e))?;
+        let url = base_url.map(|u| CString::new(u).unwrap())
+                          .unwrap_or_else(|| CString::new("").unwrap());
+        let encoding = ptr::null(); // Auto-detect encoding
+
+        // Call libxml2 directly to parse with DTD options
+        let doc_ptr = unsafe {
+            bindings::xmlReadMemory(
+                xml_cstring.as_ptr() as *const c_char,
+                xml.len() as i32,
+                url.as_ptr(),
+                encoding,
+                flags,
+            )
+        };
+
+        if doc_ptr.is_null() {
+            return Err("XML parse error: failed to parse document".to_string());
+        }
+
+        // Wrap in libxml crate's Document (takes ownership, will call xmlFreeDoc on drop)
+        let doc = unsafe { Document::new_ptr(doc_ptr) };
 
         Ok(XmlDocument { doc })
     }
@@ -76,16 +113,44 @@ impl XmlDocument {
     ///
     /// * `path` - Path to XML file
     /// * `validate_dtd` - If true, validate against DTD
+    ///
+    /// # Implementation
+    ///
+    /// Uses same DTD loading flags as `parse_string`.
     pub fn parse_file(path: &str, validate_dtd: bool) -> Result<Self, String> {
-        let parser = libxml::parser::Parser::default();
+        // libxml2 parser option flags (same as parse_string)
+        const XML_PARSE_DTDLOAD: i32 = 4;
+        const XML_PARSE_DTDATTR: i32 = 8;
+        const XML_PARSE_NONET: i32 = 2048;
+        const XML_PARSE_DTDVALID: i32 = 16;
+        const XML_PARSE_RECOVER: i32 = 1;
 
-        let doc = parser
-            .parse_file(path)
-            .map_err(|e| format!("XML parse error: {}", e))?;
+        // NOTE: Removed XML_PARSE_NONET to allow local DTD file access
+        let mut flags = XML_PARSE_DTDLOAD | XML_PARSE_DTDATTR | XML_PARSE_RECOVER;
 
         if validate_dtd {
-            // Placeholder: validation will be added
+            flags |= XML_PARSE_DTDVALID;
         }
+
+        // Prepare C strings
+        let path_cstring = CString::new(path).map_err(|e| format!("Invalid path: {}", e))?;
+        let encoding = ptr::null(); // Auto-detect encoding
+
+        // Call libxml2 directly
+        let doc_ptr = unsafe {
+            bindings::xmlReadFile(
+                path_cstring.as_ptr() as *const c_char,
+                encoding,
+                flags,
+            )
+        };
+
+        if doc_ptr.is_null() {
+            return Err(format!("XML parse error: failed to parse file: {}", path));
+        }
+
+        // Wrap in libxml crate's Document
+        let doc = unsafe { Document::new_ptr(doc_ptr) };
 
         Ok(XmlDocument { doc })
     }
@@ -129,7 +194,7 @@ mod tests {
     #[test]
     fn test_parse_simple_xml() {
         let xml = r#"<?xml version="1.0"?><root><child>text</child></root>"#;
-        let doc = XmlDocument::parse_string(xml, false);
+        let doc = XmlDocument::parse_string(xml, None, false);
 
         assert!(doc.is_ok());
         let doc = doc.unwrap();
@@ -141,7 +206,7 @@ mod tests {
         // Note: libxml2 is very tolerant and tries to repair XML
         // We need really broken XML to get an error
         let xml = r#"<root><child"#; // Incomplete tag
-        let doc = XmlDocument::parse_string(xml, false);
+        let doc = XmlDocument::parse_string(xml, None, false);
 
         // libxml2 might still parse this, so we can't strictly require error
         // Just verify it doesn't panic
@@ -151,7 +216,7 @@ mod tests {
     #[test]
     fn test_parse_with_attributes() {
         let xml = r#"<?xml version="1.0"?><root id="r1" name="test"><child/></root>"#;
-        let doc = XmlDocument::parse_string(xml, false);
+        let doc = XmlDocument::parse_string(xml, None, false);
 
         assert!(doc.is_ok());
     }
@@ -161,12 +226,86 @@ mod tests {
         use dazzle_core::grove::Node;
 
         let xml = r#"<?xml version="1.0"?><myroot><child/></myroot>"#;
-        let doc = XmlDocument::parse_string(xml, false).unwrap();
+        let doc = XmlDocument::parse_string(xml, None, false).unwrap();
 
         let root = doc.root_element();
         assert!(root.is_some());
 
         let root = root.unwrap();
         assert_eq!(root.gi(), Some("myroot".to_string()));
+    }
+
+    #[test]
+    fn test_dtd_default_attributes() {
+        use dazzle_core::grove::Node;
+        use std::fs;
+
+        // Create test DTD with default attribute
+        fs::write("/tmp/dazzle_test.dtd", r#"<!ELEMENT root EMPTY>
+<!ATTLIST root
+    name        CDATA     #REQUIRED
+    controller  (yes|no)  "yes"
+>"#).unwrap();
+
+        // XML references DTD but doesn't specify controller attribute
+        let xml = r#"<!DOCTYPE root SYSTEM "dazzle_test.dtd">
+<root name="test"/>"#;
+
+        // Parse with base URL so DTD can be resolved
+        let doc = XmlDocument::parse_string(xml, Some("/tmp/test.xml"), false).unwrap();
+        let root = doc.root_element().unwrap();
+
+        // Explicit attribute should exist
+        assert_eq!(root.attribute_string("name"), Some("test".to_string()));
+
+        // DTD default should be applied
+        let controller = root.attribute_string("controller");
+        eprintln!("controller attribute from DTD default: {:?}", controller);
+        assert_eq!(controller, Some("yes".to_string()), "DTD default attribute not applied!");
+    }
+
+    #[test]
+    fn test_dtd_defaults_on_nested_elements() {
+        use dazzle_core::grove::{Node, NodeList};
+        use std::fs;
+
+        // Create DTD similar to model.dtd with nested elements
+        fs::write("/tmp/nested_test.dtd", r#"<!ELEMENT model (interfaces)>
+<!ATTLIST model
+    company CDATA #REQUIRED
+>
+<!ELEMENT interfaces (interface+)>
+<!ELEMENT interface EMPTY>
+<!ATTLIST interface
+    entity      CDATA     #REQUIRED
+    create      (yes|no)  "no"
+    controller  (yes|no)  "yes"
+>"#).unwrap();
+
+        // XML like Icons.xml - interface element has no controller attribute
+        let xml = r#"<!DOCTYPE model SYSTEM "nested_test.dtd">
+<model company="Test">
+    <interfaces>
+        <interface entity="test.entity" create="yes"/>
+    </interfaces>
+</model>"#;
+
+        let doc = XmlDocument::parse_string(xml, Some("/tmp/test.xml"), false).unwrap();
+        let root = doc.root_element().unwrap();
+
+        // Navigate to interface element
+        let mut children = root.children();
+        let interfaces = children.first().unwrap();
+        let mut iface_children = interfaces.children();
+        let interface = iface_children.first().unwrap();
+
+        // Check explicit attributes
+        assert_eq!(interface.attribute_string("entity"), Some("test.entity".to_string()));
+        assert_eq!(interface.attribute_string("create"), Some("yes".to_string()));
+
+        // Check DTD defaults on nested element
+        let controller = interface.attribute_string("controller");
+        eprintln!("Nested element controller attribute: {:?}", controller);
+        assert_eq!(controller, Some("yes".to_string()), "DTD defaults not applied to nested elements!");
     }
 }

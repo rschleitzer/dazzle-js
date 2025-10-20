@@ -122,7 +122,7 @@ mod tests {
     #[test]
     fn test_node_list_operations() {
         let xml = r#"<?xml version="1.0"?><root><a/><b/><c/></root>"#;
-        let doc = XmlDocument::parse_string(xml, false).unwrap();
+        let doc = XmlDocument::parse_string(xml, None, false).unwrap();
         let root = doc.root_element().unwrap();
 
         let children = root.children();
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn test_node_list_rest_on_single_element() {
         let xml = r#"<?xml version="1.0"?><root><child/></root>"#;
-        let doc = XmlDocument::parse_string(xml, false).unwrap();
+        let doc = XmlDocument::parse_string(xml, None, false).unwrap();
         let root = doc.root_element().unwrap();
 
         let children = root.children();
@@ -163,7 +163,7 @@ mod tests {
     #[test]
     fn test_node_list_iteration() {
         let xml = r#"<?xml version="1.0"?><root><a/><b/><c/></root>"#;
-        let doc = XmlDocument::parse_string(xml, false).unwrap();
+        let doc = XmlDocument::parse_string(xml, None, false).unwrap();
         let root = doc.root_element().unwrap();
 
         let children = root.children();

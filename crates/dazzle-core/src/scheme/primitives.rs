@@ -3220,10 +3220,11 @@ pub fn prim_data(args: &[Value]) -> PrimitiveResult {
 /// (attribute-string name node) → string | #f
 ///
 /// Returns the value of the attribute with the given name.
-/// Returns #f if the attribute does not exist.
+/// Returns #f if the attribute does not exist or if node is #f.
 /// Includes DTD default values.
 ///
 /// **DSSSL**: Grove primitive
+/// **OpenJade**: Gracefully handles #f nodes (returns #f)
 pub fn prim_attribute_string(args: &[Value]) -> PrimitiveResult {
     if args.len() != 2 {
         return Err("attribute-string requires exactly 2 arguments".to_string());
@@ -3242,6 +3243,7 @@ pub fn prim_attribute_string(args: &[Value]) -> PrimitiveResult {
                 Ok(Value::bool(false))
             }
         }
+        Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
         _ => Err(format!("attribute-string: not a node: {:?}", args[1])),
     }
 }
