@@ -121,46 +121,39 @@ impl LibXml2Grove {
     }
 
     /// Build ID map by traversing the document tree
+    ///
+    /// Walks the libxml2 tree directly to avoid downcasting issues
     fn build_id_map(document: &Rc<XmlDocument>) -> HashMap<String, LibXml2Node> {
         let mut map = HashMap::new();
 
-        // Get root element
+        // Get root element and walk the libxml2 tree directly
         if let Some(root) = document.root_element() {
-            Self::collect_ids_recursive(&root, document, &mut map);
+            Self::collect_ids_from_libxml_node(&root, &mut map);
         }
 
         map
     }
 
-    /// Recursively collect all elements with ID attributes
-    fn collect_ids_recursive(
+    /// Recursively collect IDs by walking libxml2's native tree
+    fn collect_ids_from_libxml_node(
         node: &LibXml2Node,
-        document: &Rc<XmlDocument>,
         map: &mut HashMap<String, LibXml2Node>,
     ) {
         // Check if this node has an ID attribute
         if let Some(id) = node.id() {
-            map.insert(id.to_string(), node.clone());
+            map.insert(id, node.clone());
         }
 
-        // Recurse into children
-        let mut children_list = node.children();
-        while let Some(child_node) = children_list.first() {
-            // Downcast to LibXml2Node (we know it's our type)
-            if let Some(child) = Self::downcast_node(&child_node) {
-                Self::collect_ids_recursive(&child, document, map);
+        // Get children using libxml2's native get_child_nodes()
+        // This returns actual libxml Node objects, not trait objects
+        let libxml_node = node.inner();
+        for child_libxml in libxml_node.get_child_nodes() {
+            // Only process element nodes
+            if child_libxml.get_type() == Some(libxml::tree::NodeType::ElementNode) {
+                let child_node = LibXml2Node::from_libxml_node(child_libxml);
+                Self::collect_ids_from_libxml_node(&child_node, map);
             }
-            // Move to next child
-            children_list = children_list.rest();
         }
-    }
-
-    /// Helper to downcast Box<dyn Node> to LibXml2Node
-    fn downcast_node(_node: &Box<dyn Node>) -> Option<LibXml2Node> {
-        // This is safe because we know all nodes in our grove are LibXml2Node
-        // TODO: Consider using downcasting or a better pattern
-        // For now, we'll rely on the fact that we control node creation
-        None // Placeholder - will fix in implementation
     }
 }
 
