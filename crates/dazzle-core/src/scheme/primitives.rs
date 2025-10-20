@@ -4596,7 +4596,7 @@ pub fn prim_empty_sosofo(args: &[Value]) -> PrimitiveResult {
 /// (literal str) → sosofo
 ///
 /// Creates a sosofo that outputs the given string.
-/// This is a placeholder - full implementation will generate actual output.
+/// Appends the string to the backend's current output buffer.
 ///
 /// **DSSSL**: Processing primitive
 pub fn prim_literal(args: &[Value]) -> PrimitiveResult {
@@ -4605,9 +4605,15 @@ pub fn prim_literal(args: &[Value]) -> PrimitiveResult {
     }
 
     match &args[0] {
-        Value::String(_) => {
-            // For now, just return a sosofo placeholder
-            // Real implementation will store the string for output
+        Value::String(s) => {
+            // Get backend from evaluator context and append text
+            if let Some(ctx) = crate::scheme::evaluator::get_evaluator_context() {
+                if let Some(ref backend) = ctx.backend {
+                    backend.borrow_mut()
+                        .formatting_instruction(s)
+                        .map_err(|e| format!("literal: backend error: {}", e))?;
+                }
+            }
             Ok(Value::Sosofo)
         }
         _ => Err(format!("literal: not a string: {:?}", args[0])),
