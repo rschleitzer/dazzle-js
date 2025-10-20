@@ -53,6 +53,7 @@ thread_local! {
 pub struct EvaluatorContext {
     pub grove: Option<Rc<dyn Grove>>,
     pub current_node: Option<Rc<Box<dyn Node>>>,
+    pub backend: Option<Rc<RefCell<dyn FotBuilder>>>,
 }
 
 /// Get the current evaluator context (for use in primitives)
@@ -310,6 +311,7 @@ impl Evaluator {
         set_evaluator_context(EvaluatorContext {
             grove: self.grove.clone(),
             current_node: self.current_node.clone(),
+            backend: self.backend.clone(),
         });
 
         // Evaluate (and ensure context is cleared on return or error)
@@ -770,6 +772,18 @@ impl Evaluator {
                         } else {
                             return Err(EvalError::new(
                                 "make formatting-instruction requires data: keyword".to_string(),
+                            ));
+                        }
+                    }
+                    "literal" => {
+                        // literal is typically called as (literal "text") not (make literal ...)
+                        // but we support both forms for completeness
+                        if let Some(d) = data {
+                            backend.borrow_mut().formatting_instruction(&d)
+                                .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+                        } else {
+                            return Err(EvalError::new(
+                                "make literal requires data: keyword or a string body".to_string(),
                             ));
                         }
                     }
