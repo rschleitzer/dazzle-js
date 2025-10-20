@@ -3051,6 +3051,38 @@ pub fn prim_node_list_first(args: &[Value]) -> PrimitiveResult {
     }
 }
 
+/// (node-list->list nl) → list
+///
+/// Converts a node-list to a Scheme list of nodes.
+/// This is a utility function (not in DSSSL standard).
+///
+/// **DSSSL**: Extension (utility)
+pub fn prim_node_list_to_list(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("node-list->list requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::NodeList(nl) => {
+            // Build list by recursively traversing node-list
+            fn build_list(nl: &std::rc::Rc<Box<dyn crate::grove::NodeList>>) -> Value {
+                if nl.is_empty() {
+                    Value::Nil
+                } else if let Some(first) = nl.first() {
+                    let rest_nl = nl.rest();
+                    let rest_list = build_list(&std::rc::Rc::new(rest_nl));
+                    Value::cons(Value::node(first), rest_list)
+                } else {
+                    Value::Nil
+                }
+            }
+
+            Ok(build_list(nl))
+        }
+        _ => Err(format!("node-list->list: not a node-list: {:?}", args[0])),
+    }
+}
+
 /// (node-list-rest nl) → node-list
 ///
 /// Returns a node-list containing all but the first node.
@@ -4885,6 +4917,7 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("node-list-rest", Value::primitive("node-list-rest", prim_node_list_rest));
     env.define("node-list-ref", Value::primitive("node-list-ref", prim_node_list_ref));
     env.define("node-list-reverse", Value::primitive("node-list-reverse", prim_node_list_reverse));
+    env.define("node-list->list", Value::primitive("node-list->list", prim_node_list_to_list));
 
     // Node-list utilities (stubs)
     env.define("node-list", Value::primitive("node-list", prim_node_list));
