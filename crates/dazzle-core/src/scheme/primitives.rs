@@ -3379,16 +3379,47 @@ pub fn prim_id(args: &[Value]) -> PrimitiveResult {
 /// (ancestor gi node) → node | #f
 ///
 /// Returns the nearest ancestor element with the given generic identifier.
+/// Walks up the parent chain from the starting node until a matching ancestor is found.
 /// Returns #f if no such ancestor exists.
 ///
-/// **DSSSL**: Grove primitive (stub)
+/// **DSSSL**: Grove primitive
 pub fn prim_ancestor(args: &[Value]) -> PrimitiveResult {
-    if args.len() != 1 && args.len() != 2 {
-        return Err("ancestor requires 1 or 2 arguments".to_string());
+    if args.len() != 2 {
+        return Err("ancestor requires exactly 2 arguments".to_string());
     }
 
-    // TODO: Implement full ancestor search by walking parent chain
-    // For now, return #f (stub)
+    // First argument is the gi name
+    let gi_name = match &args[0] {
+        Value::String(s) => s.clone(),
+        _ => return Err(format!("ancestor: first argument not a string: {:?}", args[0])),
+    };
+
+    // Second argument is the starting node
+    let starting_node: Box<dyn crate::grove::Node> = match &args[1] {
+        Value::Node(n) => n.clone_node(),
+        Value::NodeList(nl) => {
+            // DSSSL: node property functions can operate on node-lists (first node)
+            if let Some(n) = nl.first() {
+                n
+            } else {
+                return Ok(Value::bool(false)); // Empty node-list -> #f
+            }
+        }
+        _ => return Err(format!("ancestor: second argument not a node or node-list: {:?}", args[1])),
+    };
+
+    // Walk up the parent chain looking for an ancestor with matching gi
+    let mut current = starting_node.parent();
+    while let Some(parent_node) = current {
+        if let Some(parent_gi) = parent_node.gi() {
+            if parent_gi == gi_name.as_str() {
+                return Ok(Value::node(parent_node));
+            }
+        }
+        current = parent_node.parent();
+    }
+
+    // No matching ancestor found
     Ok(Value::bool(false))
 }
 
@@ -3497,18 +3528,35 @@ pub fn prim_select_elements(args: &[Value]) -> PrimitiveResult {
 
 /// (element-with-id id) → node | #f
 ///
-/// Returns the element with the given ID.
+/// Returns the element with the given ID attribute.
+/// Uses the DTD to determine which attributes are of type ID.
 /// Returns #f if no element has that ID.
 ///
-/// **DSSSL**: Grove primitive (stub)
+/// **DSSSL**: Grove primitive
 pub fn prim_element_with_id(args: &[Value]) -> PrimitiveResult {
-    if args.len() != 1 && args.len() != 2 {
+    if args.is_empty() || args.len() > 2 {
         return Err("element-with-id requires 1 or 2 arguments".to_string());
     }
 
-    // TODO: Use grove's ID lookup table
-    // For now, return #f (stub)
-    Ok(Value::bool(false))
+    // First argument is the ID string
+    let id = match &args[0] {
+        Value::String(s) => s.as_str(),
+        _ => return Err(format!("element-with-id: first argument not a string: {:?}", args[0])),
+    };
+
+    // Get the grove from evaluator context
+    let ctx = crate::scheme::evaluator::get_evaluator_context()
+        .ok_or_else(|| "element-with-id: no evaluator context available".to_string())?;
+
+    let grove = ctx.grove
+        .as_ref()
+        .ok_or_else(|| "element-with-id: no grove available".to_string())?;
+
+    // Use the grove's element_with_id method
+    match grove.element_with_id(id) {
+        Some(node) => Ok(Value::node(node)),
+        None => Ok(Value::bool(false)),
+    }
 }
 
 // =============================================================================
@@ -4077,8 +4125,19 @@ pub fn prim_debug(args: &[Value]) -> PrimitiveResult {
     if args.is_empty() {
         return Err("debug requires at least 1 argument".to_string());
     }
-    // Print debug info to stderr
-    eprintln!("[DEBUG] {:?}", args[0]);
+
+    // OpenJade: (debug string) - outputs string to stdout and passes it through
+    // Evaluate the argument and print it
+    match &args[0] {
+        Value::String(s) => {
+            println!("{}", s);
+        }
+        other => {
+            // For non-strings, print their representation
+            println!("{:?}", other);
+        }
+    }
+
     Ok(args[0].clone())
 }
 
