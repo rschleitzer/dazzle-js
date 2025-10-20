@@ -3425,17 +3425,54 @@ pub fn prim_ancestor(args: &[Value]) -> PrimitiveResult {
 
 /// (descendants node) → node-list
 ///
-/// Returns all descendant nodes of the given node.
+/// Returns all descendant nodes of the given node in document order.
+/// In DSSSL, this returns only element descendants, not text nodes.
 ///
-/// **DSSSL**: Grove primitive (stub)
+/// **DSSSL**: Grove primitive
 pub fn prim_descendants(args: &[Value]) -> PrimitiveResult {
     if args.len() != 1 {
         return Err("descendants requires exactly 1 argument".to_string());
     }
 
-    // TODO: Implement recursive descendant collection
-    // For now, return empty node-list (stub)
-    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+    match &args[0] {
+        Value::Node(node) => {
+            let mut descendants = Vec::new();
+            // node is &Rc<Box<dyn Node>>
+            // node.as_ref() gives &Box<dyn Node>
+            // node.as_ref().as_ref() gives &dyn Node
+            collect_descendants(node.as_ref().as_ref(), &mut descendants);
+            Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(descendants))))
+        }
+        Value::NodeList(nl) => {
+            // DSSSL: operate on first node of node-list
+            if let Some(node) = nl.first() {
+                let mut descendants = Vec::new();
+                // node is Box<dyn Node>, so &*node gives &dyn Node
+                collect_descendants(&*node, &mut descendants);
+                Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(descendants))))
+            } else {
+                Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+            }
+        }
+        _ => Err(format!("descendants: not a node or node-list: {:?}", args[0])),
+    }
+}
+
+/// Helper function to recursively collect all descendant elements
+fn collect_descendants(node: &dyn crate::grove::Node, result: &mut Vec<Box<dyn crate::grove::Node>>) {
+    let children = node.children();
+    let len = children.length();
+
+    for i in 0..len {
+        if let Some(child) = children.get(i) {
+            // Add this child to results
+            result.push(child.clone_node());
+
+            // Recursively collect descendants of this child
+            // child is Box<dyn Node>, so &*child gives us &dyn Node
+            collect_descendants(&*child, result);
+        }
+    }
 }
 
 /// (follow node) → node-list
