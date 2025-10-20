@@ -378,6 +378,7 @@ impl Evaluator {
                 "apply" => self.eval_apply(args, env),
                 "map" => self.eval_map(args, env),
                 "for-each" => self.eval_for_each(args, env),
+                "node-list-filter" => self.eval_node_list_filter(args, env),
                 "load" => self.eval_load(args, env),
 
                 // DSSSL special forms
@@ -1331,6 +1332,54 @@ impl Evaluator {
         }
 
         Ok(Value::Unspecified)
+    }
+
+    /// (node-list-filter predicate node-list)
+    ///
+    /// Returns a node-list containing only nodes for which predicate returns #t.
+    /// DSSSL: Filter a node-list based on a predicate function.
+    fn eval_node_list_filter(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+        if args_vec.len() != 2 {
+            return Err(EvalError::new("node-list-filter requires exactly 2 arguments".to_string()));
+        }
+
+        // Evaluate the predicate
+        let pred = self.eval_inner(args_vec[0].clone(), env.clone())?;
+
+        // Evaluate the node-list
+        let node_list_val = self.eval_inner(args_vec[1].clone(), env.clone())?;
+
+        match node_list_val {
+            Value::NodeList(ref nl) => {
+                let mut filtered_nodes = Vec::new();
+
+                // Iterate through the node-list
+                let mut index = 0;
+                loop {
+                    if let Some(node) = nl.get(index) {
+                        // Apply predicate to this node
+                        let node_val = Value::node(node);
+                        let result = self.apply(pred.clone(), vec![node_val.clone()])?;
+
+                        // If predicate returns #t, include this node
+                        if let Value::Bool(true) = result {
+                            // Need to get the node again since we consumed it
+                            if let Value::Node(n) = node_val {
+                                filtered_nodes.push(n.as_ref().clone_node());
+                            }
+                        }
+
+                        index += 1;
+                    } else {
+                        break;
+                    }
+                }
+
+                Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(filtered_nodes))))
+            }
+            _ => Err(EvalError::new(format!("node-list-filter: second argument not a node-list: {:?}", node_list_val))),
+        }
     }
 
     /// (load filename)
