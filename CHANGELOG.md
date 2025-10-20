@@ -139,14 +139,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.2.0] - 2025-10-20
+
+### Added
+
+#### DSSSL Processing Model (OpenJade-compatible)
+- **Full DSSSL processing engine** with automatic tree traversal
+  - `process-root`: Starts DSSSL processing from document root
+  - Rule matching: Automatic element/root matching based on construction rules
+  - Construction mode support: Multiple processing passes with different rule sets
+  - `next-match`: Explicit continuation to next matching rule
+  - OpenJade's ProcessContext architecture ported to Rust
+
+#### Flow Objects
+- **`make` special form** for creating flow objects
+  - `make entity system-id: "file.txt"`: Write generated code to files
+  - `make formatting-instruction data: "text"`: Append text to output buffer
+  - Nested flow objects with proper buffer management
+  - Multiple file generation from single template run
+
+#### Template Features
+- **XML template wrapper support** (`.dsl` format)
+  - Entity reference resolution: `<!ENTITY name SYSTEM "file.scm">`
+  - DOCTYPE parsing and entity loading
+  - Compatible with OpenJade/DSSSL style sheets
+  - Auto-detection of XML vs plain Scheme templates
+
+#### Language Features
+- **DSSSL keyword syntax**: Trailing colon notation (`system-id:`, `data:`)
+- **`define-language` special form**: Defines language identifiers for `declare-default-language`
+- **`declare-flow-object-class` special form**: Registers flow object class names as symbols
+- **Multi-list `map` and `for-each`**: Full R4RS compliance for operating on multiple lists
+- **`node-list->list` primitive**: Convert DSSSL node-lists to Scheme lists
+
+#### Backend Improvements
+- **Buffer management API** in `FotBuilder` trait:
+  - `current_output()`: Retrieve accumulated text
+  - `clear_buffer()`: Reset buffer after file write
+  - Proper separation between buffer operations and file I/O
+
+### Fixed
+- **`define-language` and `declare-flow-object-class`** are now special forms (not primitives)
+  - Variables are properly defined in environment
+  - Compatible with OpenJade semantics
+- **`map` and `for-each`** now accept multiple lists (R4RS requirement)
+  - `(map + '(1 2 3) '(4 5 6))` → `(5 7 9)`
+  - All lists must have same length (runtime check)
+
+### Performance
+- **4x faster than OpenJade** in release mode (5ms vs 18ms on Scaly parser generation)
+- **Optimized release builds** with LTO and aggressive optimization
+- Debug builds slower (~7x) but release builds significantly faster
+- Successfully generates production code: 170KB Scaly parser (5,532 lines)
+
+### Production Validation
+- ✅ **Scaly Language Compiler**: Successfully generates Parser.scaly from XML grammar
+- ✅ **Real-world template**: 5 entity files, complex DSSSL rules
+- ✅ **Large output**: 170KB generated code (5,532 lines)
+- ✅ **Performance**: Faster than 25-year-old OpenJade in production use
+
+### Changed
+- Primitive count: **258 primitives + 2 special forms** (total 260 language features)
+- `make` is now a special form (was primitive in planning docs)
+- Backend trait requires buffer management methods
+
+### Documentation
+- Updated FIXES_IMPLEMENTED.md with v0.1.1 compatibility fixes
+- Performance benchmarking results documented
+- Production validation with Scaly compiler
+
+---
+
 ## [Unreleased]
 
-### Planned for v0.2.0
+### Planned for v0.3.0
 - Full flow object support (`make paragraph`, `make sequence`, etc.)
-- Processing modes and rules (`mode`, `with-mode`)
 - External procedure interface
-- Performance optimization and benchmarking
 - Additional grove implementations (OpenSP for full SGML)
 - Additional backends (RTF, TeX, MIF, HTML)
 
+[0.2.0]: https://github.com/rschleitzer/dazzle/releases/tag/v0.2.0
 [0.1.0]: https://github.com/rschleitzer/dazzle/releases/tag/v0.1.0
