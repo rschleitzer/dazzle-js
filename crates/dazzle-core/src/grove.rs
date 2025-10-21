@@ -24,6 +24,7 @@
 //! - `NodeList`: An ordered collection of nodes
 //! - `Grove`: The complete document grove (root + global operations)
 
+use std::any::Any;
 use std::fmt::Debug;
 
 /// A node in the document tree
@@ -42,7 +43,7 @@ use std::fmt::Debug;
 /// - **parent**: Parent node
 ///
 /// See DSSSL spec Section 8 for complete property list.
-pub trait Node: Debug {
+pub trait Node: Debug + Any {
     /// Clone this node into a new Box
     ///
     /// This is required because trait objects (Box<dyn Node>) cannot implement Clone directly.

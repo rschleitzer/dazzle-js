@@ -171,20 +171,21 @@ impl Node for LibXml2Node {
 
     fn node_eq(&self, other: &dyn Node) -> bool {
         // Node equality: same node in the document tree
-        // Compare by unique node ID (Rc pointer address)
-        self.node_id() == other.node_id()
+        // Try to downcast to LibXml2Node and compare underlying xmlNodePtr pointers
+        if let Some(other_node) = (other as &dyn std::any::Any).downcast_ref::<LibXml2Node>() {
+            // Compare the underlying xmlNodePtr C pointers
+            // libxml's Node::node_ptr() returns the raw xmlNodePtr
+            std::ptr::eq(self.node.node_ptr(), other_node.node.node_ptr())
+        } else {
+            // Different node implementation - fall back to ID comparison
+            self.node_id() == other.node_id()
+        }
     }
 
     fn node_id(&self) -> usize {
-        // HACK: Use the Debug format of the underlying Node which includes the C pointer
-        // The libxml Node's Debug impl shows the xmlNodePtr address
-        // This is a workaround until we find a better way to access xmlNodePtr directly
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        format!("{:?}", self.node).hash(&mut hasher);
-        hasher.finish() as usize
+        // Use the underlying xmlNodePtr as a unique node ID
+        // This is stable across multiple Rc wrappers of the same libxml node
+        self.node.node_ptr() as usize
     }
 }
 

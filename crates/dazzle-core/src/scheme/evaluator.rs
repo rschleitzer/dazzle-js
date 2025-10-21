@@ -1416,12 +1416,15 @@ impl Evaluator {
         }
     }
 
-    /// (node-list-map proc node-list) → list
+    /// (node-list-map proc node-list) → node-list
     ///
-    /// Applies proc to each node in node-list and returns a regular Scheme list of the results.
-    /// Unlike node-list-filter which returns a node-list, this returns a regular list.
+    /// Applies proc to each node in node-list and returns a flattened node-list.
+    /// Each result must be a node-list or a single node (which is treated as a singleton node-list).
+    /// Results are concatenated (flattened) into a single node-list.
+    /// If proc returns #f or any non-node value, processing stops (OpenJade compatibility).
     ///
-    /// DSSSL: Maps a procedure over a node-list, returning a list (not a node-list).
+    /// DSSSL: Maps a procedure over a node-list, flattening results into a single node-list.
+    /// OpenJade: MapNodeListObj - stops processing when proc returns a non-node-list value.
     fn eval_node_list_map(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
         let args_vec = self.list_to_vec(args)?;
         if args_vec.len() != 2 {
@@ -1434,15 +1437,35 @@ impl Evaluator {
         // Evaluate the node-list
         let node_list_val = self.eval_inner(args_vec[1].clone(), env.clone())?;
 
-        // Handle both single nodes and node-lists
-        let mut result_vec = Vec::new();
+        // Collect all nodes from mapping results (flattened)
+        let mut result_nodes: Vec<Box<dyn crate::grove::Node>> = Vec::new();
 
         match node_list_val {
             Value::Node(ref n) => {
-                // Single node - apply proc and return single-element list
+                // Single node - apply proc and collect result
                 let node_val = Value::node(n.as_ref().clone_node());
                 let result = self.apply(proc, vec![node_val])?;
-                result_vec.push(result);
+
+                // OpenJade: Result must be node or node-list. If not, stop processing.
+                // Single nodes are auto-converted to singleton node-lists (DSSSL spec)
+                match result {
+                    Value::Node(n) => {
+                        // Single node - treat as singleton node-list
+                        result_nodes.push(n.as_ref().clone_node());
+                    }
+                    Value::NodeList(nl) => {
+                        // Node-list - flatten all nodes
+                        let mut index = 0;
+                        while let Some(node) = nl.get(index) {
+                            result_nodes.push(node);
+                            index += 1;
+                        }
+                    }
+                    _ => {
+                        // Non-node result (e.g., #f) - stop processing (OpenJade compat)
+                        // Return empty node-list
+                    }
+                }
             }
             Value::NodeList(ref nl) => {
                 // Iterate through the node-list
@@ -1452,8 +1475,28 @@ impl Evaluator {
                         // Apply procedure to this node
                         let node_val = Value::node(node);
                         let result = self.apply(proc.clone(), vec![node_val])?;
-                        result_vec.push(result);
-                        index += 1;
+
+                        // OpenJade: Result must be node or node-list. If not, stop processing.
+                        match result {
+                            Value::Node(n) => {
+                                // Single node - treat as singleton node-list
+                                result_nodes.push(n.as_ref().clone_node());
+                                index += 1;
+                            }
+                            Value::NodeList(nl_result) => {
+                                // Node-list - flatten all nodes
+                                let mut nl_index = 0;
+                                while let Some(node) = nl_result.get(nl_index) {
+                                    result_nodes.push(node);
+                                    nl_index += 1;
+                                }
+                                index += 1;
+                            }
+                            _ => {
+                                // Non-node result (e.g., #f) - stop processing (OpenJade compat)
+                                break;
+                            }
+                        }
                     } else {
                         break;
                     }
@@ -1462,13 +1505,8 @@ impl Evaluator {
             _ => return Err(EvalError::new(format!("node-list-map: second argument must be a node or node-list: {:?}", node_list_val))),
         }
 
-        // Convert result vector to Scheme list
-        let mut result_list = Value::Nil;
-        for elem in result_vec.into_iter().rev() {
-            result_list = Value::cons(elem, result_list);
-        }
-
-        Ok(result_list)
+        // Return flattened node-list
+        Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(result_nodes))))
     }
 
     /// (node-list-some? predicate node-list)
