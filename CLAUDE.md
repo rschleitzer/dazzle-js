@@ -311,15 +311,15 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 - Modern Rust port of OpenJade's DSSSL processor for code generation
 - 10K lines of Rust (vs 72K C++ in OpenJade)
 - 260 language features (258 primitives + 2 special forms)
-- **4x faster** than OpenJade (5ms vs 18ms on real-world tasks)
+- **~4x slower** than OpenJade (~110ms vs ~27ms on Icons test case)
 - Full DSSSL processing model with automatic tree traversal
-- Production-validated on Scaly language compiler
+- Production-validated on real-world code generation
 
 **OpenJade Comparison**:
-- OpenJade: 72K C++ (117 files), 224 primitives, 18ms
-- Dazzle: 10K Rust (multi-crate), 260 features, 5ms
+- OpenJade: 72K C++ (117 files), 224 primitives, ~27ms
+- Dazzle: 10K Rust (multi-crate), 260 features, ~110ms
 - Compatibility: Full DSSSL + OpenJade extensions
-- Performance: **4x faster** in release mode
+- Performance: **~4x slower** but still fast (<200ms for 18-file generation)
 
 **Architecture**:
 - Trait-based (grove/backend pluggable), multi-crate workspace
@@ -361,7 +361,7 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 - **Language Features**: **260 total** (258 primitives + 2 special forms)
 - **Tests**: 322 passing (100% success rate)
 - **Build**: Zero warnings, zero errors
-- **Performance**: **4x FASTER than OpenJade** (5ms vs 18ms on Scaly parser generation)
+- **Performance**: **~4x slower than OpenJade** (~110ms vs ~27ms on Icons test case)
 
 **v0.2.0 Major Features:**
 - ✅ **DSSSL Processing Model** - Full OpenJade-compatible automatic tree traversal
@@ -389,8 +389,8 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 - ✅ SGML backend with buffer management
 - ✅ CLI with template loading, variables, search paths
 - ✅ XML template wrapper (.dsl format) support
-- ✅ **4x faster than OpenJade in production use**
-- ✅ Real-world validation: Scaly language compiler
+- ✅ **100% output compatibility** with OpenJade
+- ✅ Real-world validation: production code generation
 - ✅ Comprehensive test coverage
 - ✅ Full documentation (README, CHANGELOG, examples, primitive reference)
 
@@ -398,18 +398,18 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 - ✅ Published to crates.io (dazzle v0.2.0)
 - ✅ 4 published crates (core, grove-libxml2, backend-sgml, cli)
 - ✅ Working CLI tool (`dazzle`)
-- ✅ Production validation: Scaly Parser.scaly (170KB, 5,532 lines)
-- ✅ Performance benchmarks: 4x faster than OpenJade
+- ✅ Production validation: Icons test case (18 files, 100% identical to OpenJade)
+- ✅ Performance benchmarks: ~110ms for 18-file generation (vs ~27ms OpenJade)
 - ✅ Complete documentation (README, CHANGELOG, examples)
 - ✅ Test suite (322 tests, 100% passing)
 
 **Production Validation:**
-- ✅ **Scaly Language Compiler** - Generates Parser.scaly from grammar.xml
-  - Input: 23KB XML grammar specification
-  - Output: 170KB Scaly code (5,532 lines)
-  - Template: 5 entity files with complex DSSSL rules
-  - Performance: 5ms (vs 18ms in OpenJade)
-  - Result: Byte-perfect code generation
+- ✅ **Icons Test Case** - Generates C# interfaces, clients, services from XML
+  - Input: Icons.xml with entity definitions
+  - Output: 18 C# files (contracts, clients, repositories, services)
+  - Template: 14 entity files with complex DSSSL rules
+  - Performance: ~110ms (vs ~27ms in OpenJade)
+  - Result: 100% byte-for-byte identical output
 
 **Distribution Status:**
 - ✅ **crates.io**: Published v0.2.0 (Oct 20, 2025)
