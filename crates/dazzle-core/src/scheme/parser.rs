@@ -455,7 +455,10 @@ impl Tokenizer {
             match self.next_char() {
                 Some('"') => {
                     // Closing quote
-                    return Ok(result);
+                    // Normalize CRLF to LF (to match OpenJade behavior)
+                    // OpenJade always outputs Unix line endings regardless of template line endings
+                    let normalized = result.replace("\r\n", "\n");
+                    return Ok(normalized);
                 }
                 Some('\\') => {
                     // Escape sequence
