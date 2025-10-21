@@ -3510,14 +3510,34 @@ pub fn prim_children(args: &[Value]) -> PrimitiveResult {
             Ok(Value::node_list(children))
         }
         Value::NodeList(nl) => {
-            // DSSSL: node property functions can be called on node-lists
-            // Operates on the first node of the list
-            if let Some(node) = nl.first() {
-                let children = node.children();
-                Ok(Value::node_list(children))
+            // OpenJade semantics: When children is called on a multi-node NodeList,
+            // it maps children over ALL nodes and returns a flattened NodeList
+            // (see OpenJade primitive.cxx:3989-3991 - returns MapNodeListObj)
+
+            // Check if this is a singleton node-list
+            if nl.length() == 1 {
+                // Singleton - just get children of the single node
+                if let Some(node) = nl.first() {
+                    let children = node.children();
+                    Ok(Value::node_list(children))
+                } else {
+                    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+                }
             } else {
-                // Empty node-list -> empty children
-                Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+                // Multi-node list - map children over all nodes and flatten
+                let mut all_children: Vec<Box<dyn crate::grove::Node>> = Vec::new();
+                let mut index = 0;
+                while let Some(node) = nl.get(index) {
+                    let children = node.children();
+                    // Flatten all children into the result
+                    let mut child_index = 0;
+                    while let Some(child) = children.get(child_index) {
+                        all_children.push(child);
+                        child_index += 1;
+                    }
+                    index += 1;
+                }
+                Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(all_children))))
             }
         }
         Value::Bool(false) | Value::Unspecified => {
