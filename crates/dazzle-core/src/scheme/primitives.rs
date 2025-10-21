@@ -4659,8 +4659,85 @@ pub fn prim_select_by_class(_args: &[Value]) -> PrimitiveResult {
 }
 
 /// (node-list-union nl1 nl2 ...) → node-list
-pub fn prim_node_list_union(_args: &[Value]) -> PrimitiveResult {
-    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))) // Stub
+///
+/// Returns a node-list containing all unique nodes from all argument node-lists.
+/// Node identity (not equality) is used to determine uniqueness.
+/// The order is the document order of the first occurrence of each node.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_node_list_union(args: &[Value]) -> PrimitiveResult {
+    if args.is_empty() {
+        return Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())));
+    }
+
+    // Collect all nodes from all node-lists, maintaining document order
+    let mut seen_ids = std::collections::HashSet::new();
+    let mut result_nodes = Vec::new();
+
+    for arg in args {
+        match arg {
+            Value::NodeList(nl) => {
+                // Iterate through this node-list
+                for i in 0..nl.length() {
+                    if let Some(node) = nl.get(i) {
+                        let node_id = node.node_id();
+                        // Only add if we haven't seen this node before
+                        if !seen_ids.contains(&node_id) {
+                            seen_ids.insert(node_id);
+                            result_nodes.push(node);
+                        }
+                    }
+                }
+            }
+            Value::Node(n) => {
+                // Single node treated as singleton node-list
+                let node_id = n.as_ref().node_id();
+                if !seen_ids.contains(&node_id) {
+                    seen_ids.insert(node_id);
+                    result_nodes.push(n.as_ref().clone_node());
+                }
+            }
+            Value::Pair(_) => {
+                // Regular Scheme list (from node-list-map) - iterate through it
+                let mut current = arg.clone();
+                loop {
+                    match current {
+                        Value::Nil => break,
+                        Value::Pair(ref p) => {
+                            let (car, cdr) = {
+                                let pair_data = p.borrow();
+                                (pair_data.car.clone(), pair_data.cdr.clone())
+                            };
+
+                            // Extract the node from car
+                            match car {
+                                Value::Node(ref n) => {
+                                    let node_id = n.as_ref().node_id();
+                                    if !seen_ids.contains(&node_id) {
+                                        seen_ids.insert(node_id);
+                                        result_nodes.push(n.as_ref().clone_node());
+                                    }
+                                }
+                                Value::Bool(false) => {
+                                    // #f in the list - skip it (graceful handling)
+                                }
+                                _ => return Err(format!("node-list-union: list contains non-node: {:?}", car)),
+                            }
+
+                            current = cdr;
+                        }
+                        _ => return Err(format!("node-list-union: malformed list: {:?}", current)),
+                    }
+                }
+            }
+            Value::Nil => {
+                // Empty list - skip
+            }
+            _ => return Err(format!("node-list-union: argument not a node-list: {:?}", arg)),
+        }
+    }
+
+    Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(result_nodes))))
 }
 
 /// (node-list-intersection nl1 nl2 ...) → node-list
