@@ -23,7 +23,7 @@ fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing::Level::INFO.into()),
+                .add_directive(tracing::Level::WARN.into()),
         )
         .init();
 
@@ -45,7 +45,7 @@ fn main() -> Result<()> {
 
 fn run(args: Args) -> Result<()> {
     // 1. Load and parse input XML
-    info!("Loading XML: {}", args.input.display());
+    debug!("Loading XML: {}", args.input.display());
 
     // Use parse_file instead of parse_string to ensure proper DTD entity resolution
     // libxml2 can resolve relative DTD paths and external entities better when parsing from file
@@ -100,7 +100,7 @@ fn run(args: Args) -> Result<()> {
     }
 
     // 8. Load and evaluate template
-    info!("Loading template: {}", args.template.display());
+    debug!("Loading template: {}", args.template.display());
     let template_path = find_template(&args.template, &args.search_dirs)?;
     let template_content = fs::read_to_string(&template_path)
         .with_context(|| format!("Failed to read template: {}", template_path.display()))?;
@@ -108,7 +108,7 @@ fn run(args: Args) -> Result<()> {
     // Check if this is an XML template wrapper (.dsl format)
     let scheme_code = if template_content.trim_start().starts_with("<!DOCTYPE")
         || template_content.trim_start().starts_with("<?xml") {
-        info!("Detected XML template wrapper, resolving entities...");
+        debug!("Detected XML template wrapper, resolving entities...");
         resolve_xml_template(&template_content, &template_path, &args.search_dirs)?
     } else {
         template_content
@@ -120,7 +120,7 @@ fn run(args: Args) -> Result<()> {
     // 9. Start DSSSL processing from root (OpenJade's ProcessContext::process)
     // After template loading, construction rules are defined.
     // Now trigger automatic tree processing from the root node.
-    info!("Starting DSSSL processing from root...");
+    debug!("Starting DSSSL processing from root...");
     let processing_result = evaluator
         .process_root(env.clone())
         .map_err(|e| anyhow::anyhow!("Processing error: {}", e))?;
@@ -137,10 +137,10 @@ fn run(args: Args) -> Result<()> {
     let num_files = backend.borrow().written_files().len();
     if num_files == 0 && !backend.borrow().current_output().is_empty() {
         println!("{}", backend.borrow().current_output());
-        info!("Output written to stdout");
+        debug!("Output written to stdout");
     } else {
-        info!("Code generation complete!");
-        info!("Generated {} file(s) in {}", num_files, output_dir.display());
+        debug!("Code generation complete!");
+        debug!("Generated {} file(s) in {}", num_files, output_dir.display());
     }
 
     Ok(())
@@ -274,7 +274,7 @@ fn resolve_xml_template(
 
                 match content_result {
                     Ok(mut content) => {
-                        info!("Resolved entity &{};  from {}", entity_name, entity_path.display());
+                        debug!("Resolved entity &{};  from {}", entity_name, entity_path.display());
 
                         // Strip CDATA wrappers if present
                         // Some .scm files are wrapped in <![CDATA[...]]> for XML embedding
