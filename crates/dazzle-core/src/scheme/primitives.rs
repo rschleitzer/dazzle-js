@@ -4176,8 +4176,69 @@ pub fn prim_named_node_list_p(args: &[Value]) -> PrimitiveResult {
 }
 
 /// (node-list=? nl1 nl2) → boolean
-pub fn prim_node_list_eq(_args: &[Value]) -> PrimitiveResult {
-    Ok(Value::bool(false)) // Stub
+///
+/// Returns #t if nl1 and nl2 contain the same nodes in the same order.
+/// A single node is treated as a singleton node-list.
+/// Comparison is by node identity (pointer equality).
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_node_list_eq(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("node-list=? requires exactly 2 arguments".to_string());
+    }
+
+    // Handle all combinations of Node and NodeList
+    match (&args[0], &args[1]) {
+        // Two single nodes: compare by node identity
+        (Value::Node(n1), Value::Node(n2)) => {
+            Ok(Value::bool(n1.as_ref().as_ref().node_eq(n2.as_ref().as_ref())))
+        }
+
+        // Single node vs node-list: node-list must have length 1 and contain same node
+        (Value::Node(n), Value::NodeList(nl)) | (Value::NodeList(nl), Value::Node(n)) => {
+            if nl.length() != 1 {
+                return Ok(Value::bool(false));
+            }
+            if let Some(nl_node) = nl.get(0) {
+                // Compare by checking if the nodes are the same
+                Ok(Value::bool(n.as_ref().as_ref().node_eq(nl_node.as_ref())))
+            } else {
+                Ok(Value::bool(false))
+            }
+        }
+
+        // Two node-lists: compare element by element
+        (Value::NodeList(nl1), Value::NodeList(nl2)) => {
+            let len1 = nl1.length();
+            let len2 = nl2.length();
+
+            // Different lengths → not equal
+            if len1 != len2 {
+                return Ok(Value::bool(false));
+            }
+
+            // Compare each node
+            for i in 0..len1 {
+                let node1 = nl1.get(i);
+                let node2 = nl2.get(i);
+
+                match (node1, node2) {
+                    (Some(n1), Some(n2)) => {
+                        // Compare nodes by identity
+                        if !n1.node_eq(n2.as_ref()) {
+                            return Ok(Value::bool(false));
+                        }
+                    }
+                    (None, None) => continue,
+                    _ => return Ok(Value::bool(false)),
+                }
+            }
+
+            Ok(Value::bool(true))
+        }
+
+        _ => Err(format!("node-list=?: arguments must be nodes or node-lists: {:?}, {:?}", args[0], args[1])),
+    }
 }
 
 // =============================================================================

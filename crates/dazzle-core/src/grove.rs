@@ -107,6 +107,12 @@ pub trait Node: Debug {
     /// Two node references are equal if they refer to the same
     /// node in the document, not just structurally similar nodes.
     fn node_eq(&self, other: &dyn Node) -> bool;
+
+    /// Get a unique identifier for this node
+    ///
+    /// Returns a value that uniquely identifies this node within its document.
+    /// Two nodes with the same `node_id` are the same node.
+    fn node_id(&self) -> usize;
 }
 
 /// An ordered collection of nodes

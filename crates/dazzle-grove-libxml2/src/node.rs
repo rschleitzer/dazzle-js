@@ -171,29 +171,20 @@ impl Node for LibXml2Node {
 
     fn node_eq(&self, other: &dyn Node) -> bool {
         // Node equality: same node in the document tree
-        // Compare by pointer equality
+        // Compare by unique node ID (Rc pointer address)
+        self.node_id() == other.node_id()
+    }
 
-        // Try to downcast other to LibXml2Node
-        // This is a bit tricky with trait objects...
-        // For now, use a simple heuristic: compare gi, id, and data
+    fn node_id(&self) -> usize {
+        // HACK: Use the Debug format of the underlying Node which includes the C pointer
+        // The libxml Node's Debug impl shows the xmlNodePtr address
+        // This is a workaround until we find a better way to access xmlNodePtr directly
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
 
-        // TODO: Implement proper pointer-based equality
-        // This requires either:
-        // 1. A unique ID per node
-        // 2. Pointer comparison (requires unsafe or better pattern)
-        // 3. Adding a method to Node trait
-
-        if let Some(other_gi) = other.gi() {
-            if let Some(self_gi) = self.gi() {
-                if self_gi != other_gi {
-                    return false;
-                }
-            }
-        }
-
-        // For now, this is a placeholder
-        // Real implementation needs pointer comparison
-        false
+        let mut hasher = DefaultHasher::new();
+        format!("{:?}", self.node).hash(&mut hasher);
+        hasher.finish() as usize
     }
 }
 
