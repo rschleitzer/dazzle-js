@@ -4490,30 +4490,27 @@ pub fn prim_last_sibling_p(args: &[Value]) -> PrimitiveResult {
     // Get parent and check if this node is the last child with the same element name
     if let Some(parent) = node.parent() {
         let my_gi = node.gi();
+
+        // Strategy: Find the last sibling with same GI, then check if it's us
         let siblings = parent.children();
-
-        // Find the last sibling with the same GI by iterating through all siblings
-        let mut last_with_same_gi: Option<Box<dyn crate::grove::Node>> = None;
         let mut current_nl = siblings;
+        let mut last_with_same_gi: Option<Box<dyn crate::grove::Node>> = None;
 
+        // Find the last sibling with matching GI
         loop {
             if let Some(child) = current_nl.first() {
                 if child.gi() == my_gi {
                     last_with_same_gi = Some(child);
                 }
-                // Get the rest of the node list
                 current_nl = current_nl.rest();
             } else {
                 break;
             }
         }
 
-        // Check if we are that last sibling
+        // Check if we are that last sibling using node_eq
         if let Some(last) = last_with_same_gi {
-            // Compare node identities using the ID (which should be unique for each node)
-            let my_id = node.id();
-            let last_id = last.id();
-            Ok(Value::bool(my_id == last_id))
+            Ok(Value::bool(node.node_eq(last.as_ref())))
         } else {
             Ok(Value::bool(false))
         }
