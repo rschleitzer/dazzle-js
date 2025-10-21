@@ -23,7 +23,7 @@
 //! | **Total**         | **~236**       |               |
 
 use crate::scheme::value::Value;
-use crate::grove::EmptyNodeList;
+use crate::grove::{EmptyNodeList, Node};
 
 /// Result type for primitive procedures
 pub type PrimitiveResult = Result<Value, String>;
@@ -3177,10 +3177,22 @@ pub fn prim_node_list_reverse(args: &[Value]) -> PrimitiveResult {
     }
 
     match &args[0] {
-        Value::NodeList(_nl) => {
-            // TODO: Implement proper node-list reversal
-            // For now, just return empty list
-            Ok(Value::node_list(Box::new(EmptyNodeList::new())))
+        Value::NodeList(nl) => {
+            // Collect all nodes into a Vec and reverse it
+            let mut nodes: Vec<Box<dyn Node>> = Vec::new();
+            let mut current = nl.clone();
+            while let Some(node) = current.first() {
+                nodes.push(node);
+                current = std::rc::Rc::new(current.rest());
+                if current.length() == 0 {
+                    break;
+                }
+            }
+            nodes.reverse();
+
+            // Create a new node-list from the reversed Vec
+            use crate::grove::VecNodeList;
+            Ok(Value::node_list(Box::new(VecNodeList::new(nodes))))
         }
         _ => Err(format!("node-list-reverse: not a node-list: {:?}", args[0])),
     }
