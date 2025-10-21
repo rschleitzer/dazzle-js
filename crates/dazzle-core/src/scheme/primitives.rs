@@ -3071,6 +3071,11 @@ pub fn prim_node_list_first(args: &[Value]) -> PrimitiveResult {
                 Ok(Value::bool(false))
             }
         }
+        Value::Node(_) => {
+            // DSSSL: A single node can be treated as a single-element node-list
+            // The first element is the node itself
+            Ok(args[0].clone())
+        }
         _ => Err(format!("node-list-first: not a node-list: {:?}", args[0])),
     }
 }
@@ -3132,6 +3137,11 @@ pub fn prim_node_list_rest(args: &[Value]) -> PrimitiveResult {
             // Now implemented with real grove support
             let rest = _nl.rest();
             Ok(Value::node_list(rest))
+        }
+        Value::Node(_) => {
+            // DSSSL: A single node can be treated as a single-element node-list
+            // The rest of a single-element list is an empty node-list
+            Ok(Value::node_list(Box::new(EmptyNodeList::new())))
         }
         _ => Err(format!("node-list-rest: not a node-list: {:?}", args[0])),
     }
