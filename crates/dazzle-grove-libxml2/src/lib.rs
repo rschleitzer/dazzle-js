@@ -120,6 +120,33 @@ impl LibXml2Grove {
         })
     }
 
+    /// Parse XML file into a Grove
+    ///
+    /// This is preferred over `parse` + `read_to_string` for files with DTDs,
+    /// because libxml2 can better resolve relative DTD paths and external entities
+    /// when it knows the file's location.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to XML file
+    /// * `validate_dtd` - If true, validate against DTD (if present in DOCTYPE)
+    ///
+    /// # Errors
+    ///
+    /// Returns error if file cannot be read, XML is malformed, or DTD validation fails.
+    pub fn parse_file(path: &str, validate_dtd: bool) -> Result<Self, String> {
+        let document = XmlDocument::parse_file(path, validate_dtd)?;
+        let doc_rc = Rc::new(document);
+
+        // Build ID map by traversing tree
+        let id_map = Self::build_id_map(&doc_rc);
+
+        Ok(LibXml2Grove {
+            document: doc_rc,
+            id_map,
+        })
+    }
+
     /// Build ID map by traversing the document tree
     ///
     /// Walks the libxml2 tree directly to avoid downcasting issues

@@ -61,6 +61,11 @@ pub fn get_evaluator_context() -> Option<EvaluatorContext> {
     EVALUATOR_CONTEXT.with(|ctx| ctx.borrow().clone())
 }
 
+/// Check if evaluator context is currently set
+fn has_evaluator_context() -> bool {
+    EVALUATOR_CONTEXT.with(|ctx| ctx.borrow().is_some())
+}
+
 /// Set the evaluator context (called by evaluator before eval)
 fn set_evaluator_context(ctx: EvaluatorContext) {
     EVALUATOR_CONTEXT.with(|c| *c.borrow_mut() = Some(ctx));
@@ -307,18 +312,29 @@ impl Evaluator {
     /// 2. **Symbols**: Variable lookup in environment
     /// 3. **Lists**: Check first element for special forms, otherwise apply
     pub fn eval(&mut self, expr: Value, env: Gc<Environment>) -> EvalResult {
-        // Set evaluator context for primitives
+        // Save previous context state
+        let context_was_set = has_evaluator_context();
+        let previous_context = get_evaluator_context();
+
+        // ALWAYS update context to reflect current evaluator state
+        // This ensures current_node is correct for nested eval() calls
         set_evaluator_context(EvaluatorContext {
             grove: self.grove.clone(),
             current_node: self.current_node.clone(),
             backend: self.backend.clone(),
         });
 
-        // Evaluate (and ensure context is cleared on return or error)
+        // Evaluate
         let result = self.eval_inner(expr, env);
 
-        // Clear context (important for nested evals)
-        clear_evaluator_context();
+        // Restore previous context state
+        if context_was_set {
+            if let Some(prev_ctx) = previous_context {
+                set_evaluator_context(prev_ctx);
+            }
+        } else {
+            clear_evaluator_context();
+        }
 
         result
     }
@@ -381,6 +397,7 @@ impl Evaluator {
                 "map" => self.eval_map(args, env),
                 "for-each" => self.eval_for_each(args, env),
                 "node-list-filter" => self.eval_node_list_filter(args, env),
+                "node-list-some?" => self.eval_node_list_some(args, env),
                 "load" => self.eval_load(args, env),
 
                 // DSSSL special forms
@@ -1136,9 +1153,11 @@ impl Evaluator {
             // First element should be a list of datums
             let datums = self.list_to_vec(clause_vec[0].clone())?;
 
-            // Check if key matches any datum using eqv?
+            // Check if key matches any datum using equal? (not eqv?)
+            // NOTE: R4RS specifies eqv?, but that doesn't work for strings.
+            // OpenJade uses equal? for case matching to handle string comparisons.
             for datum in datums {
-                if key.eqv(&datum) {
+                if key.equal(&datum) {
                     // Match found - evaluate body expressions
                     if clause_vec.len() == 1 {
                         // No expressions in clause - return unspecified
@@ -1393,6 +1412,51 @@ impl Evaluator {
                 Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(filtered_nodes))))
             }
             _ => Err(EvalError::new(format!("node-list-filter: second argument not a node-list: {:?}", node_list_val))),
+        }
+    }
+
+    /// (node-list-some? predicate node-list)
+    ///
+    /// Returns #t if the predicate returns true for at least one node in the node-list.
+    /// Returns #f if the node-list is empty or the predicate returns false for all nodes.
+    /// DSSSL: Test if any node in the node-list satisfies the predicate.
+    fn eval_node_list_some(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+        if args_vec.len() != 2 {
+            return Err(EvalError::new("node-list-some? requires exactly 2 arguments".to_string()));
+        }
+
+        // Evaluate the predicate
+        let pred = self.eval_inner(args_vec[0].clone(), env.clone())?;
+
+        // Evaluate the node-list
+        let node_list_val = self.eval_inner(args_vec[1].clone(), env.clone())?;
+
+        match node_list_val {
+            Value::NodeList(ref nl) => {
+                // Iterate through the node-list
+                let mut index = 0;
+                loop {
+                    if let Some(node) = nl.get(index) {
+                        // Apply predicate to this node
+                        let node_val = Value::node(node);
+                        let result = self.apply(pred.clone(), vec![node_val])?;
+
+                        // If predicate returns #t, return #t immediately
+                        if let Value::Bool(true) = result {
+                            return Ok(Value::bool(true));
+                        }
+
+                        index += 1;
+                    } else {
+                        break;
+                    }
+                }
+
+                // If we get here, no node satisfied the predicate
+                Ok(Value::bool(false))
+            }
+            _ => Err(EvalError::new(format!("node-list-some?: second argument not a node-list: {:?}", node_list_val))),
         }
     }
 
