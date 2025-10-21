@@ -1175,6 +1175,10 @@ pub fn prim_string_append(args: &[Value]) -> PrimitiveResult {
                 // Treat unspecified as empty string (graceful handling)
                 // This happens when template functions don't explicitly return values
             }
+            Value::Bool(false) => {
+                // Treat #f as empty string (graceful handling)
+                // Common pattern in templates where #f indicates "no value"
+            }
             _ => return Err(format!("string-append: not a string: {:?}", arg)),
         }
     }
