@@ -3399,16 +3399,12 @@ pub fn prim_data(args: &[Value]) -> PrimitiveResult {
     match &args[0] {
         Value::Node(node) => {
             if let Some(data) = node.data() {
-                // OpenJade normalizes whitespace: replace sequences of whitespace
-                // (spaces, tabs, newlines) with a single space, and trim
-                let normalized = data
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                if normalized.is_empty() {
+                // OpenJade returns text content as-is, WITHOUT whitespace normalization
+                // This preserves leading/trailing spaces and all internal whitespace
+                if data.is_empty() {
                     Ok(Value::bool(false))
                 } else {
-                    Ok(Value::string(normalized))
+                    Ok(Value::string(data))
                 }
             } else {
                 Ok(Value::bool(false))
@@ -3438,13 +3434,8 @@ pub fn prim_data(args: &[Value]) -> PrimitiveResult {
             if result.is_empty() {
                 Ok(Value::bool(false))
             } else {
-                // OpenJade normalizes whitespace: replace sequences of whitespace
-                // (spaces, tabs, newlines) with a single space, and trim
-                let normalized = result
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                Ok(Value::string(normalized))
+                // OpenJade concatenates data as-is, WITHOUT whitespace normalization
+                Ok(Value::string(result))
             }
         }
         Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
