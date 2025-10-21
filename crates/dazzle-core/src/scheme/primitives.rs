@@ -3392,19 +3392,28 @@ pub fn prim_data(args: &[Value]) -> PrimitiveResult {
         }
         Value::NodeList(nl) => {
             // DSSSL: node property functions can be called on node-lists
-            // Operates on the first node of the list
-            if nl.length() == 1 {
-                if let Some(node) = nl.first() {
+            // OpenJade behavior: concatenates data from ALL nodes in the list
+            let mut result = String::new();
+            let mut current = nl.clone();
+
+            loop {
+                if let Some(node) = current.first() {
                     if let Some(data) = node.data() {
-                        Ok(Value::string(data))
-                    } else {
-                        Ok(Value::bool(false))
+                        result.push_str(&data);
+                    }
+                    current = std::rc::Rc::new(current.rest());
+                    if current.length() == 0 {
+                        break;
                     }
                 } else {
-                    Ok(Value::bool(false))
+                    break;
                 }
+            }
+
+            if result.is_empty() {
+                Ok(Value::bool(false))
             } else {
-                Err(format!("data: node-list must have exactly 1 element, got {}", nl.length()))
+                Ok(Value::string(result))
             }
         }
         Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
@@ -4421,8 +4430,80 @@ pub fn prim_last_sibling_p(_args: &[Value]) -> PrimitiveResult {
 }
 
 /// (child-number node) → integer
-pub fn prim_child_number(_args: &[Value]) -> PrimitiveResult {
-    Ok(Value::integer(0)) // Stub
+///
+/// Returns the 1-based position of the node among siblings with the same element name.
+/// If called with no arguments, uses the current node.
+///
+/// **DSSSL**: Grove primitive (DSSSL §9)
+/// **OpenJade**: Returns 1-based count (internal childNumber is 0-based, but adds 1)
+pub fn prim_child_number(args: &[Value]) -> PrimitiveResult {
+    if args.is_empty() || args.len() > 1 {
+        return Err("child-number requires 0 or 1 arguments".to_string());
+    }
+
+    let node = if args.is_empty() {
+        // Use current node (from context - but we don't have context here, so error)
+        return Err("child-number with no arguments requires current-node context (not yet implemented)".to_string());
+    } else {
+        match &args[0] {
+            Value::Node(n) => n.clone(),
+            Value::NodeList(nl) => {
+                if let Some(node) = nl.first() {
+                    if nl.length() != 1 {
+                        return Err(format!("child-number: node-list must have exactly 1 element, got {}", nl.length()));
+                    }
+                    std::rc::Rc::new(node)
+                } else {
+                    return Err("child-number: empty node-list".to_string());
+                }
+            }
+            _ => return Err(format!("child-number: not a node: {:?}", args[0])),
+        }
+    };
+
+    // Get the element name of this node
+    let gi = match node.gi() {
+        Some(name) => name.to_string(),
+        None => return Ok(Value::bool(false)), // Not an element
+    };
+
+    // Get the parent to find siblings
+    let parent = match node.parent() {
+        Some(p) => p,
+        None => return Ok(Value::integer(1)), // Document element → child-number = 1
+    };
+
+    // Count siblings with the same GI that come before this node
+    let mut count = 0;
+    let mut current = parent.children();
+
+    loop {
+        if let Some(sibling) = current.first() {
+            // Check if this is the target node (use node_eq for proper identity comparison)
+            if sibling.node_eq(&**node) {
+                // Found our node, return count + 1 (1-based)
+                return Ok(Value::integer((count + 1) as i64));
+            }
+
+            // Not the target node, check if it has the same GI
+            if let Some(sibling_gi) = sibling.gi() {
+                if sibling_gi == gi {
+                    count += 1;
+                }
+            }
+
+            // Move to next sibling
+            current = current.rest();
+            if current.length() == 0 {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    // If we didn't find the node, something is wrong
+    Err("child-number: node not found among siblings".to_string())
 }
 
 /// (element-number node) → integer
