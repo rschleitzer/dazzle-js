@@ -1396,8 +1396,8 @@ impl Evaluator {
                         let node_val = Value::node(node);
                         let result = self.apply(pred.clone(), vec![node_val.clone()])?;
 
-                        // If predicate returns #t, include this node
-                        if let Value::Bool(true) = result {
+                        // If predicate returns a truthy value (anything except #f), include this node
+                        if !matches!(result, Value::Bool(false)) {
                             // Need to get the node again since we consumed it
                             if let Value::Node(n) = node_val {
                                 filtered_nodes.push(n.as_ref().clone_node());
