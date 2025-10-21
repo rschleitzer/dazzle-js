@@ -3378,6 +3378,23 @@ pub fn prim_data(args: &[Value]) -> PrimitiveResult {
                 Ok(Value::bool(false))
             }
         }
+        Value::NodeList(nl) => {
+            // DSSSL: node property functions can be called on node-lists
+            // Operates on the first node of the list
+            if nl.length() == 1 {
+                if let Some(node) = nl.first() {
+                    if let Some(data) = node.data() {
+                        Ok(Value::string(data))
+                    } else {
+                        Ok(Value::bool(false))
+                    }
+                } else {
+                    Ok(Value::bool(false))
+                }
+            } else {
+                Err(format!("data: node-list must have exactly 1 element, got {}", nl.length()))
+            }
+        }
         Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
         _ => Err(format!("data: not a node: {:?}", args[0])),
     }
@@ -3411,7 +3428,10 @@ pub fn prim_attribute_string(args: &[Value]) -> PrimitiveResult {
         }
         Value::NodeList(nl) => {
             // Handle single-element node-lists (OpenJade compatibility)
-            if nl.length() == 1 {
+            // Empty node-lists return #f (no node to get attribute from)
+            if nl.length() == 0 {
+                Ok(Value::bool(false))
+            } else if nl.length() == 1 {
                 if let Some(node) = nl.first() {
                     if let Some(value) = node.attribute_string(name) {
                         Ok(Value::string(value))

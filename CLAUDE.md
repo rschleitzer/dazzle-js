@@ -49,7 +49,7 @@
 
 **Problem**: OpenJade disappearing from package managers (dropped from Homebrew, aging in MacPorts, unmaintained C++)
 
-**Solution**: Pure Rust, libxml2, OpenJade CLI-compatible, focus on code generation
+**Solution**: Pure Rust, libxml2 (UTF-8 support), OpenJade CLI-compatible, focus on code generation
 
 ---
 
@@ -153,7 +153,7 @@
 
 **Host**: Rust (maintainable, cross-platform, good FFI)
 **Scheme**: Ported from OpenJade (~12K C++ → ~10K Rust) - NOT Steel (parser bugs)
-**XML**: libxml2 (industry standard, DTD validation, clean C FFI)
+**XML**: libxml2 (industry standard, DTD validation, UTF-8 support, clean C FFI)
 
 **Dependencies**:
 ```toml
@@ -313,13 +313,14 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 - 260 language features (258 primitives + 2 special forms)
 - **~4x slower** than OpenJade (~110ms vs ~27ms on Icons test case)
 - Full DSSSL processing model with automatic tree traversal
-- Production-validated on real-world code generation
+- Production-validated on real-world code generation (Icons + ADM test cases)
 
 **OpenJade Comparison**:
 - OpenJade: 72K C++ (117 files), 224 primitives, ~27ms
 - Dazzle: 10K Rust (multi-crate), 260 features, ~110ms
 - Compatibility: Full DSSSL + OpenJade extensions
 - Performance: **~4x slower** but still fast (<200ms for 18-file generation)
+- **UTF-8**: Dazzle handles modern XML with UTF-8 characters
 
 **Architecture**:
 - Trait-based (grove/backend pluggable), multi-crate workspace
@@ -340,7 +341,7 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 
 ---
 
-## Current Status (October 20, 2025)
+## Current Status (October 21, 2025)
 
 ### 🚀 v0.2.0 - PRODUCTION READY
 
@@ -386,11 +387,12 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 - ✅ Full DSSSL grove query primitives (50+)
 - ✅ Full DSSSL processing model (process-root, rules, modes, next-match)
 - ✅ libxml2 integration with DTD validation
+- ✅ **UTF-8 support**: Handles modern XML
 - ✅ SGML backend with buffer management
 - ✅ CLI with template loading, variables, search paths
 - ✅ XML template wrapper (.dsl format) support
 - ✅ **100% output compatibility** with OpenJade
-- ✅ Real-world validation: production code generation
+- ✅ Real-world validation: production code generation (Icons + ADM)
 - ✅ Comprehensive test coverage
 - ✅ Full documentation (README, CHANGELOG, examples, primitive reference)
 
@@ -398,7 +400,9 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 - ✅ Published to crates.io (dazzle v0.2.0)
 - ✅ 4 published crates (core, grove-libxml2, backend-sgml, cli)
 - ✅ Working CLI tool (`dazzle`)
-- ✅ Production validation: Icons test case (18 files, 100% identical to OpenJade)
+- ✅ Production validation: 2 test cases (27 files total, 100% identical to OpenJade)
+  - Icons: 18 files, ASCII-clean XML
+  - ADM: 9 files (5,983 lines), UTF-8 XML
 - ✅ Performance benchmarks: ~110ms for 18-file generation (vs ~27ms OpenJade)
 - ✅ Complete documentation (README, CHANGELOG, examples)
 - ✅ Test suite (322 tests, 100% passing)
@@ -409,7 +413,18 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
   - Output: 18 C# files (contracts, clients, repositories, services)
   - Template: 14 entity files with complex DSSSL rules
   - Performance: ~110ms (vs ~27ms in OpenJade)
-  - Result: 100% byte-for-byte identical output
+  - Result: 100% byte-for-byte identical output to OpenJade
+
+- ✅ **ADM Test Case** - Administrative module code generation with UTF-8 content
+  - Input: ADM.xml with UTF-8 German characters (ü, ö, etc.)
+  - Output: 9 C# files (5,983 lines total)
+    - ADM/contracts/Interfaces.cs (825 lines)
+    - ADM/module/generated/Context.cs (843 lines)
+    - ADM/client/generated/Client.cs (2,863 lines)
+    - 6 additional module files
+  - Template: Same map.dsl as Icons
+  - libxml2 handles UTF-8 correctly
+  - Result: 100% byte-for-byte identical output to OpenJade (with SP_ENCODING=XML)
 
 **Distribution Status:**
 - ✅ **crates.io**: Published v0.2.0 (Oct 20, 2025)
