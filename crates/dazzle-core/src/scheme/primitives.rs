@@ -3389,7 +3389,17 @@ pub fn prim_data(args: &[Value]) -> PrimitiveResult {
     match &args[0] {
         Value::Node(node) => {
             if let Some(data) = node.data() {
-                Ok(Value::string(data))
+                // OpenJade normalizes whitespace: replace sequences of whitespace
+                // (spaces, tabs, newlines) with a single space, and trim
+                let normalized = data
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                if normalized.is_empty() {
+                    Ok(Value::bool(false))
+                } else {
+                    Ok(Value::string(normalized))
+                }
             } else {
                 Ok(Value::bool(false))
             }
@@ -3397,6 +3407,7 @@ pub fn prim_data(args: &[Value]) -> PrimitiveResult {
         Value::NodeList(nl) => {
             // DSSSL: node property functions can be called on node-lists
             // OpenJade behavior: concatenates data from ALL nodes in the list
+            // and normalizes whitespace (collapses sequences to single space, trims)
             let mut result = String::new();
             let mut current = nl.clone();
 
@@ -3417,7 +3428,13 @@ pub fn prim_data(args: &[Value]) -> PrimitiveResult {
             if result.is_empty() {
                 Ok(Value::bool(false))
             } else {
-                Ok(Value::string(result))
+                // OpenJade normalizes whitespace: replace sequences of whitespace
+                // (spaces, tabs, newlines) with a single space, and trim
+                let normalized = result
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                Ok(Value::string(normalized))
             }
         }
         Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
