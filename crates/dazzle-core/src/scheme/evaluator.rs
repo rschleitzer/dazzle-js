@@ -1498,8 +1498,8 @@ impl Evaluator {
                         let node_val = Value::node(node);
                         let result = self.apply(pred.clone(), vec![node_val])?;
 
-                        // If predicate returns #t, return #t immediately
-                        if let Value::Bool(true) = result {
+                        // If predicate returns a truthy value (anything except #f), return #t immediately
+                        if !matches!(result, Value::Bool(false)) {
                             return Ok(Value::bool(true));
                         }
 
