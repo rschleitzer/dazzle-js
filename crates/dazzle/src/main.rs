@@ -46,13 +46,11 @@ fn main() -> Result<()> {
 fn run(args: Args) -> Result<()> {
     // 1. Load and parse input XML
     info!("Loading XML: {}", args.input.display());
-    let xml_content = fs::read_to_string(&args.input)
-        .with_context(|| format!("Failed to read input file: {}", args.input.display()))?;
 
-    // Parse with base URL so libxml2 can resolve relative DTD paths (e.g., model.dtd)
-    // This is CRITICAL for DTD attribute defaults to work
-    let base_url = args.input.to_str().ok_or_else(|| anyhow::anyhow!("Invalid input path"))?;
-    let grove = LibXml2Grove::parse_with_base_url(&xml_content, base_url, true)
+    // Use parse_file instead of parse_string to ensure proper DTD entity resolution
+    // libxml2 can resolve relative DTD paths and external entities better when parsing from file
+    let input_path = args.input.to_str().ok_or_else(|| anyhow::anyhow!("Invalid input path"))?;
+    let grove = LibXml2Grove::parse_file(input_path, true)
         .map_err(|e| anyhow::anyhow!("Failed to parse XML: {}", e))?;
     let grove_rc = Rc::new(grove);
 

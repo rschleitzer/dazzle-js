@@ -1120,14 +1120,13 @@ pub fn prim_string_length(args: &[Value]) -> PrimitiveResult {
     match &args[0] {
         Value::String(s) => Ok(Value::integer(s.chars().count() as i64)),
         Value::Bool(false) => {
-            // Provide helpful error message for #f
-            eprintln!("DEBUG: string-length received #f");
-            eprintln!("RUST_BACKTRACE=1 to see call stack");
-            Err("string-length: received #f (false) instead of a string. This usually means an attribute or function returned #f when a string was expected. Check your template for missing attributes or failed lookups.".to_string())
+            // Treat #f as empty string (graceful handling)
+            Ok(Value::integer(0))
         }
         Value::Unspecified => {
-            // Provide helpful error message for unspecified
-            Err("string-length: received #<unspecified> instead of a string. This usually happens when a 'case' expression has no matching clause and no 'else'. Add an 'else' clause to your 'case' expression or ensure all possible values are covered.".to_string())
+            // Treat unspecified as empty string (graceful handling)
+            // This happens when case expressions have no matching clause
+            Ok(Value::integer(0))
         }
         _ => Err(format!("string-length: not a string: {:?}", args[0])),
     }
@@ -1172,6 +1171,10 @@ pub fn prim_string_append(args: &[Value]) -> PrimitiveResult {
     for arg in args {
         match arg {
             Value::String(s) => result.push_str(s),
+            Value::Unspecified => {
+                // Treat unspecified as empty string (graceful handling)
+                // This happens when template functions don't explicitly return values
+            }
             _ => return Err(format!("string-append: not a string: {:?}", arg)),
         }
     }
@@ -1193,8 +1196,11 @@ pub fn prim_substring(args: &[Value]) -> PrimitiveResult {
     let s = match &args[0] {
         Value::String(s) => s,
         Value::Bool(false) => {
-            eprintln!("DEBUG: substring called with #f as first argument");
             return Err("substring: first argument is #f (expected string)".to_string());
+        }
+        Value::Unspecified => {
+            // Treat unspecified as empty string (graceful handling)
+            return Ok(Value::string(String::new()));
         }
         _ => return Err(format!("substring: not a string: {:?}", args[0])),
     };
@@ -2974,7 +2980,6 @@ pub fn prim_current_node(args: &[Value]) -> PrimitiveResult {
         .current_node
         .ok_or_else(|| "current-node: no current node set".to_string())?;
 
-    eprintln!("DEBUG: current-node returning node with gi={:?}", node.gi());
     Ok(Value::Node(node))
 }
 
@@ -3093,6 +3098,10 @@ pub fn prim_node_list_to_list(args: &[Value]) -> PrimitiveResult {
             }
 
             Ok(build_list(nl))
+        }
+        Value::Nil => {
+            // Empty list treated as empty node-list
+            Ok(Value::Nil)
         }
         _ => Err(format!("node-list->list: not a node-list: {:?}", args[0])),
     }
@@ -3223,6 +3232,49 @@ pub fn prim_node_list_count(args: &[Value]) -> PrimitiveResult {
     prim_node_list_length(&[unique_nl])
 }
 
+/// (node-list-contains? node-list node) → boolean
+///
+/// Returns #t if the node is in the node-list, #f otherwise.
+/// Uses node equality (same identity) for comparison.
+///
+/// **DSSSL**: Grove primitive (extension)
+pub fn prim_node_list_contains_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("node-list-contains? requires exactly 2 arguments".to_string());
+    }
+
+    let search_node = match &args[1] {
+        Value::Node(n) => n,
+        _ => return Err(format!("node-list-contains?: second argument not a node: {:?}", args[1])),
+    };
+
+    match &args[0] {
+        Value::NodeList(nl) => {
+            // Iterate through the node-list checking for equality
+            let mut index = 0;
+            loop {
+                if let Some(node) = nl.get(index) {
+                    // Check if nodes are equal using node_eq
+                    if node.node_eq(search_node.as_ref().as_ref()) {
+                        return Ok(Value::bool(true));
+                    }
+                    index += 1;
+                } else {
+                    break;
+                }
+            }
+
+            // Not found
+            Ok(Value::bool(false))
+        }
+        Value::Nil => {
+            // Empty list treated as empty node-list
+            Ok(Value::bool(false))
+        }
+        _ => Err(format!("node-list-contains?: first argument not a node-list: {:?}", args[0])),
+    }
+}
+
 /// (node? obj) → boolean
 ///
 /// Returns #t if obj is a node.
@@ -3308,10 +3360,6 @@ pub fn prim_attribute_string(args: &[Value]) -> PrimitiveResult {
             if let Some(value) = node.attribute_string(name) {
                 Ok(Value::string(value))
             } else {
-                if name == "name" {
-                    eprintln!("DEBUG: attribute-string called for 'name' but node has no 'name' attribute");
-                    eprintln!("  Node gi: {:?}", node.gi());
-                }
                 Ok(Value::bool(false))
             }
         }
@@ -3346,6 +3394,10 @@ pub fn prim_children(args: &[Value]) -> PrimitiveResult {
                 // Empty node-list -> empty children
                 Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
             }
+        }
+        Value::Bool(false) | Value::Unspecified => {
+            // Graceful handling: treat #f and unspecified as having no children
+            Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
         }
         _ => Err(format!("children: not a node or node-list: {:?}", args[0])),
     }
@@ -4704,14 +4756,15 @@ pub fn prim_literal(args: &[Value]) -> PrimitiveResult {
 ///
 /// **DSSSL**: Processing primitive
 pub fn prim_sosofo_append(args: &[Value]) -> PrimitiveResult {
-    // Check all arguments are sosofos
+    // Check all arguments are sosofos or unspecified (which we treat as empty sosofo)
     for arg in args {
-        if !matches!(arg, Value::Sosofo) {
+        if !matches!(arg, Value::Sosofo | Value::Unspecified) {
             return Err(format!("sosofo-append: not a sosofo: {:?}", arg));
         }
     }
 
     // Return a sosofo (placeholder for now)
+    // In practice, sosofos are just markers - the actual output happens via backend
     Ok(Value::Sosofo)
 }
 
@@ -5196,6 +5249,7 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("node-list-ref", Value::primitive("node-list-ref", prim_node_list_ref));
     env.define("node-list-reverse", Value::primitive("node-list-reverse", prim_node_list_reverse));
     env.define("node-list->list", Value::primitive("node-list->list", prim_node_list_to_list));
+    env.define("node-list-contains?", Value::primitive("node-list-contains?", prim_node_list_contains_p));
 
     // Node-list utilities (stubs)
     env.define("node-list", Value::primitive("node-list", prim_node_list));
