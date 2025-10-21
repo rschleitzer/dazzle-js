@@ -3103,6 +3103,11 @@ pub fn prim_node_list_to_list(args: &[Value]) -> PrimitiveResult {
             // Empty list treated as empty node-list
             Ok(Value::Nil)
         }
+        Value::Pair(_) => {
+            // Already a regular Scheme list - return as-is
+            // This handles the case where node-list-map returns a regular list
+            Ok(args[0].clone())
+        }
         _ => Err(format!("node-list->list: not a node-list: {:?}", args[0])),
     }
 }
@@ -3271,6 +3276,31 @@ pub fn prim_node_list_contains_p(args: &[Value]) -> PrimitiveResult {
             // Empty list treated as empty node-list
             Ok(Value::bool(false))
         }
+        Value::Pair(_) => {
+            // Regular Scheme list - iterate through it
+            let mut current = args[0].clone();
+            loop {
+                match current {
+                    Value::Nil => return Ok(Value::bool(false)),
+                    Value::Pair(ref p) => {
+                        let (car, cdr) = {
+                            let pair_data = p.borrow();
+                            (pair_data.car.clone(), pair_data.cdr.clone())
+                        };
+
+                        // Check if car is the node we're looking for
+                        if let Value::Node(ref n) = car {
+                            if n.as_ref().node_eq(search_node.as_ref().as_ref()) {
+                                return Ok(Value::bool(true));
+                            }
+                        }
+                        // Continue with cdr
+                        current = cdr;
+                    }
+                    _ => return Err(format!("node-list-contains?: malformed list: {:?}", current)),
+                }
+            }
+        }
         _ => Err(format!("node-list-contains?: first argument not a node-list: {:?}", args[0])),
     }
 }
@@ -3305,6 +3335,22 @@ pub fn prim_gi(args: &[Value]) -> PrimitiveResult {
                 Ok(Value::string(gi))
             } else {
                 Ok(Value::bool(false))
+            }
+        }
+        Value::NodeList(nl) => {
+            // Handle single-element node-lists (OpenJade compatibility)
+            if nl.length() == 1 {
+                if let Some(node) = nl.first() {
+                    if let Some(gi) = node.gi() {
+                        Ok(Value::string(gi))
+                    } else {
+                        Ok(Value::bool(false))
+                    }
+                } else {
+                    Ok(Value::bool(false))
+                }
+            } else {
+                Err(format!("gi: node-list must have exactly 1 element, got {}", nl.length()))
             }
         }
         Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
@@ -3361,6 +3407,22 @@ pub fn prim_attribute_string(args: &[Value]) -> PrimitiveResult {
                 Ok(Value::string(value))
             } else {
                 Ok(Value::bool(false))
+            }
+        }
+        Value::NodeList(nl) => {
+            // Handle single-element node-lists (OpenJade compatibility)
+            if nl.length() == 1 {
+                if let Some(node) = nl.first() {
+                    if let Some(value) = node.attribute_string(name) {
+                        Ok(Value::string(value))
+                    } else {
+                        Ok(Value::bool(false))
+                    }
+                } else {
+                    Ok(Value::bool(false))
+                }
+            } else {
+                Err(format!("attribute-string: node-list must have exactly 1 element, got {}", nl.length()))
             }
         }
         Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
@@ -4153,8 +4215,14 @@ pub fn prim_node_list(_args: &[Value]) -> PrimitiveResult {
 }
 
 /// (node-list-map proc node-list) → list
+///
+/// Applies proc to each node in node-list and returns a list of the results.
+/// Unlike map, this returns a regular list, not a node-list.
+///
+/// **DSSSL**: Grove primitive
+/// **NOTE**: Implemented as a special form in the evaluator
 pub fn prim_node_list_map(_args: &[Value]) -> PrimitiveResult {
-    Ok(Value::Nil) // Stub
+    Err("node-list-map should be handled as a special form in the evaluator".to_string())
 }
 
 /// (node-property prop-name node) → value
@@ -4246,8 +4314,73 @@ pub fn prim_node_list_eq(args: &[Value]) -> PrimitiveResult {
 // =============================================================================
 
 /// (first-sibling? node) → boolean
-pub fn prim_first_sibling_p(_args: &[Value]) -> PrimitiveResult {
-    Ok(Value::bool(false)) // Stub
+///
+/// Returns #t if the node is the first sibling with the same element name.
+/// If no argument is provided, uses current-node.
+///
+/// **DSSSL**: Grove primitive
+pub fn prim_first_sibling_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() > 1 {
+        return Err("first-sibling? requires 0 or 1 arguments".to_string());
+    }
+
+    // Get the node to check
+    let node = if args.is_empty() {
+        // Use current-node if no argument provided
+        let ctx = crate::scheme::evaluator::get_evaluator_context()
+            .ok_or_else(|| "first-sibling?: no evaluator context available".to_string())?;
+        ctx.current_node
+            .ok_or_else(|| "first-sibling?: no current node set".to_string())?
+    } else {
+        match &args[0] {
+            Value::Node(n) => n.clone(),
+            Value::NodeList(nl) => {
+                // Single-element node-list
+                if nl.length() != 1 {
+                    return Err("first-sibling?: argument must be a single node".to_string());
+                }
+                if let Some(n) = nl.first() {
+                    std::rc::Rc::new(n)
+                } else {
+                    return Err("first-sibling?: empty node-list".to_string());
+                }
+            }
+            _ => return Err(format!("first-sibling?: not a node: {:?}", args[0])),
+        }
+    };
+
+    // Get the node's GI (element name)
+    let gi = match node.gi() {
+        Some(g) => g,
+        None => return Ok(Value::bool(true)), // Non-elements are considered first siblings
+    };
+
+    // Get parent to find all siblings
+    let parent = match node.parent() {
+        Some(p) => p,
+        None => return Ok(Value::bool(true)), // Root node is always first sibling
+    };
+
+    // Check all siblings before this node
+    let siblings = parent.children();
+    for i in 0..siblings.length() {
+        if let Some(sibling) = siblings.get(i) {
+            // If we found ourselves, we're the first sibling with this GI
+            if sibling.node_eq(node.as_ref().as_ref()) {
+                return Ok(Value::bool(true));
+            }
+
+            // If we found an earlier sibling with the same GI, we're not first
+            if let Some(sibling_gi) = sibling.gi() {
+                if sibling_gi == gi {
+                    return Ok(Value::bool(false));
+                }
+            }
+        }
+    }
+
+    // Should not reach here, but treat as first sibling
+    Ok(Value::bool(true))
 }
 
 /// (last-sibling? node) → boolean

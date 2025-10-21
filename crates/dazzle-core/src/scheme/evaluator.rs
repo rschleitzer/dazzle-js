@@ -397,6 +397,7 @@ impl Evaluator {
                 "map" => self.eval_map(args, env),
                 "for-each" => self.eval_for_each(args, env),
                 "node-list-filter" => self.eval_node_list_filter(args, env),
+                "node-list-map" => self.eval_node_list_map(args, env),
                 "node-list-some?" => self.eval_node_list_some(args, env),
                 "load" => self.eval_load(args, env),
 
@@ -1413,6 +1414,61 @@ impl Evaluator {
             }
             _ => Err(EvalError::new(format!("node-list-filter: second argument not a node-list: {:?}", node_list_val))),
         }
+    }
+
+    /// (node-list-map proc node-list) → list
+    ///
+    /// Applies proc to each node in node-list and returns a regular Scheme list of the results.
+    /// Unlike node-list-filter which returns a node-list, this returns a regular list.
+    ///
+    /// DSSSL: Maps a procedure over a node-list, returning a list (not a node-list).
+    fn eval_node_list_map(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+        if args_vec.len() != 2 {
+            return Err(EvalError::new("node-list-map requires exactly 2 arguments".to_string()));
+        }
+
+        // Evaluate the procedure
+        let proc = self.eval_inner(args_vec[0].clone(), env.clone())?;
+
+        // Evaluate the node-list
+        let node_list_val = self.eval_inner(args_vec[1].clone(), env.clone())?;
+
+        // Handle both single nodes and node-lists
+        let mut result_vec = Vec::new();
+
+        match node_list_val {
+            Value::Node(ref n) => {
+                // Single node - apply proc and return single-element list
+                let node_val = Value::node(n.as_ref().clone_node());
+                let result = self.apply(proc, vec![node_val])?;
+                result_vec.push(result);
+            }
+            Value::NodeList(ref nl) => {
+                // Iterate through the node-list
+                let mut index = 0;
+                loop {
+                    if let Some(node) = nl.get(index) {
+                        // Apply procedure to this node
+                        let node_val = Value::node(node);
+                        let result = self.apply(proc.clone(), vec![node_val])?;
+                        result_vec.push(result);
+                        index += 1;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            _ => return Err(EvalError::new(format!("node-list-map: second argument must be a node or node-list: {:?}", node_list_val))),
+        }
+
+        // Convert result vector to Scheme list
+        let mut result_list = Value::Nil;
+        for elem in result_vec.into_iter().rev() {
+            result_list = Value::cons(elem, result_list);
+        }
+
+        Ok(result_list)
     }
 
     /// (node-list-some? predicate node-list)
