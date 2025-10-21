@@ -128,6 +128,9 @@ pub struct ProcessingMode {
     /// In OpenJade, rules are stored in intrusive linked lists and indexed lazily.
     /// We use a simple Vec for now - can optimize later with HashMap if needed.
     pub rules: Vec<ConstructionRule>,
+
+    /// Default construction rule (fallback when no specific rule matches)
+    pub default_rule: Option<Value>,
 }
 
 impl ProcessingMode {
@@ -135,12 +138,18 @@ impl ProcessingMode {
     pub fn new() -> Self {
         ProcessingMode {
             rules: Vec::new(),
+            default_rule: None,
         }
     }
 
     /// Add a construction rule
     pub fn add_rule(&mut self, element_name: String, expr: Value) {
         self.rules.push(ConstructionRule { element_name, expr });
+    }
+
+    /// Add a default construction rule
+    pub fn add_default_rule(&mut self, expr: Value) {
+        self.default_rule = Some(expr);
     }
 
     /// Find matching rule for an element
@@ -294,11 +303,13 @@ impl Evaluator {
             // Rule found - evaluate the construction expression
             // The expression should return a sosofo (in practice, it evaluates to a string or calls primitives)
             self.eval(rule.expr.clone(), env)
+        } else if let Some(ref default_expr) = self.processing_mode.default_rule {
+            // No specific rule found - use default rule
+            self.eval(default_expr.clone(), env)
         } else {
-            // No rule found - default behavior is to process children
-            // This is implemented by the process-children primitive
-            // For now, return Unspecified (template should call process-children explicitly)
-            Ok(Value::Unspecified)
+            // No rule found (and no default) - OpenJade's implicit default behavior:
+            // Process children automatically (DSSSL §10.1.5)
+            self.eval_process_children(env)
         }
     }
 
@@ -406,6 +417,7 @@ impl Evaluator {
                 "declare-flow-object-class" => self.eval_declare_flow_object_class(args, env),
                 "declare-characteristic" => self.eval_declare_characteristic(args, env),
                 "element" => self.eval_element(args, env),
+                "default" => self.eval_default(args, env),
                 "process-children" => self.eval_process_children(env),
                 "make" => self.eval_make(args, env),
 
@@ -648,6 +660,26 @@ impl Evaluator {
         // Second argument is the construction expression (NOT evaluated yet!)
         // Store it for later evaluation during processing
         self.processing_mode.add_rule(element_name.to_string(), args_vec[1].clone());
+
+        Ok(Value::Unspecified)
+    }
+
+    /// DSSSL default construction rule
+    /// Syntax: (default construction-expression)
+    ///
+    /// Defines a default rule that applies to all elements that don't have a specific rule.
+    /// This is the catch-all rule.
+    fn eval_default(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+
+        if args_vec.is_empty() {
+            return Err(EvalError::new(
+                "default requires at least 1 argument (construction-expression)".to_string(),
+            ));
+        }
+
+        // Store the default rule (use empty string as the key for default)
+        self.processing_mode.add_default_rule(args_vec[0].clone());
 
         Ok(Value::Unspecified)
     }

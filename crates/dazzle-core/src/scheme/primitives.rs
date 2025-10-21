@@ -3047,6 +3047,10 @@ pub fn prim_node_list_length(args: &[Value]) -> PrimitiveResult {
             // Now implemented with real grove support
             Ok(Value::integer(nl.length() as i64))
         }
+        Value::Node(_) => {
+            // DSSSL: A single node can be treated as a single-element node-list
+            Ok(Value::integer(1))
+        }
         _ => Err(format!("node-list-length: not a node-list: {:?}", args[0])),
     }
 }
@@ -3077,6 +3081,53 @@ pub fn prim_node_list_first(args: &[Value]) -> PrimitiveResult {
             Ok(args[0].clone())
         }
         _ => Err(format!("node-list-first: not a node-list: {:?}", args[0])),
+    }
+}
+
+/// (node-list-last nl) → node
+///
+/// Returns the last node in a node-list.
+/// Returns #f if the node-list is empty.
+///
+/// **DSSSL**: Grove primitive (OpenJade extension)
+pub fn prim_node_list_last(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("node-list-last requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::NodeList(nl) => {
+            let len = nl.length();
+            if len == 0 {
+                Ok(Value::bool(false))
+            } else {
+                // Get the last element by index (length - 1)
+                let mut current_nl = nl.clone();
+                let mut last_node = None;
+
+                // Iterate through the node-list to find the last node
+                while let Some(node) = current_nl.first() {
+                    last_node = Some(node);
+                    let rest = current_nl.rest();
+                    if rest.is_empty() {
+                        break;
+                    }
+                    current_nl = std::rc::Rc::new(rest);
+                }
+
+                if let Some(node) = last_node {
+                    Ok(Value::node(node))
+                } else {
+                    Ok(Value::bool(false))
+                }
+            }
+        }
+        Value::Node(_) => {
+            // DSSSL: A single node can be treated as a single-element node-list
+            // The last element is the node itself
+            Ok(args[0].clone())
+        }
+        _ => Err(format!("node-list-last: not a node-list: {:?}", args[0])),
     }
 }
 
@@ -3246,6 +3297,15 @@ pub fn prim_node_list_remove_duplicates(args: &[Value]) -> PrimitiveResult {
             }
 
             Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(unique_nodes))))
+        }
+        Value::Node(_) => {
+            // DSSSL: A single node can be treated as a single-element node-list
+            // A single node has no duplicates, so return it as a single-element node-list
+            Ok(args[0].clone())
+        }
+        Value::Bool(false) => {
+            // #f → empty node-list (graceful handling)
+            Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
         }
         _ => Err(format!("node-list-remove-duplicates: not a node-list: {:?}", args[0])),
     }
@@ -3617,16 +3677,79 @@ pub fn prim_parent(args: &[Value]) -> PrimitiveResult {
         return Err("parent requires exactly 1 argument".to_string());
     }
 
-    match &args[0] {
-        Value::Node(node) => {
-            if let Some(parent) = node.parent() {
-                Ok(Value::node(parent))
+    let node: Box<dyn crate::grove::Node> = match &args[0] {
+        Value::Node(n) => n.clone_node(),
+        Value::NodeList(nl) => {
+            // DSSSL: node property functions can operate on node-lists (first node)
+            if let Some(n) = nl.first() {
+                n
             } else {
-                Ok(Value::bool(false))
+                return Ok(Value::bool(false)); // Empty node-list -> #f
             }
         }
+        Value::Bool(false) => return Ok(Value::bool(false)), // #f → #f (graceful handling)
+        _ => return Err(format!("parent: not a node or node-list: {:?}", args[0])),
+    };
+
+    if let Some(parent) = node.parent() {
+        Ok(Value::node(parent))
+    } else {
+        Ok(Value::bool(false))
+    }
+}
+
+/// (tree-root node) → node
+///
+/// Returns the root node of the tree containing the given node.
+/// Walks up the parent chain until reaching the topmost node (which has no parent).
+///
+/// **DSSSL**: Grove property
+pub fn prim_tree_root(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("tree-root requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::Node(node) => {
+            // Walk up parent chain until we find the root
+            let mut current = node.clone_node();
+            while let Some(parent) = current.parent() {
+                current = parent;
+            }
+            Ok(Value::node(current))
+        }
         Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
-        _ => Err(format!("parent: not a node: {:?}", args[0])),
+        _ => Err(format!("tree-root: not a node: {:?}", args[0])),
+    }
+}
+
+/// (ancestors node) → node-list
+///
+/// Returns a node-list containing all ancestors of the given node,
+/// from the immediate parent up to (but not including) the root.
+/// The node-list is ordered from nearest to farthest ancestor.
+///
+/// **DSSSL**: Grove primitive (OpenJade extension)
+pub fn prim_ancestors(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("ancestors requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::Node(node) => {
+            // Collect all ancestors by walking up the parent chain
+            let mut ancestor_nodes = Vec::new();
+            let mut current = node.clone_node();
+
+            while let Some(parent) = current.parent() {
+                ancestor_nodes.push(parent.clone_node());
+                current = parent;
+            }
+
+            Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(ancestor_nodes))))
+        }
+        Value::Bool(false) => Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))), // #f → empty node-list (graceful handling)
+        _ => Err(format!("ancestors: not a node: {:?}", args[0])),
     }
 }
 
@@ -5714,6 +5837,8 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("children", Value::primitive("children", prim_children));
     env.define("select-children", Value::primitive("select-children", prim_select_children));
     env.define("parent", Value::primitive("parent", prim_parent));
+    env.define("tree-root", Value::primitive("tree-root", prim_tree_root));
+    env.define("ancestors", Value::primitive("ancestors", prim_ancestors));
 
     // Node navigation (stubs for now)
     env.define("ancestor", Value::primitive("ancestor", prim_ancestor));
@@ -5731,6 +5856,7 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("node-list-length", Value::primitive("node-list-length", prim_node_list_length));
     env.define("node-list-remove-duplicates", Value::primitive("node-list-remove-duplicates", prim_node_list_remove_duplicates));
     env.define("node-list-first", Value::primitive("node-list-first", prim_node_list_first));
+    env.define("node-list-last", Value::primitive("node-list-last", prim_node_list_last));
     env.define("node-list-rest", Value::primitive("node-list-rest", prim_node_list_rest));
     env.define("node-list-ref", Value::primitive("node-list-ref", prim_node_list_ref));
     env.define("node-list-reverse", Value::primitive("node-list-reverse", prim_node_list_reverse));

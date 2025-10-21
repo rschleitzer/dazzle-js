@@ -247,8 +247,9 @@ fn resolve_xml_template(
     for line in xml_content.lines() {
         let line = line.trim();
 
-        // Skip XML/DOCTYPE lines
-        if line.starts_with("<!") || line.starts_with("<?") || line.starts_with("<") {
+        // Skip XML/DOCTYPE lines and DOCTYPE closing bracket
+        if line.starts_with("<!") || line.starts_with("<?") || line.starts_with("<")
+            || line.starts_with("]>") || line == "]" || line.is_empty() {
             continue;
         }
 

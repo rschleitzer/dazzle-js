@@ -524,6 +524,18 @@ impl Tokenizer {
             "newline" => Ok('\n'),
             "tab" => Ok('\t'),
             "return" => Ok('\r'),
+            // OpenJade Unicode character literal: #\U-XXXX (e.g., #\U-00E4 for ä)
+            // Format: U-XXXX where XXXX is hexadecimal Unicode code point
+            s if s.starts_with("U-") => {
+                let hex_str = &s[2..]; // Skip "U-"
+                u32::from_str_radix(hex_str, 16)
+                    .ok()
+                    .and_then(std::char::from_u32)
+                    .ok_or_else(|| ParseError::new(
+                        format!("Invalid Unicode character literal: #\\{}", name),
+                        start_pos,
+                    ))
+            }
             // Accept any single Unicode character (handles UTF-8 multi-byte sequences)
             // OpenJade accepts UTF-8 characters in character literals for define-language
             s if s.chars().count() == 1 => Ok(s.chars().next().unwrap()),
@@ -532,6 +544,53 @@ impl Tokenizer {
                 start_pos,
             )),
         }
+    }
+
+    /// Parse a CDATA string literal: <![CDATA[...]]>
+    /// This is an OpenJade extension for multi-line string literals
+    /// The content between <![CDATA[ and ]]> is returned as a string token
+    fn parse_cdata_string(&mut self, start_pos: Position) -> ParseResult<Token> {
+        // Skip "<![CDATA["
+        for _ in 0..9 {
+            self.next_char();
+        }
+
+        let mut content = String::new();
+
+        // Read until we find "]]>"
+        loop {
+            match self.peek_char() {
+                None => {
+                    return Err(ParseError::new(
+                        "Unclosed CDATA section: missing ]]>".to_string(),
+                        start_pos,
+                    ));
+                }
+                Some(']') => {
+                    // Check if this is the closing ]]>
+                    if self.pos + 2 < self.input.len()
+                        && self.input[self.pos] == ']'
+                        && self.input[self.pos + 1] == ']'
+                        && self.input[self.pos + 2] == '>'
+                    {
+                        // Skip ]]>
+                        self.next_char(); // ]
+                        self.next_char(); // ]
+                        self.next_char(); // >
+                        break;
+                    } else {
+                        content.push(']');
+                        self.next_char();
+                    }
+                }
+                Some(ch) => {
+                    content.push(ch);
+                    self.next_char();
+                }
+            }
+        }
+
+        Ok(Token::String(content))
     }
 
     /// Get the next token
@@ -667,6 +726,22 @@ impl Tokenizer {
                 } else {
                     self.next_char();
                     Ok(Token::Dot)
+                }
+            }
+
+            Some('<') => {
+                // Check for CDATA section: <![CDATA[...]]>
+                // This is an OpenJade extension for multi-line string literals
+                let cdata_prefix = ['<', '!', '[', 'C', 'D', 'A', 'T', 'A', '['];
+                let is_cdata = self.pos + cdata_prefix.len() <= self.input.len()
+                    && self.input[self.pos..self.pos + cdata_prefix.len()] == cdata_prefix;
+
+                if is_cdata {
+                    self.parse_cdata_string(start_pos)
+                } else {
+                    // Regular < symbol
+                    let sym = self.parse_symbol();
+                    Ok(Token::Symbol(sym))
                 }
             }
 
@@ -953,6 +1028,31 @@ mod tests {
             tok.next_token().unwrap(),
             Token::String("with\nnewline".to_string())
         );
+    }
+
+    #[test]
+    fn test_tokenize_cdata() {
+        // Test CDATA section parsing (OpenJade extension)
+        let mut tok = Tokenizer::new(r#"<![CDATA[<!DOCTYPE HTML>]]>"#);
+        assert_eq!(
+            tok.next_token().unwrap(),
+            Token::String("<!DOCTYPE HTML>".to_string())
+        );
+
+        // Test CDATA with newlines
+        let mut tok = Tokenizer::new("<![CDATA[\nLine 1\nLine 2\n]]>");
+        assert_eq!(
+            tok.next_token().unwrap(),
+            Token::String("\nLine 1\nLine 2\n".to_string())
+        );
+
+        // Test CDATA in expression context
+        let mut tok = Tokenizer::new("(define x <![CDATA[test]]>)");
+        assert_eq!(tok.next_token().unwrap(), Token::LeftParen);
+        assert_eq!(tok.next_token().unwrap(), Token::Symbol("define".to_string()));
+        assert_eq!(tok.next_token().unwrap(), Token::Symbol("x".to_string()));
+        assert_eq!(tok.next_token().unwrap(), Token::String("test".to_string()));
+        assert_eq!(tok.next_token().unwrap(), Token::RightParen);
     }
 
     #[test]
