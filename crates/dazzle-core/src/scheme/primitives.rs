@@ -4456,8 +4456,71 @@ pub fn prim_first_sibling_p(args: &[Value]) -> PrimitiveResult {
 }
 
 /// (last-sibling? node) → boolean
-pub fn prim_last_sibling_p(_args: &[Value]) -> PrimitiveResult {
-    Ok(Value::bool(false)) // Stub
+///
+/// Returns #t if the node is the last sibling among nodes with the same element name.
+/// If called with no arguments, uses the current node from the context.
+///
+/// **DSSSL**: Grove primitive
+/// **OpenJade**: Checks if node is last among siblings with same GI
+pub fn prim_last_sibling_p(args: &[Value]) -> PrimitiveResult {
+    if args.len() > 1 {
+        return Err("last-sibling? requires 0 or 1 arguments".to_string());
+    }
+
+    let node = if args.is_empty() {
+        // Use current node (from context)
+        return Err("last-sibling? with no arguments requires current-node context (not yet implemented)".to_string());
+    } else {
+        match &args[0] {
+            Value::Node(n) => n.clone(),
+            Value::NodeList(nl) => {
+                if let Some(node) = nl.first() {
+                    if nl.length() != 1 {
+                        return Err(format!("last-sibling?: node-list must have exactly 1 element, got {}", nl.length()));
+                    }
+                    std::rc::Rc::new(node)
+                } else {
+                    return Ok(Value::bool(false)); // Empty node-list
+                }
+            }
+            _ => return Err("last-sibling? requires node or singleton node-list".to_string()),
+        }
+    };
+
+    // Get parent and check if this node is the last child with the same element name
+    if let Some(parent) = node.parent() {
+        let my_gi = node.gi();
+        let siblings = parent.children();
+
+        // Find the last sibling with the same GI by iterating through all siblings
+        let mut last_with_same_gi: Option<Box<dyn crate::grove::Node>> = None;
+        let mut current_nl = siblings;
+
+        loop {
+            if let Some(child) = current_nl.first() {
+                if child.gi() == my_gi {
+                    last_with_same_gi = Some(child);
+                }
+                // Get the rest of the node list
+                current_nl = current_nl.rest();
+            } else {
+                break;
+            }
+        }
+
+        // Check if we are that last sibling
+        if let Some(last) = last_with_same_gi {
+            // Compare node identities using the ID (which should be unique for each node)
+            let my_id = node.id();
+            let last_id = last.id();
+            Ok(Value::bool(my_id == last_id))
+        } else {
+            Ok(Value::bool(false))
+        }
+    } else {
+        // No parent - can't determine siblings
+        Ok(Value::bool(false))
+    }
 }
 
 /// (child-number node) → integer
