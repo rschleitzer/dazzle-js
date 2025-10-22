@@ -175,10 +175,33 @@ See [PRIMITIVES.md](PRIMITIVES.md) for complete reference.
 
 ## Known Limitations
 
-### Current Limitations (v0.1)
-- **Flow objects**: Only basic `literal` support (full FOT implementation in future)
-- **File writing**: Via backend buffer, not full `make entity` syntax yet
-- **Processing modes**: Not yet implemented (planned for v0.2)
+### Stack Overflow on Deep Recursion (v0.3)
+
+⚠️ **Dazzle does not yet implement Tail Call Optimization (TCO)**
+
+This means deeply recursive functions will overflow the stack at ~10,000 calls:
+
+```scheme
+;; This will stack overflow on large inputs
+(define (countdown n)
+  (if (= n 0)
+      'done
+      (countdown (- n 1))))
+
+(countdown 10000)  ;; ❌ Stack overflow!
+```
+
+**Why this matters:**
+- Processing XML documents with >10,000 nested elements
+- Recursive list processing on large datasets (>10,000 items)
+- Deep iterative loops using named `let`
+
+**Workarounds:**
+- Use `map`, `for-each` for list processing (implemented iteratively)
+- Keep XML nesting depth reasonable (<5,000 levels)
+- Avoid deeply recursive algorithms
+
+**Technical background:** OpenJade's `-G` (debug mode) flag disables TCO to preserve full stack traces on errors. Dazzle currently always provides stack traces (like OpenJade with `-G`), but doesn't have TCO yet. Most real-world DSSSL templates work fine within these limits.
 
 ## Testing
 
