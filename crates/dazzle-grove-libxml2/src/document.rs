@@ -70,7 +70,6 @@ impl XmlDocument {
         const XML_PARSE_DTDLOAD: i32 = 4;    // Load external DTD
         const XML_PARSE_DTDATTR: i32 = 8;    // Apply DTD default attributes (CRITICAL!)
         const XML_PARSE_DTDVALID: i32 = 16;  // Validate with DTD
-        const XML_PARSE_NONET: i32 = 2048;   // Forbid network access (security)
 
         // Build parser flags
         // ALWAYS load DTD, apply defaults, and substitute entities (required for DSSSL/OpenJade compatibility)
@@ -88,6 +87,7 @@ impl XmlDocument {
         let encoding = ptr::null(); // Auto-detect encoding
 
         // Call libxml2 directly to parse with DTD options
+        // SAFETY: We're calling libxml2 C functions with properly constructed C strings
         let doc_ptr = unsafe {
             bindings::xmlReadMemory(
                 xml_cstring.as_ptr() as *const c_char,
@@ -103,7 +103,7 @@ impl XmlDocument {
         }
 
         // Wrap in libxml crate's Document (takes ownership, will call xmlFreeDoc on drop)
-        let doc = unsafe { Document::new_ptr(doc_ptr) };
+        let doc = Document::new_ptr(doc_ptr);
 
         Ok(XmlDocument { doc })
     }
@@ -125,7 +125,6 @@ impl XmlDocument {
         const XML_PARSE_DTDLOAD: i32 = 4;
         const XML_PARSE_DTDATTR: i32 = 8;
         const XML_PARSE_DTDVALID: i32 = 16;
-        const XML_PARSE_NONET: i32 = 2048;
 
         // NOTE: Removed XML_PARSE_NONET to allow local DTD file access
         let mut flags = XML_PARSE_DTDLOAD | XML_PARSE_DTDATTR | XML_PARSE_NOENT | XML_PARSE_RECOVER;
@@ -152,7 +151,7 @@ impl XmlDocument {
         }
 
         // Wrap in libxml crate's Document
-        let doc = unsafe { Document::new_ptr(doc_ptr) };
+        let doc = Document::new_ptr(doc_ptr);
 
         Ok(XmlDocument { doc })
     }
@@ -268,7 +267,7 @@ mod tests {
 
     #[test]
     fn test_dtd_defaults_on_nested_elements() {
-        use dazzle_core::grove::{Node, NodeList};
+        use dazzle_core::grove::Node;
         use std::fs;
 
         // Create DTD similar to model.dtd with nested elements
@@ -296,9 +295,9 @@ mod tests {
         let root = doc.root_element().unwrap();
 
         // Navigate to interface element
-        let mut children = root.children();
+        let children = root.children();
         let interfaces = children.first().unwrap();
-        let mut iface_children = interfaces.children();
+        let iface_children = interfaces.children();
         let interface = iface_children.first().unwrap();
 
         // Check explicit attributes

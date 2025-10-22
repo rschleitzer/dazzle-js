@@ -77,24 +77,76 @@ fn clear_evaluator_context() {
 }
 
 // =============================================================================
+// Call Stack (for error reporting)
+// =============================================================================
+
+use crate::scheme::value::SourceInfo;
+
+/// A call stack frame
+///
+/// Tracks function calls for error reporting with source locations.
+#[derive(Debug, Clone)]
+pub struct CallFrame {
+    /// Function name (or "<lambda>" for anonymous functions)
+    pub function_name: String,
+    /// Source location (file:line:column)
+    pub source: Option<SourceInfo>,
+}
+
+impl CallFrame {
+    pub fn new(function_name: String, source: Option<SourceInfo>) -> Self {
+        CallFrame {
+            function_name,
+            source,
+        }
+    }
+}
+
+// =============================================================================
 // Evaluation Error
 // =============================================================================
 
-/// Evaluation error
+/// Evaluation error with call stack
 #[derive(Debug, Clone)]
 pub struct EvalError {
     pub message: String,
+    pub call_stack: Vec<CallFrame>,
 }
 
 impl EvalError {
     pub fn new(message: String) -> Self {
-        EvalError { message }
+        EvalError {
+            message,
+            call_stack: Vec::new(),
+        }
+    }
+
+    /// Create error with call stack
+    pub fn with_stack(message: String, call_stack: Vec<CallFrame>) -> Self {
+        EvalError {
+            message,
+            call_stack,
+        }
     }
 }
 
 impl std::fmt::Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Eval error: {}", self.message)
+        writeln!(f, "Eval error: {}", self.message)?;
+
+        if !self.call_stack.is_empty() {
+            writeln!(f, "\nCall stack:")?;
+            for frame in &self.call_stack {
+                if let Some(ref source) = frame.source {
+                    // VS Code clickable format: file:line:column
+                    writeln!(f, "  at {} ({})", frame.function_name, source)?;
+                } else {
+                    writeln!(f, "  at {}", frame.function_name)?;
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -197,6 +249,17 @@ pub struct Evaluator {
     /// This is used by the `make` special form to write flow objects to output.
     /// Wrapped in Rc<RefCell<>> to allow shared mutable access.
     backend: Option<Rc<RefCell<dyn FotBuilder>>>,
+
+    /// Call stack for error reporting
+    ///
+    /// Tracks function calls with their source locations.
+    /// Used to generate helpful error messages with clickable file paths.
+    call_stack: Vec<CallFrame>,
+
+    /// Current source file being evaluated (for error reporting)
+    ///
+    /// Set when loading templates, used to provide context in errors.
+    current_source_file: Option<String>,
 }
 
 impl Evaluator {
@@ -207,6 +270,8 @@ impl Evaluator {
             current_node: None,
             processing_mode: ProcessingMode::new(),
             backend: None,
+            call_stack: Vec::new(),
+            current_source_file: None,
         }
     }
 
@@ -217,7 +282,34 @@ impl Evaluator {
             current_node: None,
             processing_mode: ProcessingMode::new(),
             backend: None,
+            call_stack: Vec::new(),
+            current_source_file: None,
         }
+    }
+
+    /// Set the current source file (for error reporting)
+    pub fn set_source_file(&mut self, file: String) {
+        self.current_source_file = Some(file);
+    }
+
+    /// Get the current source file
+    pub fn source_file(&self) -> Option<&str> {
+        self.current_source_file.as_deref()
+    }
+
+    /// Push a call frame onto the stack
+    fn push_call_frame(&mut self, function_name: String, source: Option<SourceInfo>) {
+        self.call_stack.push(CallFrame::new(function_name, source));
+    }
+
+    /// Pop a call frame from the stack
+    fn pop_call_frame(&mut self) {
+        self.call_stack.pop();
+    }
+
+    /// Create an error with the current call stack
+    fn error_with_stack(&self, message: String) -> EvalError {
+        EvalError::with_stack(message, self.call_stack.clone())
     }
 
     /// Set the backend
@@ -373,7 +465,7 @@ impl Evaluator {
             // Symbols: variable lookup
             Value::Symbol(ref name) => env
                 .lookup(name)
-                .ok_or_else(|| EvalError::new(format!("Undefined variable: {}", name))),
+                .ok_or_else(|| self.error_with_stack(format!("Undefined variable: {}", name))),
 
             // Keywords are self-evaluating
             Value::Keyword(_) => Ok(expr),
@@ -533,18 +625,49 @@ impl Evaluator {
                 let (name_val, params) = self.list_car_cdr(&args_vec[0])?;
 
                 if let Value::Symbol(ref name) = name_val {
-                    // Build lambda: (lambda params body...)
-                    let lambda_body = args_vec[1..].to_vec();
-                    let mut body_list = Value::Nil;
-                    for expr in lambda_body.into_iter().rev() {
-                        body_list = Value::cons(expr, body_list);
+                    // Extract parameter names
+                    let params_vec = if params.is_nil() {
+                        Vec::new()
+                    } else {
+                        self.list_to_vec(params)?
+                    };
+
+                    let mut param_names = Vec::new();
+                    for param in params_vec {
+                        if let Value::Symbol(ref pname) = param {
+                            param_names.push(pname.to_string());
+                        } else {
+                            return Err(EvalError::new(format!(
+                                "Parameter must be a symbol, got: {:?}",
+                                param
+                            )));
+                        }
                     }
-                    let lambda_expr = Value::cons(
-                        Value::symbol("lambda"),
-                        Value::cons(params, body_list),
+
+                    // Build body
+                    let body = if args_vec.len() == 2 {
+                        args_vec[1].clone()
+                    } else {
+                        let mut body_list = Value::Nil;
+                        for expr in args_vec[1..].iter().rev() {
+                            body_list = Value::cons(expr.clone(), body_list);
+                        }
+                        Value::cons(Value::symbol("begin"), body_list)
+                    };
+
+                    // Create lambda with function name and source info
+                    let source_info = self.current_source_file.as_ref().map(|file| {
+                        use crate::scheme::parser::Position;
+                        SourceInfo::new(file.clone(), Position::new())
+                    });
+                    let lambda_value = Value::lambda_with_source(
+                        param_names,
+                        body,
+                        env.clone(),
+                        source_info,
+                        Some(name.to_string()),
                     );
 
-                    let lambda_value = self.eval_inner(lambda_expr, env.clone())?;
                     env.define(name, lambda_value);
                     Ok(Value::Unspecified)
                 } else {
@@ -639,7 +762,7 @@ impl Evaluator {
     ///
     /// Stores the rule in processing mode WITHOUT evaluating the body.
     /// The body will be evaluated later during tree processing when a matching element is found.
-    fn eval_element(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+    fn eval_element(&mut self, args: Value, _env: Gc<Environment>) -> EvalResult {
         let args_vec = self.list_to_vec(args)?;
 
         if args_vec.len() < 2 {
@@ -669,7 +792,7 @@ impl Evaluator {
     ///
     /// Defines a default rule that applies to all elements that don't have a specific rule.
     /// This is the catch-all rule.
-    fn eval_default(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+    fn eval_default(&mut self, args: Value, _env: Gc<Environment>) -> EvalResult {
         let args_vec = self.list_to_vec(args)?;
 
         if args_vec.is_empty() {
@@ -919,7 +1042,12 @@ impl Evaluator {
         };
 
         // Create lambda closure capturing current environment
-        Ok(Value::lambda(param_names, body, env))
+        // Use current source file for error reporting (line numbers would require parser changes)
+        let source_info = self.current_source_file.as_ref().map(|file| {
+            use crate::scheme::parser::Position;
+            SourceInfo::new(file.clone(), Position::new())
+        });
+        Ok(Value::lambda_with_source(param_names, body, env, source_info, None))
     }
 
     /// (let ((var val)...) body...)
@@ -1669,18 +1797,26 @@ impl Evaluator {
     fn apply(&mut self, proc: Value, args: Vec<Value>) -> EvalResult {
         if let Value::Procedure(ref p) = proc {
             match &**p {
-                Procedure::Primitive { func, .. } => {
-                    func(&args).map_err(|e| EvalError::new(e))
+                Procedure::Primitive { name, func } => {
+                    // Push primitive call frame
+                    self.push_call_frame(name.to_string(), None);
+                    let result = func(&args).map_err(|e| self.error_with_stack(e));
+                    self.pop_call_frame();
+                    result
                 }
-                Procedure::Lambda { params, body, env } => {
+                Procedure::Lambda { params, body, env, source, name } => {
                     // Check argument count
                     if args.len() != params.len() {
-                        return Err(EvalError::new(format!(
+                        return Err(self.error_with_stack(format!(
                             "Lambda expects {} arguments, got {}",
                             params.len(),
                             args.len()
                         )));
                     }
+
+                    // Push call frame with function name and source location
+                    let func_name = name.clone().unwrap_or_else(|| "<lambda>".to_string());
+                    self.push_call_frame(func_name, source.clone());
 
                     // Create new environment extending the closure environment
                     let lambda_env = Environment::extend(env.clone());
@@ -1691,11 +1827,16 @@ impl Evaluator {
                     }
 
                     // Evaluate body in the new environment
-                    self.eval_inner((**body).clone(), lambda_env)
+                    let result = self.eval_inner((**body).clone(), lambda_env);
+
+                    // Pop call frame
+                    self.pop_call_frame();
+
+                    result
                 }
             }
         } else {
-            Err(EvalError::new(format!(
+            Err(self.error_with_stack(format!(
                 "Not a procedure: {:?}",
                 proc
             )))

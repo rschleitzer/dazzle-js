@@ -115,6 +115,8 @@ fn run(args: Args) -> Result<()> {
     };
 
     debug!("Template loaded, evaluating...");
+    // Set source file for error reporting
+    evaluator.set_source_file(template_path.to_string_lossy().to_string());
     evaluate_template(&mut evaluator, env.clone(), &scheme_code)?;
 
     // 9. Start DSSSL processing from root (OpenJade's ProcessContext::process)

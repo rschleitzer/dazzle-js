@@ -37,6 +37,32 @@ use gc::{Gc, GcCell};
 use std::fmt;
 use std::rc::Rc;
 
+// Import Position for source location tracking
+use crate::scheme::parser::Position;
+
+/// Source code location information
+///
+/// Used for error reporting and stack traces.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceInfo {
+    /// Source file path (template file)
+    pub file: String,
+    /// Position in the file (line:column)
+    pub pos: Position,
+}
+
+impl SourceInfo {
+    pub fn new(file: String, pos: Position) -> Self {
+        SourceInfo { file, pos }
+    }
+}
+
+impl fmt::Display for SourceInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.file, self.pos)
+    }
+}
+
 /// A Scheme value
 ///
 /// Corresponds to OpenJade's `ELObj` base class.
@@ -203,10 +229,14 @@ pub enum Procedure {
     /// - `params`: Parameter names (formal parameters)
     /// - `body`: Expression to evaluate when called
     /// - `env`: Closure environment (captures lexical scope)
+    /// - `source`: Source location (for error reporting)
+    /// - `name`: Optional name (for named procedures defined with `define`)
     Lambda {
         params: Gc<Vec<String>>,
         body: Gc<Value>,
         env: Gc<crate::scheme::environment::Environment>,
+        source: Option<SourceInfo>,
+        name: Option<String>,
     },
 }
 
@@ -217,10 +247,12 @@ impl Clone for Procedure {
                 name,
                 func: *func,
             },
-            Procedure::Lambda { params, body, env } => Procedure::Lambda {
+            Procedure::Lambda { params, body, env, source, name } => Procedure::Lambda {
                 params: params.clone(),
                 body: body.clone(),
                 env: env.clone(),
+                source: source.clone(),
+                name: name.clone(),
             },
         }
     }
@@ -233,8 +265,9 @@ unsafe impl gc::Trace for Procedure {
             Procedure::Primitive { .. } => {
                 // Primitives don't have GC'd data
             }
-            Procedure::Lambda { params, body, env } => {
+            Procedure::Lambda { params, body, env, source: _, name: _ } => {
                 // Trace the lambda's garbage-collected fields
+                // Note: source and name are not GC'd, so we don't trace them
                 params.trace();
                 body.trace();
                 env.trace();
@@ -245,7 +278,7 @@ unsafe impl gc::Trace for Procedure {
     unsafe fn root(&self) {
         match self {
             Procedure::Primitive { .. } => {}
-            Procedure::Lambda { params, body, env } => {
+            Procedure::Lambda { params, body, env, source: _, name: _ } => {
                 params.root();
                 body.root();
                 env.root();
@@ -256,7 +289,7 @@ unsafe impl gc::Trace for Procedure {
     unsafe fn unroot(&self) {
         match self {
             Procedure::Primitive { .. } => {}
-            Procedure::Lambda { params, body, env } => {
+            Procedure::Lambda { params, body, env, source: _, name: _ } => {
                 params.unroot();
                 body.unroot();
                 env.unroot();
@@ -334,6 +367,25 @@ impl Value {
             params: Gc::new(params),
             body: Gc::new(body),
             env,
+            source: None,
+            name: None,
+        }))
+    }
+
+    /// Create a user-defined lambda procedure with source location
+    pub fn lambda_with_source(
+        params: Vec<String>,
+        body: Value,
+        env: Gc<crate::scheme::environment::Environment>,
+        source: Option<SourceInfo>,
+        name: Option<String>,
+    ) -> Self {
+        Value::Procedure(Gc::new(Procedure::Lambda {
+            params: Gc::new(params),
+            body: Gc::new(body),
+            env,
+            source,
+            name,
         }))
     }
 
