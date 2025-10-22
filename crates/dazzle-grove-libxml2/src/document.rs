@@ -65,7 +65,6 @@ impl XmlDocument {
     /// This is **critical for OpenJade compatibility** - templates rely on DTD defaults.
     pub fn parse_string(xml: &str, base_url: Option<&str>, validate_dtd: bool) -> Result<Self, String> {
         // libxml2 parser option flags
-        const XML_PARSE_RECOVER: i32 = 1;    // Relaxed parsing (recover from errors)
         const XML_PARSE_NOENT: i32 = 2;      // Substitute entities (CRITICAL for external entity refs!)
         const XML_PARSE_DTDLOAD: i32 = 4;    // Load external DTD
         const XML_PARSE_DTDATTR: i32 = 8;    // Apply DTD default attributes (CRITICAL!)
@@ -74,7 +73,8 @@ impl XmlDocument {
         // Build parser flags
         // ALWAYS load DTD, apply defaults, and substitute entities (required for DSSSL/OpenJade compatibility)
         // NOTE: Removed XML_PARSE_NONET to allow local DTD file access
-        let mut flags = XML_PARSE_DTDLOAD | XML_PARSE_DTDATTR | XML_PARSE_NOENT | XML_PARSE_RECOVER;
+        // NOTE: Removed XML_PARSE_RECOVER to fail fast on malformed XML (production safety)
+        let mut flags = XML_PARSE_DTDLOAD | XML_PARSE_DTDATTR | XML_PARSE_NOENT;
 
         if validate_dtd {
             flags |= XML_PARSE_DTDVALID;
@@ -120,14 +120,14 @@ impl XmlDocument {
     /// Uses same DTD loading flags as `parse_string`.
     pub fn parse_file(path: &str, validate_dtd: bool) -> Result<Self, String> {
         // libxml2 parser option flags (same as parse_string)
-        const XML_PARSE_RECOVER: i32 = 1;
         const XML_PARSE_NOENT: i32 = 2;
         const XML_PARSE_DTDLOAD: i32 = 4;
         const XML_PARSE_DTDATTR: i32 = 8;
         const XML_PARSE_DTDVALID: i32 = 16;
 
         // NOTE: Removed XML_PARSE_NONET to allow local DTD file access
-        let mut flags = XML_PARSE_DTDLOAD | XML_PARSE_DTDATTR | XML_PARSE_NOENT | XML_PARSE_RECOVER;
+        // NOTE: Removed XML_PARSE_RECOVER to fail fast on malformed XML (production safety)
+        let mut flags = XML_PARSE_DTDLOAD | XML_PARSE_DTDATTR | XML_PARSE_NOENT;
 
         if validate_dtd {
             flags |= XML_PARSE_DTDVALID;

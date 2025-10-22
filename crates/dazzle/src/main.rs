@@ -177,26 +177,38 @@ fn evaluate_template(
     env: gc::Gc<Environment>,
     template: &str,
 ) -> Result<()> {
+    use dazzle_core::scheme::parser::Token;
+
     let mut parser = SchemeParser::new(template);
 
     // Parse and evaluate all expressions in the template
+    // Use peek_token() to detect clean EOF vs syntax errors
     loop {
-        match parser.parse() {
-            Ok(expr) => {
-                let _result = evaluator
-                    .eval(expr, env.clone())
-                    .map_err(|e| anyhow::anyhow!("Evaluation error: {}", e))?;
-
-                // Results are now handled by `make` flow objects directly
-                // No need to write strings to backend here
+        // Peek at next token - if EOF, we're done
+        let peek_result = parser.peek_token();
+        match peek_result {
+            Ok(tok) if matches!(*tok, Token::Eof) => {
+                // Clean EOF - all expressions parsed successfully
+                break;
+            }
+            Ok(_) => {
+                // More tokens available, try to parse
+                match parser.parse() {
+                    Ok(expr) => {
+                        let _result = evaluator
+                            .eval(expr, env.clone())
+                            .map_err(|e| anyhow::anyhow!("Evaluation error: {}", e))?;
+                        // Results are now handled by `make` flow objects directly
+                    }
+                    Err(e) => {
+                        // Parse error - fail immediately
+                        return Err(anyhow::anyhow!("Parse error at {}: {}", e.position, e.message));
+                    }
+                }
             }
             Err(e) => {
-                // Check if we've reached end of input
-                let msg = e.message.to_lowercase();
-                if msg.contains("unexpected end of input") || msg.contains("eof") || msg.contains("end of input") {
-                    break;
-                }
-                return Err(anyhow::anyhow!("Parse error: {}", e.message));
+                // Tokenizer error - fail immediately
+                return Err(anyhow::anyhow!("Tokenizer error at {}: {}", e.position, e.message));
             }
         }
     }

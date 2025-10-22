@@ -803,6 +803,14 @@ impl Parser {
         self.parse_expr()
     }
 
+    /// Peek at the next token without consuming it
+    ///
+    /// Returns `Ok(&Token)` if successful, `Err(ParseError)` on tokenizer error.
+    /// This is useful for checking if we're at EOF before attempting to parse.
+    pub fn peek_token(&mut self) -> ParseResult<&Token> {
+        self.tokenizer.peek_token()
+    }
+
     /// Parse all S-expressions in input
     ///
     /// Returns a list of all top-level expressions.
