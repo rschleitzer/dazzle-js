@@ -869,10 +869,12 @@ impl Evaluator {
             )),
         };
 
-        // Parse keyword arguments and body
+        // Parse keyword arguments and collect body expressions
         let mut i = 1;
         let mut system_id = None;
         let mut data = None;
+        let mut path = None;
+        let mut body_exprs = Vec::new();
 
         while i < args_vec.len() {
             match &args_vec[i] {
@@ -904,6 +906,15 @@ impl Evaluator {
                                 ));
                             }
                         }
+                        "path" => {
+                            if let Value::String(s) = value {
+                                path = Some(s);
+                            } else {
+                                return Err(EvalError::new(
+                                    "make: path must be a string".to_string(),
+                                ));
+                            }
+                        }
                         _ => {
                             // Ignore unknown keywords for now
                         }
@@ -911,20 +922,25 @@ impl Evaluator {
                     i += 2;
                 }
                 _ => {
-                    // Non-keyword argument - evaluate as body sosofo
-                    // Nested make calls will append to backend buffer
-                    let _result = self.eval(args_vec[i].clone(), env.clone())?;
+                    // Non-keyword argument - collect as body expression
+                    body_exprs.push(args_vec[i].clone());
                     i += 1;
                 }
             }
         }
 
         // Call backend method based on flow object type
-        match self.backend {
+        let backend = self.backend.clone();
+        match backend {
             Some(ref backend) => {
                 match fo_type {
                     "entity" => {
                         if let Some(sid) = system_id {
+                            // Evaluate body expressions (they append to buffer)
+                            for expr in body_exprs {
+                                self.eval(expr, env.clone())?;
+                            }
+
                             // Get current buffer content and write to file
                             let content = backend.borrow().current_output().to_string();
                             backend.borrow_mut().entity(&sid, &content)
@@ -957,6 +973,29 @@ impl Evaluator {
                         } else {
                             return Err(EvalError::new(
                                 "make literal requires data: keyword or a string body".to_string(),
+                            ));
+                        }
+                    }
+                    "directory" => {
+                        if let Some(p) = path {
+                            // Save current directory context
+                            let prev_dir = backend.borrow().current_directory().map(|s| s.to_string());
+
+                            // Create directory and set as current context
+                            backend.borrow_mut().directory(&p)
+                                .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+
+                            // Evaluate body expressions in the new directory context
+                            // (nested entities/directories will be created relative to this directory)
+                            for expr in body_exprs {
+                                self.eval(expr, env.clone())?;
+                            }
+
+                            // Restore previous directory context
+                            backend.borrow_mut().set_current_directory(prev_dir);
+                        } else {
+                            return Err(EvalError::new(
+                                "make directory requires path: keyword".to_string(),
                             ));
                         }
                     }

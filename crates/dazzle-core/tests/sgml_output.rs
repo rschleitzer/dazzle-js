@@ -12,6 +12,7 @@ use dazzle_core::scheme::primitives;
 use dazzle_core::scheme::value::Value;
 use dazzle_backend_sgml::SgmlBackend;
 use dazzle_grove_libxml2::LibXml2Grove;
+use std::cell::RefCell;
 use std::fs;
 use std::rc::Rc;
 use tempfile::TempDir;
@@ -276,4 +277,126 @@ fn test_formatting_instruction_accumulation() {
     // Verify file was written
     let file_content = fs::read_to_string(temp_dir.path().join("output.txt")).unwrap();
     assert_eq!(file_content, "Line 1\nLine 2\nLine 3\n");
+}
+
+#[test]
+fn test_make_directory_flow_object() {
+    let temp_dir = TempDir::new().unwrap();
+
+    let xml = r#"<?xml version="1.0"?>
+<project>
+    <name>TestProject</name>
+</project>"#;
+
+    let (mut evaluator, env, backend) = setup_full_pipeline(xml, temp_dir.path());
+
+    // Set backend on evaluator (wrap in Rc<RefCell<>>)
+    let backend_rc = Rc::new(RefCell::new(backend)) as Rc<RefCell<dyn FotBuilder>>;
+    evaluator.set_backend(backend_rc);
+
+    // Use make directory flow object with functional nesting
+    let code = r#"
+        (begin
+          (make directory path: "src"
+            (make directory path: "models")
+            (make directory path: "controllers"))
+          (make directory path: "tests"
+            (make directory path: "integration")))
+    "#;
+
+    eval_scheme(&mut evaluator, env, code);
+
+    // Verify directories were created
+    assert!(temp_dir.path().join("src/models").exists());
+    assert!(temp_dir.path().join("src/models").is_dir());
+    assert!(temp_dir.path().join("src/controllers").exists());
+    assert!(temp_dir.path().join("src/controllers").is_dir());
+    assert!(temp_dir.path().join("tests/integration").exists());
+    assert!(temp_dir.path().join("tests/integration").is_dir());
+}
+
+#[test]
+fn test_make_directory_then_write_files() {
+    let temp_dir = TempDir::new().unwrap();
+
+    let xml = r#"<?xml version="1.0"?><root/>"#;
+    let (mut evaluator, env, backend) = setup_full_pipeline(xml, temp_dir.path());
+
+    // Set backend on evaluator (wrap in Rc<RefCell<>>)
+    let backend_rc = Rc::new(RefCell::new(backend)) as Rc<RefCell<dyn FotBuilder>>;
+    evaluator.set_backend(backend_rc);
+
+    // Create directory structure and write files using functional nesting
+    let code = r#"
+        (make directory path: "src"
+          (make directory path: "generated"
+            (make entity system-id: "model.rs"
+              (make formatting-instruction data: "pub struct Model {}\n"))
+            (make entity system-id: "controller.rs"
+              (make formatting-instruction data: "pub struct Controller {}\n"))))
+    "#;
+
+    eval_scheme(&mut evaluator, env, code);
+
+    // Verify directory exists
+    assert!(temp_dir.path().join("src/generated").exists());
+    assert!(temp_dir.path().join("src/generated").is_dir());
+
+    // Verify files were created with correct content
+    let model_path = temp_dir.path().join("src/generated/model.rs");
+    assert!(model_path.exists());
+    let model_content = fs::read_to_string(&model_path).unwrap();
+    assert_eq!(model_content, "pub struct Model {}\n");
+
+    let controller_path = temp_dir.path().join("src/generated/controller.rs");
+    assert!(controller_path.exists());
+    let controller_content = fs::read_to_string(&controller_path).unwrap();
+    assert_eq!(controller_content, "pub struct Controller {}\n");
+}
+
+#[test]
+fn test_directory_with_relative_entity_paths() {
+    let temp_dir = TempDir::new().unwrap();
+
+    let xml = r#"<?xml version="1.0"?><root/>"#;
+    let (mut evaluator, env, backend) = setup_full_pipeline(xml, temp_dir.path());
+
+    // Set backend on evaluator (wrap in Rc<RefCell<>>)
+    let backend_rc = Rc::new(RefCell::new(backend)) as Rc<RefCell<dyn FotBuilder>>;
+    evaluator.set_backend(backend_rc);
+
+    // Create directory structure with functional nesting
+    let code = r#"
+        (make directory path: "generated"
+          (make directory path: "models"
+            (make entity system-id: "User.rs"
+              (make formatting-instruction data: "pub struct User {}\n"))
+            (make entity system-id: "Post.rs"
+              (make formatting-instruction data: "pub struct Post {}\n")))
+          (make directory path: "controllers"
+            (make entity system-id: "UserController.rs"
+              (make formatting-instruction data: "pub struct UserController {}\n"))))
+    "#;
+
+    eval_scheme(&mut evaluator, env, code);
+
+    // Verify directory structure
+    assert!(temp_dir.path().join("generated/models").exists());
+    assert!(temp_dir.path().join("generated/controllers").exists());
+
+    // Verify files were created with relative paths in correct directories
+    let user_path = temp_dir.path().join("generated/models/User.rs");
+    assert!(user_path.exists());
+    let user_content = fs::read_to_string(&user_path).unwrap();
+    assert_eq!(user_content, "pub struct User {}\n");
+
+    let post_path = temp_dir.path().join("generated/models/Post.rs");
+    assert!(post_path.exists());
+    let post_content = fs::read_to_string(&post_path).unwrap();
+    assert_eq!(post_content, "pub struct Post {}\n");
+
+    let controller_path = temp_dir.path().join("generated/controllers/UserController.rs");
+    assert!(controller_path.exists());
+    let controller_content = fs::read_to_string(&controller_path).unwrap();
+    assert_eq!(controller_content, "pub struct UserController {}\n");
 }

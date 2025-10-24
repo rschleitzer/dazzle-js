@@ -84,6 +84,22 @@ pub trait FotBuilder: Debug {
     /// ```
     fn formatting_instruction(&mut self, data: &str) -> Result<()>;
 
+    /// Create a directory
+    ///
+    /// **Usage**: Create a directory path (and all parent directories if needed).
+    ///
+    /// **Arguments**:
+    /// - `path`: Directory path to create (e.g., "src/generated/models")
+    ///
+    /// **DSSSL**: `directory` flow object (Dazzle extension)
+    ///
+    /// **Example**:
+    /// ```scheme
+    /// (make directory
+    ///   path: "src/generated/models")
+    /// ```
+    fn directory(&mut self, path: &str) -> Result<()>;
+
     /// Get the current output buffer contents
     ///
     /// **Usage**: Retrieve accumulated text from `formatting_instruction` calls.
@@ -98,6 +114,27 @@ pub trait FotBuilder: Debug {
     ///
     /// Typically called after `entity()` writes a file.
     fn clear_buffer(&mut self);
+
+    /// Get the current directory context
+    ///
+    /// **Usage**: Returns the directory that relative entity paths are resolved against.
+    ///
+    /// Returns `None` if no current directory is set (paths are relative to output_dir).
+    fn current_directory(&self) -> Option<&str> {
+        None
+    }
+
+    /// Set the current directory context
+    ///
+    /// **Usage**: Sets the directory that subsequent entity paths are resolved against.
+    ///
+    /// **Arguments**:
+    /// - `path`: Directory path (relative to output_dir, or None to reset)
+    ///
+    /// This is automatically called by the `directory` flow object.
+    fn set_current_directory(&mut self, _path: Option<String>) {
+        // Default implementation does nothing (backends can override)
+    }
 
     // ============================================================================
     // Document Formatting Primitives (future backends)
