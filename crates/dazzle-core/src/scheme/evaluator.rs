@@ -1983,9 +1983,7 @@ impl Evaluator {
 
                     // Only push call frame for NAMED functions (not anonymous lambdas)
                     // This matches OpenJade's behavior - it only tracks named function calls
-                    let should_track = name.is_some();
-
-                    if should_track {
+                    let pushed_frame = if let Some(func_name) = name.clone() {
                         let call_site = match (&saved_file, &saved_pos) {
                             (Some(file), Some(pos)) => Some(SourceInfo {
                                 file: file.clone(),
@@ -1993,9 +1991,11 @@ impl Evaluator {
                             }),
                             _ => None,
                         };
-                        let func_name = name.clone().unwrap();
                         self.push_call_frame(func_name, call_site);
-                    }
+                        true
+                    } else {
+                        false
+                    };
 
                     // Switch to lambda's definition location for evaluating the body
                     if let Some(ref src) = source {
@@ -2019,7 +2019,7 @@ impl Evaluator {
                     self.current_position = saved_pos;
 
                     // Pop call frame if we pushed one
-                    if should_track {
+                    if pushed_frame {
                         self.pop_call_frame();
                     }
 
