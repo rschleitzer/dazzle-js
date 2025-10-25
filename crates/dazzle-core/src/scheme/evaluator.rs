@@ -179,6 +179,10 @@ pub struct ConstructionRule {
 
     /// Construction expression (returns sosofo when evaluated)
     pub expr: Value,
+
+    /// Source position where this rule was defined (for error reporting)
+    pub source_file: Option<String>,
+    pub source_pos: Option<Position>,
 }
 
 /// Processing mode containing construction rules
@@ -205,8 +209,13 @@ impl ProcessingMode {
     }
 
     /// Add a construction rule
-    pub fn add_rule(&mut self, element_name: String, expr: Value) {
-        self.rules.push(ConstructionRule { element_name, expr });
+    pub fn add_rule(&mut self, element_name: String, expr: Value, source_file: Option<String>, source_pos: Option<Position>) {
+        self.rules.push(ConstructionRule {
+            element_name,
+            expr,
+            source_file,
+            source_pos
+        });
     }
 
     /// Add a default construction rule
@@ -425,8 +434,27 @@ impl Evaluator {
 
         if let Some(rule) = rule {
             // Rule found - evaluate the construction expression
-            // The expression should return a sosofo (in practice, it evaluates to a string or calls primitives)
-            self.eval(rule.expr.clone(), env)
+            // Save current source context
+            let saved_file = self.current_source_file.clone();
+            let saved_pos = self.current_position.clone();
+
+            // Restore source context to where the rule was defined
+            // This ensures error messages show the rule definition location, not the rule body location
+            if let Some(ref rule_file) = rule.source_file {
+                self.current_source_file = Some(rule_file.clone());
+            }
+            if let Some(ref rule_pos) = rule.source_pos {
+                self.current_position = Some(rule_pos.clone());
+            }
+
+            // Evaluate the construction expression
+            let result = self.eval(rule.expr.clone(), env);
+
+            // Restore previous source context
+            self.current_source_file = saved_file;
+            self.current_position = saved_pos;
+
+            result
         } else if let Some(ref default_expr) = self.processing_mode.default_rule {
             // No specific rule found - use default rule
             self.eval(default_expr.clone(), env)
@@ -822,7 +850,13 @@ impl Evaluator {
 
         // Second argument is the construction expression (NOT evaluated yet!)
         // Store it for later evaluation during processing
-        self.processing_mode.add_rule(element_name.to_string(), args_vec[1].clone());
+        // Capture the current source position (where the 'element' form is)
+        self.processing_mode.add_rule(
+            element_name.to_string(),
+            args_vec[1].clone(),
+            self.current_source_file.clone(),
+            self.current_position.clone()
+        );
 
         Ok(Value::Unspecified)
     }
@@ -1895,6 +1929,10 @@ impl Evaluator {
         args: Value,
         env: Gc<Environment>,
     ) -> EvalResult {
+        // Save the position of this application expression (the call site)
+        let application_pos = self.current_position.clone();
+        let application_file = self.current_source_file.clone();
+
         // Evaluate operator
         let proc = self.eval_inner(operator, env.clone())?;
 
@@ -1910,6 +1948,11 @@ impl Evaluator {
             }
             evaled_args.push(self.eval_inner(arg, env.clone())?);
         }
+
+        // Restore the application position before calling apply
+        // This ensures that when we push a call frame, we capture the CALL SITE, not the last argument's position
+        self.current_position = application_pos;
+        self.current_source_file = application_file;
 
         // Apply procedure
         self.apply(proc, evaled_args)
