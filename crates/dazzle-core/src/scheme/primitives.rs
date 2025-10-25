@@ -1119,16 +1119,10 @@ pub fn prim_string_length(args: &[Value]) -> PrimitiveResult {
 
     match &args[0] {
         Value::String(s) => Ok(Value::integer(s.chars().count() as i64)),
-        Value::Bool(false) => {
-            // Treat #f as empty string (graceful handling)
-            Ok(Value::integer(0))
-        }
-        Value::Unspecified => {
-            // Treat unspecified as empty string (graceful handling)
-            // This happens when case expressions have no matching clause
-            Ok(Value::integer(0))
-        }
-        _ => Err(format!("string-length: not a string: {:?}", args[0])),
+        _ => Err(format!(
+            "argument for primitive \"string-length\" of wrong type: {:?} not a string",
+            args[0]
+        )),
     }
 }
 
@@ -1168,22 +1162,34 @@ pub fn prim_string_ref(args: &[Value]) -> PrimitiveResult {
 pub fn prim_string_append(args: &[Value]) -> PrimitiveResult {
     let mut result = String::new();
 
-    for arg in args {
+    for (i, arg) in args.iter().enumerate() {
         match arg {
             Value::String(s) => result.push_str(s),
-            Value::Unspecified => {
-                // Treat unspecified as empty string (graceful handling)
-                // This happens when template functions don't explicitly return values
+            _ => {
+                return Err(format!(
+                    "{} argument for primitive \"string-append\" of wrong type: {:?} not a string",
+                    ordinal(i + 1),
+                    arg
+                ))
             }
-            Value::Bool(false) => {
-                // Treat #f as empty string (graceful handling)
-                // Common pattern in templates where #f indicates "no value"
-            }
-            _ => return Err(format!("string-append: not a string: {:?}", arg)),
         }
     }
 
     Ok(Value::string(result))
+}
+
+/// Convert number to ordinal string (1st, 2nd, 3rd, etc.)
+fn ordinal(n: usize) -> String {
+    let suffix = match (n % 10, n % 100) {
+        (1, 11) => "th",
+        (1, _) => "st",
+        (2, 12) => "th",
+        (2, _) => "nd",
+        (3, 13) => "th",
+        (3, _) => "rd",
+        _ => "th",
+    };
+    format!("{}{}", n, suffix)
 }
 
 /// (substring string start end) → string
@@ -1199,14 +1205,12 @@ pub fn prim_substring(args: &[Value]) -> PrimitiveResult {
 
     let s = match &args[0] {
         Value::String(s) => s,
-        Value::Bool(false) => {
-            return Err("substring: first argument is #f (expected string)".to_string());
+        _ => {
+            return Err(format!(
+                "1st argument for primitive \"substring\" of wrong type: {:?} not a string",
+                args[0]
+            ))
         }
-        Value::Unspecified => {
-            // Treat unspecified as empty string (graceful handling)
-            return Ok(Value::string(String::new()));
-        }
-        _ => return Err(format!("substring: not a string: {:?}", args[0])),
     };
 
     let start = match args[1] {
@@ -3303,11 +3307,10 @@ pub fn prim_node_list_remove_duplicates(args: &[Value]) -> PrimitiveResult {
             // A single node has no duplicates, so return it as a single-element node-list
             Ok(args[0].clone())
         }
-        Value::Bool(false) => {
-            // #f → empty node-list (graceful handling)
-            Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
-        }
-        _ => Err(format!("node-list-remove-duplicates: not a node-list: {:?}", args[0])),
+        _ => Err(format!(
+            "1st argument for primitive \"node-list-remove-duplicates\" of wrong type: {:?} not a node-list",
+            args[0]
+        )),
     }
 }
 
@@ -3439,8 +3442,10 @@ pub fn prim_gi(args: &[Value]) -> PrimitiveResult {
                 Err(format!("gi: node-list must have exactly 1 element, got {}", nl.length()))
             }
         }
-        Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
-        _ => Err(format!("gi: not a node: {:?}", args[0])),
+        _ => Err(format!(
+            "1st argument for primitive \"gi\" of wrong type: {:?} not an optional singleton node list",
+            args[0]
+        )),
     }
 }
 
@@ -3498,8 +3503,10 @@ pub fn prim_data(args: &[Value]) -> PrimitiveResult {
                 Ok(Value::string(result))
             }
         }
-        Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
-        _ => Err(format!("data: not a node: {:?}", args[0])),
+        _ => Err(format!(
+            "1st argument for primitive \"data\" of wrong type: {:?} not an optional singleton node list",
+            args[0]
+        )),
     }
 }
 
@@ -3548,8 +3555,10 @@ pub fn prim_attribute_string(args: &[Value]) -> PrimitiveResult {
                 Err(format!("attribute-string: node-list must have exactly 1 element, got {}", nl.length()))
             }
         }
-        Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
-        _ => Err(format!("attribute-string: not a node: {:?}", args[1])),
+        _ => Err(format!(
+            "2nd argument for primitive \"attribute-string\" of wrong type: {:?} not an optional singleton node list",
+            args[1]
+        )),
     }
 }
 
@@ -3658,11 +3667,10 @@ pub fn prim_select_children(args: &[Value]) -> PrimitiveResult {
                 Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
             }
         }
-        Value::Bool(false) => {
-            // #f → empty node-list (graceful handling)
-            Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
-        }
-        _ => Err(format!("select-children: second argument not a node or node-list: {:?}", args[1])),
+        _ => Err(format!(
+            "2nd argument for primitive \"select-children\" of wrong type: {:?} not an optional singleton node list",
+            args[1]
+        )),
     }
 }
 
@@ -3687,8 +3695,10 @@ pub fn prim_parent(args: &[Value]) -> PrimitiveResult {
                 return Ok(Value::bool(false)); // Empty node-list -> #f
             }
         }
-        Value::Bool(false) => return Ok(Value::bool(false)), // #f → #f (graceful handling)
-        _ => return Err(format!("parent: not a node or node-list: {:?}", args[0])),
+        _ => return Err(format!(
+            "1st argument for primitive \"parent\" of wrong type: {:?} not an optional singleton node list",
+            args[0]
+        )),
     };
 
     if let Some(parent) = node.parent() {
@@ -3718,8 +3728,10 @@ pub fn prim_tree_root(args: &[Value]) -> PrimitiveResult {
             }
             Ok(Value::node(current))
         }
-        Value::Bool(false) => Ok(Value::bool(false)), // #f → #f (graceful handling)
-        _ => Err(format!("tree-root: not a node: {:?}", args[0])),
+        _ => Err(format!(
+            "1st argument for primitive \"tree-root\" of wrong type: {:?} not an optional singleton node list",
+            args[0]
+        )),
     }
 }
 
@@ -3748,8 +3760,10 @@ pub fn prim_ancestors(args: &[Value]) -> PrimitiveResult {
 
             Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(ancestor_nodes))))
         }
-        Value::Bool(false) => Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))), // #f → empty node-list (graceful handling)
-        _ => Err(format!("ancestors: not a node: {:?}", args[0])),
+        _ => Err(format!(
+            "1st argument for primitive \"ancestors\" of wrong type: {:?} not an optional singleton node list",
+            args[0]
+        )),
     }
 }
 
@@ -3805,8 +3819,10 @@ pub fn prim_ancestor(args: &[Value]) -> PrimitiveResult {
                 return Ok(Value::bool(false)); // Empty node-list -> #f
             }
         }
-        Value::Bool(false) => return Ok(Value::bool(false)), // #f → #f (graceful handling)
-        _ => return Err(format!("ancestor: second argument not a node or node-list: {:?}", args[1])),
+        _ => return Err(format!(
+            "2nd argument for primitive \"ancestor\" of wrong type: {:?} not an optional singleton node list",
+            args[1]
+        )),
     };
 
     // Walk up the parent chain looking for an ancestor with matching gi
@@ -3979,8 +3995,10 @@ pub fn prim_element_with_id(args: &[Value]) -> PrimitiveResult {
     // First argument is the ID string
     let id = match &args[0] {
         Value::String(s) => s.as_str(),
-        Value::Bool(false) => return Ok(Value::bool(false)), // #f → #f (graceful handling)
-        _ => return Err(format!("element-with-id: first argument not a string: {:?}", args[0])),
+        _ => return Err(format!(
+            "1st argument for primitive \"element-with-id\" of wrong type: {:?} not a string",
+            args[0]
+        )),
     };
 
     // Get the grove from evaluator context
@@ -5055,9 +5073,6 @@ pub fn prim_node_list_union(args: &[Value]) -> PrimitiveResult {
                                         seen_ids.insert(node_id);
                                         result_nodes.push(n.as_ref().clone_node());
                                     }
-                                }
-                                Value::Bool(false) => {
-                                    // #f in the list - skip it (graceful handling)
                                 }
                                 _ => return Err(format!("node-list-union: list contains non-node: {:?}", car)),
                             }
