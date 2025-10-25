@@ -82,8 +82,10 @@ impl XmlDocument {
 
         // Prepare C strings
         let xml_cstring = CString::new(xml).map_err(|e| format!("Invalid XML string: {}", e))?;
-        let url = base_url.map(|u| CString::new(u).unwrap())
-                          .unwrap_or_else(|| CString::new("").unwrap());
+        let url = match base_url {
+            Some(u) => CString::new(u).map_err(|e| format!("Invalid base URL (contains null byte): {}", e))?,
+            None => CString::new("").expect("Empty string cannot contain null bytes"),
+        };
         let encoding = ptr::null(); // Auto-detect encoding
 
         // Call libxml2 directly to parse with DTD options
