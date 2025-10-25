@@ -201,11 +201,20 @@ pub enum Value {
 pub struct PairData {
     pub car: Value,
     pub cdr: Value,
+    /// Source position (for error reporting)
+    ///
+    /// Tracks where this pair (list expression) was parsed from.
+    /// Used to provide accurate error locations for expressions inside functions.
+    pub pos: Option<Position>,
 }
 
 impl PairData {
     pub fn new(car: Value, cdr: Value) -> Self {
-        PairData { car, cdr }
+        PairData { car, cdr, pos: None }
+    }
+
+    pub fn with_pos(car: Value, cdr: Value, pos: Position) -> Self {
+        PairData { car, cdr, pos: Some(pos) }
     }
 }
 
@@ -345,6 +354,11 @@ impl Value {
     /// Create a cons cell (pair)
     pub fn cons(car: Value, cdr: Value) -> Self {
         Value::Pair(Gc::new(GcCell::new(PairData::new(car, cdr))))
+    }
+
+    /// Create a cons cell with source position
+    pub fn cons_with_pos(car: Value, cdr: Value, pos: Position) -> Self {
+        Value::Pair(Gc::new(GcCell::new(PairData::with_pos(car, cdr, pos))))
     }
 
     /// Create a vector

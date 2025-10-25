@@ -12,6 +12,7 @@ use dazzle_core::scheme::environment::Environment;
 use dazzle_core::scheme::evaluator::Evaluator;
 use dazzle_core::scheme::parser::Parser as SchemeParser;
 use dazzle_core::scheme::primitives;
+use dazzle_core::scheme::value::Value;
 use dazzle_grove_libxml2::LibXml2Grove;
 use std::fs;
 use std::path::PathBuf;
@@ -60,6 +61,7 @@ fn run(args: Args) -> Result<()> {
     let output_dir = args
         .input
         .parent()
+        .filter(|p| !p.as_os_str().is_empty())  // Filter out empty path
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."));
 
@@ -106,18 +108,18 @@ fn run(args: Args) -> Result<()> {
         .with_context(|| format!("Failed to read template: {}", template_path.display()))?;
 
     // Check if this is an XML template wrapper (.dsl format)
-    let scheme_code = if template_content.trim_start().starts_with("<!DOCTYPE")
+    let (scheme_code, line_mappings) = if template_content.trim_start().starts_with("<!DOCTYPE")
         || template_content.trim_start().starts_with("<?xml") {
         debug!("Detected XML template wrapper, resolving entities...");
         resolve_xml_template(&template_content, &template_path, &args.search_dirs)?
     } else {
-        template_content
+        (template_content, Vec::new())
     };
 
     debug!("Template loaded, evaluating...");
     // Set source file for error reporting
     evaluator.set_source_file(template_path.to_string_lossy().to_string());
-    evaluate_template(&mut evaluator, env.clone(), &scheme_code)?;
+    evaluate_template(&mut evaluator, env.clone(), &scheme_code, &line_mappings)?;
 
     // 9. Start DSSSL processing from root (OpenJade's ProcessContext::process)
     // After template loading, construction rules are defined.
@@ -125,7 +127,7 @@ fn run(args: Args) -> Result<()> {
     debug!("Starting DSSSL processing from root...");
     let processing_result = evaluator
         .process_root(env.clone())
-        .map_err(|e| anyhow::anyhow!("Processing error: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Processing error:\n{}", e))?;
 
     // If processing returned a string, write it to backend
     if let dazzle_core::scheme::value::Value::String(s) = processing_result {
@@ -176,6 +178,7 @@ fn evaluate_template(
     evaluator: &mut Evaluator,
     env: gc::Gc<Environment>,
     template: &str,
+    line_mappings: &[LineMapping],
 ) -> Result<()> {
     use dazzle_core::scheme::parser::Token;
 
@@ -192,9 +195,33 @@ fn evaluate_template(
                 break;
             }
             Ok(_) => {
+                // Get position before parsing this expression
+                let pos = parser.current_position();
+
                 // More tokens available, try to parse
                 match parser.parse() {
                     Ok(expr) => {
+                        // Translate positions in the expression tree using line mappings
+                        if !line_mappings.is_empty() {
+                            translate_positions(expr.clone(), line_mappings);
+
+                            // Find the mapping for this top-level expression's line
+                            if let Some(mapping) = line_mappings.iter().find(|m| m.output_line == pos.line) {
+                                // Update evaluator with the mapped source file and position
+                                evaluator.set_source_file(mapping.source_file.clone());
+                                evaluator.set_position(dazzle_core::scheme::parser::Position {
+                                    line: mapping.source_line,
+                                    column: pos.column,
+                                });
+                            } else {
+                                // No mapping found, use original position
+                                evaluator.set_position(pos);
+                            }
+                        } else {
+                            // No mappings, use original position
+                            evaluator.set_position(pos);
+                        }
+
                         let _result = evaluator
                             .eval(expr, env.clone())
                             .map_err(|e| anyhow::anyhow!("Evaluation error: {}", e))?;
@@ -216,15 +243,65 @@ fn evaluate_template(
     Ok(())
 }
 
+/// Line mapping entry - maps a line number in concatenated code to its source file and line
+#[derive(Debug, Clone)]
+pub struct LineMapping {
+    /// Line number in the concatenated output (1-indexed)
+    pub output_line: usize,
+    /// Source file path
+    pub source_file: String,
+    /// Line number in the source file (1-indexed)
+    pub source_line: usize,
+}
+
+/// Translate all positions in an expression tree using line mappings
+///
+/// Recursively walks the expression tree and translates positions in all pairs.
+fn translate_positions(expr: Value, line_mappings: &[LineMapping]) {
+    match expr {
+        Value::Pair(ref p) => {
+            let mut pair_data = p.borrow_mut();
+
+            // Translate the position if present
+            if let Some(ref pos) = pair_data.pos {
+                if let Some(mapping) = line_mappings.iter().find(|m| m.output_line == pos.line) {
+                    pair_data.pos = Some(dazzle_core::scheme::parser::Position {
+                        line: mapping.source_line,
+                        column: pos.column,
+                    });
+                }
+            }
+
+            // Recursively translate car and cdr (clone before recursing to avoid borrow issues)
+            let car = pair_data.car.clone();
+            let cdr = pair_data.cdr.clone();
+            drop(pair_data); // Release the borrow before recursing
+            translate_positions(car, line_mappings);
+            translate_positions(cdr, line_mappings);
+        }
+        Value::Vector(ref v) => {
+            let vec_data = v.borrow();
+            let elements: Vec<Value> = vec_data.iter().cloned().collect();
+            drop(vec_data); // Release the borrow
+            for elem in elements {
+                translate_positions(elem, line_mappings);
+            }
+        }
+        _ => {},
+    }
+}
+
 /// Resolve XML template wrapper (.dsl format) to plain Scheme code
 ///
 /// Parses entity declarations from DOCTYPE and resolves entity references
 /// by loading external .scm files, then concatenates all Scheme code.
+///
+/// Returns (concatenated_code, line_mappings)
 fn resolve_xml_template(
     xml_content: &str,
     template_path: &PathBuf,
     _search_dirs: &[PathBuf],
-) -> Result<String> {
+) -> Result<(String, Vec<LineMapping>)> {
     use std::collections::HashMap;
 
     // Extract entity declarations from DOCTYPE
@@ -257,6 +334,8 @@ fn resolve_xml_template(
 
     // Build result by resolving entity references
     let mut result = String::new();
+    let mut line_mappings = Vec::new();
+    let mut current_output_line = 1;
 
     for line in xml_content.lines() {
         let line = line.trim();
@@ -300,9 +379,23 @@ fn resolve_xml_template(
                                 content = content[..content.len() - 3].to_string(); // Strip "]]>"
                             }
                         }
+                        // No line offset needed - when we strip "<![CDATA[" from the string,
+                        // the first line of the stripped content corresponds to line 1 of the original file
+                        // (the part after "<![CDATA[" on that line)
+
+                        // Track line mappings for this entity file
+                        let source_file = entity_path.to_string_lossy().to_string();
+                        for (source_line_idx, _) in content.lines().enumerate() {
+                            line_mappings.push(LineMapping {
+                                output_line: current_output_line,
+                                source_file: source_file.clone(),
+                                source_line: source_line_idx + 1, // 1-indexed line numbers
+                            });
+                            current_output_line += 1;
+                        }
 
                         result.push_str(&content);
-                        result.push('\n');
+                        // Don't add extra newline - it creates a line offset in the concatenated output
                     }
                     Err(e) => {
                         return Err(anyhow::anyhow!(
@@ -320,5 +413,5 @@ fn resolve_xml_template(
         anyhow::bail!("No Scheme code extracted from XML template");
     }
 
-    Ok(result)
+    Ok((result, line_mappings))
 }

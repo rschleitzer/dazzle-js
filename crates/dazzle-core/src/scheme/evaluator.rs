@@ -27,6 +27,7 @@
 //!   - Otherwise → evaluate all elements, apply first to rest
 
 use crate::scheme::environment::Environment;
+use crate::scheme::parser::Position;
 use crate::scheme::value::{Procedure, Value};
 use crate::grove::{Grove, Node};
 use crate::fot::FotBuilder;
@@ -132,16 +133,25 @@ impl EvalError {
 
 impl std::fmt::Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Eval error: {}", self.message)?;
+        // OpenJade-style format: file:line:col:E: message
+        write!(f, "{}", self.message)?;
 
-        if !self.call_stack.is_empty() {
-            writeln!(f, "\nCall stack:")?;
-            for frame in &self.call_stack {
-                if let Some(ref source) = frame.source {
-                    // VS Code clickable format: file:line:column
-                    writeln!(f, "  at {} ({})", frame.function_name, source)?;
+        // Show call stack in reverse order (innermost to outermost, matching OpenJade)
+        for (i, frame) in self.call_stack.iter().rev().enumerate() {
+            if let Some(ref source) = frame.source {
+                // First frame gets a newline before it, rest don't
+                if i == 0 {
+                    writeln!(f, "\n{}:{}:{}:I: called from here",
+                             source.file, source.pos.line, source.pos.column)?;
                 } else {
-                    writeln!(f, "  at {}", frame.function_name)?;
+                    writeln!(f, "{}:{}:{}:I: called from here",
+                             source.file, source.pos.line, source.pos.column)?;
+                }
+            } else {
+                if i == 0 {
+                    writeln!(f, "\n{}:I: called from here", frame.function_name)?;
+                } else {
+                    writeln!(f, "{}:I: called from here", frame.function_name)?;
                 }
             }
         }
@@ -260,6 +270,11 @@ pub struct Evaluator {
     ///
     /// Set when loading templates, used to provide context in errors.
     current_source_file: Option<String>,
+
+    /// Current position in source (for error reporting)
+    ///
+    /// Tracks line and column for the expression being evaluated.
+    current_position: Option<Position>,
 }
 
 impl Evaluator {
@@ -272,6 +287,7 @@ impl Evaluator {
             backend: None,
             call_stack: Vec::new(),
             current_source_file: None,
+            current_position: None,
         }
     }
 
@@ -284,6 +300,7 @@ impl Evaluator {
             backend: None,
             call_stack: Vec::new(),
             current_source_file: None,
+            current_position: None,
         }
     }
 
@@ -297,6 +314,11 @@ impl Evaluator {
         self.current_source_file.as_deref()
     }
 
+    /// Set the current position (for error reporting)
+    pub fn set_position(&mut self, position: Position) {
+        self.current_position = Some(position);
+    }
+
     /// Push a call frame onto the stack
     fn push_call_frame(&mut self, function_name: String, source: Option<SourceInfo>) {
         self.call_stack.push(CallFrame::new(function_name, source));
@@ -307,9 +329,19 @@ impl Evaluator {
         self.call_stack.pop();
     }
 
-    /// Create an error with the current call stack
+    /// Create an error with the current call stack and position
     fn error_with_stack(&self, message: String) -> EvalError {
-        EvalError::with_stack(message, self.call_stack.clone())
+        // Include current position in the error message (OpenJade format)
+        let full_message = match (&self.current_source_file, &self.current_position) {
+            (Some(file), Some(pos)) => {
+                format!("{}:{}:{}:E: {}", file, pos.line, pos.column, message)
+            }
+            (Some(file), None) => {
+                format!("{}:E: {}", file, message)
+            }
+            _ => message,
+        };
+        EvalError::with_stack(full_message, self.call_stack.clone())
     }
 
     /// Set the backend
@@ -477,6 +509,14 @@ impl Evaluator {
 
     /// Evaluate a list (special form or function call)
     fn eval_list(&mut self, expr: Value, env: Gc<Environment>) -> EvalResult {
+        // Extract position from the pair if available and update current position
+        if let Value::Pair(ref p) = expr {
+            let pair_data = p.borrow();
+            if let Some(ref pos) = pair_data.pos {
+                self.current_position = Some(pos.clone());
+            }
+        }
+
         // Extract the operator (first element)
         let (operator, args) = self.list_car_cdr(&expr)?;
 
@@ -1080,12 +1120,19 @@ impl Evaluator {
             Value::cons(Value::symbol("begin"), body_list)
         };
 
-        // Create lambda closure capturing current environment
-        // Use current source file for error reporting (line numbers would require parser changes)
-        let source_info = self.current_source_file.as_ref().map(|file| {
-            use crate::scheme::parser::Position;
-            SourceInfo::new(file.clone(), Position::new())
-        });
+        // Create lambda closure capturing current environment and source location
+        // current_position has been set by eval_list to the position of the (lambda ...) expression
+        let source_info = match (&self.current_source_file, &self.current_position) {
+            (Some(file), Some(pos)) => {
+                // Clone the position since we'll be mutating current_position later
+                Some(SourceInfo::new(file.clone(), pos.clone()))
+            }
+            (Some(file), None) => {
+                use crate::scheme::parser::Position;
+                Some(SourceInfo::new(file.clone(), Position::new()))
+            }
+            _ => None,
+        };
         Ok(Value::lambda_with_source(param_names, body, env, source_info, None))
     }
 
@@ -1328,6 +1375,11 @@ impl Evaluator {
     /// The key expression is evaluated and compared with each datum using eqv?.
     /// The datums are NOT evaluated (they are literal constants).
     fn eval_case(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        // Save position at the start of eval_case for accurate error reporting
+        // (the case expression's position, not sub-expressions)
+        let case_position = self.current_position.clone();
+        let case_file = self.current_source_file.clone();
+
         let args_vec = self.list_to_vec(args)?;
         if args_vec.is_empty() {
             return Err(EvalError::new("case requires at least 1 argument".to_string()));
@@ -1369,8 +1421,13 @@ impl Evaluator {
             }
         }
 
-        // No match found
-        Ok(Value::Unspecified)
+        // No match found - restore the case expression's position for the error
+        self.current_position = case_position.clone();
+        self.current_source_file = case_file;
+        Err(self.error_with_stack(format!(
+            "no clause in case expression matched {:?}",
+            key
+        )))
     }
 
     /// (and expr...)
@@ -1569,6 +1626,8 @@ impl Evaluator {
 
     /// (node-list-filter predicate node-list)
     ///
+    /// (node-list-filter pred node-list) → node-list
+    ///
     /// Returns a node-list containing only nodes for which predicate returns #t.
     /// DSSSL: Filter a node-list based on a predicate function.
     fn eval_node_list_filter(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
@@ -1708,7 +1767,7 @@ impl Evaluator {
         Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(result_nodes))))
     }
 
-    /// (node-list-some? predicate node-list)
+    /// (node-list-some? predicate node-list) → boolean
     ///
     /// Returns #t if the predicate returns true for at least one node in the node-list.
     /// Returns #f if the node-list is empty or the predicate returns false for all nodes.
@@ -1783,11 +1842,25 @@ impl Evaluator {
         let mut parser = crate::scheme::parser::Parser::new(&contents);
         let mut result = Value::Unspecified;
 
+        // Save current source file and position, set to the loaded file for error reporting
+        let prev_source_file = self.current_source_file.clone();
+        let prev_position = self.current_position.clone();
+        self.current_source_file = Some(filename.clone());
+
         // Evaluate each expression in sequence
-        loop {
+        let eval_result = loop {
+            // Get position before parsing
+            let pos = parser.current_position();
+
             match parser.parse() {
                 Ok(expr) => {
-                    result = self.eval_inner(expr, env.clone())?;
+                    // Set position for this expression
+                    self.current_position = Some(pos);
+
+                    match self.eval_inner(expr, env.clone()) {
+                        Ok(val) => result = val,
+                        Err(e) => break Err(e),
+                    }
                 }
                 Err(e) => {
                     // Check if we've reached end of input (not an error)
@@ -1795,16 +1868,20 @@ impl Evaluator {
                     if error_msg.contains("Unexpected end of input")
                         || error_msg.contains("Expected")
                         || error_msg.contains("EOF") {
-                        break;
+                        break Ok(result);
                     }
-                    return Err(EvalError::new(
+                    break Err(EvalError::new(
                         format!("load: parse error in '{}': {}", filename, e)
                     ));
                 }
             }
-        }
+        };
 
-        Ok(result)
+        // Restore previous source file and position
+        self.current_source_file = prev_source_file;
+        self.current_position = prev_position;
+
+        eval_result
     }
 
     // =========================================================================
@@ -1825,6 +1902,12 @@ impl Evaluator {
         let args_vec = self.list_to_vec(args)?;
         let mut evaled_args = Vec::new();
         for arg in args_vec {
+            // Update position to this argument's position before evaluating it
+            if let Value::Pair(ref p) = arg {
+                if let Some(ref pos) = p.borrow().pos {
+                    self.current_position = Some(pos.clone());
+                }
+            }
             evaled_args.push(self.eval_inner(arg, env.clone())?);
         }
 
@@ -1837,11 +1920,9 @@ impl Evaluator {
         if let Value::Procedure(ref p) = proc {
             match &**p {
                 Procedure::Primitive { name, func } => {
-                    // Push primitive call frame
-                    self.push_call_frame(name.to_string(), None);
-                    let result = func(&args).map_err(|e| self.error_with_stack(e));
-                    self.pop_call_frame();
-                    result
+                    // Don't push call frames for primitives - only for user lambdas
+                    // This matches OpenJade's behavior
+                    func(&args).map_err(|e| self.error_with_stack(e))
                 }
                 Procedure::Lambda { params, body, env, source, name } => {
                     // Check argument count
@@ -1853,9 +1934,31 @@ impl Evaluator {
                         )));
                     }
 
-                    // Push call frame with function name and source location
-                    let func_name = name.clone().unwrap_or_else(|| "<lambda>".to_string());
-                    self.push_call_frame(func_name, source.clone());
+                    // Save current position (call site) before switching to lambda's definition location
+                    let saved_file = self.current_source_file.clone();
+                    let saved_pos = self.current_position.clone();
+
+                    // Only push call frame for NAMED functions (not anonymous lambdas)
+                    // This matches OpenJade's behavior - it only tracks named function calls
+                    let should_track = name.is_some();
+
+                    if should_track {
+                        let call_site = match (&saved_file, &saved_pos) {
+                            (Some(file), Some(pos)) => Some(SourceInfo {
+                                file: file.clone(),
+                                pos: pos.clone(),
+                            }),
+                            _ => None,
+                        };
+                        let func_name = name.clone().unwrap();
+                        self.push_call_frame(func_name, call_site);
+                    }
+
+                    // Switch to lambda's definition location for evaluating the body
+                    if let Some(ref src) = source {
+                        self.current_source_file = Some(src.file.clone());
+                        self.current_position = Some(src.pos.clone());
+                    }
 
                     // Create new environment extending the closure environment
                     let lambda_env = Environment::extend(env.clone());
@@ -1868,8 +1971,14 @@ impl Evaluator {
                     // Evaluate body in the new environment
                     let result = self.eval_inner((**body).clone(), lambda_env);
 
-                    // Pop call frame
-                    self.pop_call_frame();
+                    // Restore previous position
+                    self.current_source_file = saved_file;
+                    self.current_position = saved_pos;
+
+                    // Pop call frame if we pushed one
+                    if should_track {
+                        self.pop_call_frame();
+                    }
 
                     result
                 }

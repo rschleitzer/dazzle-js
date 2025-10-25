@@ -298,14 +298,21 @@ mod tests {
             panic!("Expected symbol 'default");
         }
 
-        // Test case with no match and no else (returns unspecified)
+        // Test case with no match and no else (should error - OpenJade behavior)
+        // R4RS says the result is unspecified, but OpenJade treats this as an error
+        // for better error detection, which is more useful for code generation
         let code = r#"
             (case 99
               ((1 2) 'first)
               ((3 4) 'second))
         "#;
-        let result = eval_string(code);
-        assert!(matches!(result, Value::Unspecified));
+        // This should error
+        let env = Environment::new_global();
+        let mut evaluator = Evaluator::new();
+        let mut parser = Parser::new(code);
+        let expr = parser.parse().unwrap();
+        let result = evaluator.eval(expr, env);
+        assert!(result.is_err(), "Expected error when no case clause matches");
 
         // Test case with expression as key
         let code = r#"

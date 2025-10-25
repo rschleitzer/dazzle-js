@@ -107,7 +107,10 @@ impl fmt::Display for Token {
 /// Source code position (line and column)
 ///
 /// **Important**: Line and column numbers start at 1 (human-readable).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Derives Trace and Finalize for GC compatibility (used in PairData).
+/// Note: Can't derive Copy with Finalize due to destructor conflict.
+#[derive(Debug, Clone, PartialEq, Eq, gc::Trace, gc::Finalize)]
 pub struct Position {
     pub line: usize,
     pub column: usize,
@@ -811,6 +814,14 @@ impl Parser {
         self.tokenizer.peek_token()
     }
 
+    /// Get the current position in the source code
+    ///
+    /// Returns the position of the last token consumed by the parser.
+    /// Useful for error reporting.
+    pub fn current_position(&self) -> Position {
+        self.tokenizer.position()
+    }
+
     /// Parse all S-expressions in input
     ///
     /// Returns a list of all top-level expressions.
@@ -852,33 +863,36 @@ impl Parser {
             // Quote
             Token::Quote => {
                 let quoted = self.parse_expr()?;
-                Ok(Value::cons(Value::symbol("quote"), Value::cons(quoted, Value::Nil)))
+                Ok(Value::cons_with_pos(Value::symbol("quote"), Value::cons(quoted, Value::Nil), start_pos))
             }
 
             // Quasiquote
             Token::Quasiquote => {
                 let quoted = self.parse_expr()?;
-                Ok(Value::cons(
+                Ok(Value::cons_with_pos(
                     Value::symbol("quasiquote"),
                     Value::cons(quoted, Value::Nil),
+                    start_pos
                 ))
             }
 
             // Unquote
             Token::Unquote => {
                 let quoted = self.parse_expr()?;
-                Ok(Value::cons(
+                Ok(Value::cons_with_pos(
                     Value::symbol("unquote"),
                     Value::cons(quoted, Value::Nil),
+                    start_pos
                 ))
             }
 
             // Unquote-splicing
             Token::UnquoteSplicing => {
                 let quoted = self.parse_expr()?;
-                Ok(Value::cons(
+                Ok(Value::cons_with_pos(
                     Value::symbol("unquote-splicing"),
                     Value::cons(quoted, Value::Nil),
+                    start_pos
                 ))
             }
 
@@ -944,10 +958,10 @@ impl Parser {
             }
         }
 
-        // Build the list from right to left
+        // Build the list from right to left, preserving the source position
         let mut result = dotted_tail.unwrap_or(Value::Nil);
         for elem in elements.into_iter().rev() {
-            result = Value::cons(elem, result);
+            result = Value::cons_with_pos(elem, result, start_pos.clone());
         }
 
         Ok(result)

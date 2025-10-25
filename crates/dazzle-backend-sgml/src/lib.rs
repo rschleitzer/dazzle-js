@@ -219,12 +219,25 @@ impl FotBuilder for SgmlBackend {
 
         // Construct full directory path
         let dir_path = self.output_dir.join(&relative_path);
-        fs::create_dir_all(&dir_path)?;
+        fs::create_dir_all(&dir_path)
+            .map_err(|e| std::io::Error::new(
+                e.kind(),
+                format!("Failed to create directory {}: {}", dir_path.display(), e)
+            ))?;
 
         // Normalize the path to handle .. and .
         // We do this by canonicalizing relative to output_dir
-        let canonical = dir_path.canonicalize()?;
-        let normalized_relative = canonical.strip_prefix(&self.output_dir.canonicalize()?)
+        let canonical = dir_path.canonicalize()
+            .map_err(|e| std::io::Error::new(
+                e.kind(),
+                format!("Failed to canonicalize directory {}: {}", dir_path.display(), e)
+            ))?;
+        let output_canonical = self.output_dir.canonicalize()
+            .map_err(|e| std::io::Error::new(
+                e.kind(),
+                format!("Failed to canonicalize output_dir {}: {}", self.output_dir.display(), e)
+            ))?;
+        let normalized_relative = canonical.strip_prefix(&output_canonical)
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|_| relative_path.clone());
 
