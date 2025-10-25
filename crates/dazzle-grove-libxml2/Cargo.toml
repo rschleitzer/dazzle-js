@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "libxml2-based grove implementation for Dazzle (XML + DTD validation)"
 
 [dependencies]
-dazzle-core = { version = "0.3.0", path = "../dazzle-core" }
+dazzle-core = { version = "0.4.0", path = "../dazzle-core" }
 libxml = { workspace = true }
 thiserror = { workspace = true }
 
