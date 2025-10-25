@@ -3419,6 +3419,10 @@ pub fn prim_gi(args: &[Value]) -> PrimitiveResult {
     }
 
     match &args[0] {
+        Value::Bool(false) => {
+            // #f → #f (OpenJade behavior for optional singleton node list)
+            Ok(Value::bool(false))
+        }
         Value::Node(node) => {
             if let Some(gi) = node.gi() {
                 Ok(Value::string(gi))
@@ -3449,11 +3453,11 @@ pub fn prim_gi(args: &[Value]) -> PrimitiveResult {
     }
 }
 
-/// (data node) → string | #f
+/// (data node) → string
 ///
 /// Returns the text content of a node.
 /// For text nodes, returns the text. For elements, returns concatenated descendant text.
-/// Returns #f if the node has no data.
+/// Returns an empty string if the node has no data (OpenJade behavior).
 ///
 /// **DSSSL**: Grove primitive
 pub fn prim_data(args: &[Value]) -> PrimitiveResult {
@@ -3463,16 +3467,14 @@ pub fn prim_data(args: &[Value]) -> PrimitiveResult {
 
     match &args[0] {
         Value::Node(node) => {
+            // OpenJade always returns a string (possibly empty), never #f
+            // It returns text content as-is, WITHOUT whitespace normalization
+            // This preserves leading/trailing spaces and all internal whitespace
             if let Some(data) = node.data() {
-                // OpenJade returns text content as-is, WITHOUT whitespace normalization
-                // This preserves leading/trailing spaces and all internal whitespace
-                if data.is_empty() {
-                    Ok(Value::bool(false))
-                } else {
-                    Ok(Value::string(data))
-                }
+                Ok(Value::string(data))
             } else {
-                Ok(Value::bool(false))
+                // No data - return empty string (OpenJade behavior)
+                Ok(Value::string(String::new()))
             }
         }
         Value::NodeList(nl) => {
@@ -3496,12 +3498,9 @@ pub fn prim_data(args: &[Value]) -> PrimitiveResult {
                 }
             }
 
-            if result.is_empty() {
-                Ok(Value::bool(false))
-            } else {
-                // OpenJade concatenates data as-is, WITHOUT whitespace normalization
-                Ok(Value::string(result))
-            }
+            // OpenJade always returns a string (possibly empty), never #f
+            // OpenJade concatenates data as-is, WITHOUT whitespace normalization
+            Ok(Value::string(result))
         }
         _ => Err(format!(
             "1st argument for primitive \"data\" of wrong type: {:?} not an optional singleton node list",
@@ -3554,6 +3553,11 @@ pub fn prim_attribute_string(args: &[Value]) -> PrimitiveResult {
             } else {
                 Err(format!("attribute-string: node-list must have exactly 1 element, got {}", nl.length()))
             }
+        }
+        Value::Bool(false) => {
+            // #f → #f (OpenJade behavior for optional singleton node list)
+            // This handles the case where a function might return #f meaning "no node"
+            Ok(Value::bool(false))
         }
         _ => Err(format!(
             "2nd argument for primitive \"attribute-string\" of wrong type: {:?} not an optional singleton node list",
@@ -3686,6 +3690,10 @@ pub fn prim_parent(args: &[Value]) -> PrimitiveResult {
     }
 
     let node: Box<dyn crate::grove::Node> = match &args[0] {
+        Value::Bool(false) => {
+            // #f → #f (OpenJade behavior for optional singleton node list)
+            return Ok(Value::bool(false));
+        }
         Value::Node(n) => n.clone_node(),
         Value::NodeList(nl) => {
             // DSSSL: node property functions can operate on node-lists (first node)
