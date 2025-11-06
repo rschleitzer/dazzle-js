@@ -217,6 +217,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.2] - 2025-11-06
+
+### Fixed
+- **Parser error handling for dot-prefixed identifiers**: Fixed parser to report clear error messages when invalid dot-prefixed identifiers are used
+  - Previously, syntax like `(.gitignore)` was silently misparsed, causing confusing behavior
+  - Now gives clear error: "Invalid syntax: dot cannot appear immediately after opening parenthesis"
+  - Error message explains that identifiers cannot start with '.' (dot is reserved for dotted pairs)
+  - Provides examples of valid dotted pairs: `(a . b)` and invalid syntax: `(.gitignore)`
+  - OpenJade also rejects this syntax with error: "unexpected token"
+  - Added 3 test cases to verify error handling
+- **Filename reporting in parse errors**: Parse errors now show the actual source file and line number
+  - Previously: "Parse error at 502:11: ..." (concatenated line number)
+  - Now: "codegen/boilerplate.scm:358:11: ..." (actual source file and line)
+  - Works with XML template wrappers that load multiple .scm files via entity references
+
+---
+
 ## [Unreleased]
 
 ### Planned for v0.5.0
@@ -225,6 +242,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Additional grove implementations (OpenSP for full SGML)
 - Additional backends (RTF, TeX, MIF, HTML)
 
+[0.4.2]: https://github.com/rschleitzer/dazzle/releases/tag/v0.4.2
 [0.4.1]: https://github.com/rschleitzer/dazzle/releases/tag/v0.4.1
 [0.2.0]: https://github.com/rschleitzer/dazzle/releases/tag/v0.2.0
 [0.1.0]: https://github.com/rschleitzer/dazzle/releases/tag/v0.1.0
