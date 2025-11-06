@@ -9,7 +9,7 @@ use dazzle_backend_sgml::SgmlBackend;
 use dazzle_core::fot::FotBuilder;
 use dazzle_core::grove::Grove;
 use dazzle_core::scheme::environment::Environment;
-use dazzle_core::scheme::evaluator::Evaluator;
+use dazzle_core::scheme::evaluator::{Evaluator, LineMapping};
 use dazzle_core::scheme::parser::Parser as SchemeParser;
 use dazzle_core::scheme::primitives;
 use dazzle_core::scheme::value::Value;
@@ -114,6 +114,10 @@ fn run(args: Args) -> Result<()> {
     debug!("Template loaded, evaluating...");
     // Set source file for error reporting
     evaluator.set_source_file(template_path.to_string_lossy().to_string());
+    // Set line mappings for accurate error reporting
+    if !line_mappings.is_empty() {
+        evaluator.set_line_mappings(line_mappings.clone());
+    }
     evaluate_template(&mut evaluator, env.clone(), &scheme_code, &line_mappings)?;
 
     // 9. Start DSSSL processing from root (OpenJade's ProcessContext::process)
@@ -196,26 +200,9 @@ fn evaluate_template(
                 // More tokens available, try to parse
                 match parser.parse() {
                     Ok(expr) => {
-                        // Translate positions in the expression tree using line mappings
-                        if !line_mappings.is_empty() {
-                            translate_positions(expr.clone(), line_mappings);
-
-                            // Find the mapping for this top-level expression's line
-                            if let Some(mapping) = line_mappings.iter().find(|m| m.output_line == pos.line) {
-                                // Update evaluator with the mapped source file and position
-                                evaluator.set_source_file(mapping.source_file.clone());
-                                evaluator.set_position(dazzle_core::scheme::parser::Position {
-                                    line: mapping.source_line,
-                                    column: pos.column,
-                                });
-                            } else {
-                                // No mapping found, use original position
-                                evaluator.set_position(pos);
-                            }
-                        } else {
-                            // No mappings, use original position
-                            evaluator.set_position(pos);
-                        }
+                        // Don't translate positions - let eval_list do it dynamically
+                        // Just set the position from the parser
+                        evaluator.set_position(pos);
 
                         let _result = evaluator
                             .eval(expr, env.clone())
@@ -260,17 +247,6 @@ fn evaluate_template(
     }
 
     Ok(())
-}
-
-/// Line mapping entry - maps a line number in concatenated code to its source file and line
-#[derive(Debug, Clone)]
-pub struct LineMapping {
-    /// Line number in the concatenated output (1-indexed)
-    pub output_line: usize,
-    /// Source file path
-    pub source_file: String,
-    /// Line number in the source file (1-indexed)
-    pub source_line: usize,
 }
 
 /// Translate all positions in an expression tree using line mappings
@@ -391,16 +367,21 @@ fn resolve_xml_template(
 
                         // Strip CDATA wrappers if present
                         // Some .scm files are wrapped in <![CDATA[...]]> for XML embedding
-                        let trimmed = content.trim();
-                        if trimmed.starts_with("<![CDATA[") {
-                            content = trimmed[9..].to_string(); // Strip "<![CDATA["
-                            if content.ends_with("]]>") {
+                        // IMPORTANT: Don't use trim() - it changes line counts!
+                        if content.starts_with("<![CDATA[") {
+                            content = content[9..].to_string(); // Strip "<![CDATA["
+
+                            // Strip ]]> suffix - handle both "]]>" and "]]>\n"
+                            if content.ends_with("]]>\n") {
+                                content = content[..content.len() - 4].to_string(); // Strip "]]>\n"
+                                content.push('\n'); // Keep the final newline for correct line counting
+                            } else if content.ends_with("]]>") {
                                 content = content[..content.len() - 3].to_string(); // Strip "]]>"
                             }
                         }
-                        // No line offset needed - when we strip "<![CDATA[" from the string,
-                        // the first line of the stripped content corresponds to line 1 of the original file
-                        // (the part after "<![CDATA[" on that line)
+                        // After stripping CDATA markers, line numbers are preserved:
+                        // - Line 1 of stripped content = Line 1 of original file (content after <![CDATA[)
+                        // - The ]]> line is removed, keeping line numbers aligned with the original file
 
                         // Track line mappings for this entity file
                         let source_file = entity_path.to_string_lossy().to_string();

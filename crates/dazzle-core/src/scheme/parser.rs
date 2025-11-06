@@ -970,6 +970,7 @@ impl Parser {
     /// Parse a list (after opening paren consumed)
     fn parse_list(&mut self, start_pos: Position) -> ParseResult<Value> {
         let mut elements = Vec::new();
+        let mut element_positions = Vec::new();
         let mut dotted_tail = None;
 
         loop {
@@ -1020,15 +1021,19 @@ impl Parser {
                 }
 
                 _ => {
+                    // Capture the position BEFORE parsing each element
+                    // This gives us the position where this element appears in source
+                    let elem_pos = self.tokenizer.position();
                     elements.push(self.parse_expr()?);
+                    element_positions.push(elem_pos);
                 }
             }
         }
 
-        // Build the list from right to left, preserving the source position
+        // Build the list from right to left, using each element's individual position
         let mut result = dotted_tail.unwrap_or(Value::Nil);
-        for elem in elements.into_iter().rev() {
-            result = Value::cons_with_pos(elem, result, start_pos.clone());
+        for (elem, elem_pos) in elements.into_iter().zip(element_positions.into_iter()).rev() {
+            result = Value::cons_with_pos(elem, result, elem_pos);
         }
 
         Ok(result)
