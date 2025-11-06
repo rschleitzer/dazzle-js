@@ -138,22 +138,31 @@ impl fmt::Display for Position {
 // Parse Error
 // =============================================================================
 
-/// Parse error with line:column position
+/// Parse error with line:column position and optional filename
 #[derive(Debug, Clone)]
 pub struct ParseError {
     pub message: String,
     pub position: Position,
+    pub filename: Option<String>,
 }
 
 impl ParseError {
     pub fn new(message: String, position: Position) -> Self {
-        ParseError { message, position }
+        ParseError { message, position, filename: None }
+    }
+
+    pub fn with_filename(message: String, position: Position, filename: String) -> Self {
+        ParseError { message, position, filename: Some(filename) }
     }
 }
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Parse error at {}: {}", self.position, self.message)
+        if let Some(ref filename) = self.filename {
+            write!(f, "{}:{}:E: {}", filename, self.position, self.message)
+        } else {
+            write!(f, "Parse error at {}: {}", self.position, self.message)
+        }
     }
 }
 
@@ -195,6 +204,9 @@ pub struct Tokenizer {
 
     /// Peeked token (for lookahead)
     peeked: Option<Token>,
+
+    /// Optional filename for error reporting
+    filename: Option<String>,
 }
 
 impl Tokenizer {
@@ -206,6 +218,28 @@ impl Tokenizer {
             line: 1,
             column: 1,
             peeked: None,
+            filename: None,
+        }
+    }
+
+    /// Create a new tokenizer from source code with a filename for error reporting
+    pub fn new_with_filename(input: &str, filename: String) -> Self {
+        Tokenizer {
+            input: input.chars().collect(),
+            pos: 0,
+            line: 1,
+            column: 1,
+            peeked: None,
+            filename: Some(filename),
+        }
+    }
+
+    /// Helper to create a ParseError with the current filename
+    fn error(&self, message: String, position: Position) -> ParseError {
+        if let Some(ref filename) = self.filename {
+            ParseError::with_filename(message, position, filename.clone())
+        } else {
+            ParseError::new(message, position)
         }
     }
 
@@ -329,7 +363,7 @@ impl Tokenizer {
                 break;
             } else {
                 // Invalid character in number
-                return Err(ParseError::new(
+                return Err(self.error(
                     format!("Invalid character in number: {}", ch),
                     start_pos,
                 ));
@@ -346,7 +380,7 @@ impl Tokenizer {
             return Ok(Token::Real(n));
         }
 
-        Err(ParseError::new(
+        Err(self.error(
             format!("Invalid number: {}", num_str),
             start_pos,
         ))
@@ -363,7 +397,7 @@ impl Tokenizer {
             } else if Self::is_delimiter(ch) {
                 break;
             } else {
-                return Err(ParseError::new(
+                return Err(self.error(
                     format!("Invalid character in hex number: {}", ch),
                     start_pos,
                 ));
@@ -371,12 +405,12 @@ impl Tokenizer {
         }
 
         if num_str.is_empty() {
-            return Err(ParseError::new("Empty hex number".to_string(), start_pos));
+            return Err(self.error("Empty hex number".to_string(), start_pos));
         }
 
         i64::from_str_radix(&num_str, 16)
             .map(Token::Integer)
-            .map_err(|_| ParseError::new(format!("Invalid hex number: {}", num_str), start_pos))
+            .map_err(|_| self.error(format!("Invalid hex number: {}", num_str), start_pos))
     }
 
     /// Parse an octal number (#o prefix)
@@ -390,7 +424,7 @@ impl Tokenizer {
             } else if Self::is_delimiter(ch) {
                 break;
             } else {
-                return Err(ParseError::new(
+                return Err(self.error(
                     format!("Invalid character in octal number: {}", ch),
                     start_pos,
                 ));
@@ -398,12 +432,12 @@ impl Tokenizer {
         }
 
         if num_str.is_empty() {
-            return Err(ParseError::new("Empty octal number".to_string(), start_pos));
+            return Err(self.error("Empty octal number".to_string(), start_pos));
         }
 
         i64::from_str_radix(&num_str, 8)
             .map(Token::Integer)
-            .map_err(|_| ParseError::new(format!("Invalid octal number: {}", num_str), start_pos))
+            .map_err(|_| self.error(format!("Invalid octal number: {}", num_str), start_pos))
     }
 
     /// Parse a binary number (#b prefix)
@@ -417,7 +451,7 @@ impl Tokenizer {
             } else if Self::is_delimiter(ch) {
                 break;
             } else {
-                return Err(ParseError::new(
+                return Err(self.error(
                     format!("Invalid character in binary number: {}", ch),
                     start_pos,
                 ));
@@ -425,12 +459,12 @@ impl Tokenizer {
         }
 
         if num_str.is_empty() {
-            return Err(ParseError::new("Empty binary number".to_string(), start_pos));
+            return Err(self.error("Empty binary number".to_string(), start_pos));
         }
 
         i64::from_str_radix(&num_str, 2)
             .map(Token::Integer)
-            .map_err(|_| ParseError::new(format!("Invalid binary number: {}", num_str), start_pos))
+            .map_err(|_| self.error(format!("Invalid binary number: {}", num_str), start_pos))
     }
 
     /// Parse a symbol or keyword
@@ -473,7 +507,7 @@ impl Tokenizer {
                         Some('"') => result.push('"'),
                         Some(ch) => result.push(ch), // Unknown escape, keep literal
                         None => {
-                            return Err(ParseError::new(
+                            return Err(self.error(
                                 "Unexpected EOF in string escape".to_string(),
                                 start_pos,
                             ))
@@ -484,7 +518,7 @@ impl Tokenizer {
                     result.push(ch);
                 }
                 None => {
-                    return Err(ParseError::new(
+                    return Err(self.error(
                         "Unexpected EOF in string".to_string(),
                         start_pos,
                     ))
@@ -498,7 +532,7 @@ impl Tokenizer {
     fn parse_char(&mut self, start_pos: Position) -> ParseResult<char> {
         // Expect backslash
         if self.next_char() != Some('\\') {
-            return Err(ParseError::new(
+            return Err(self.error(
                 "Expected \\ after # in character literal".to_string(),
                 start_pos,
             ));
@@ -515,7 +549,7 @@ impl Tokenizer {
         }
 
         if name.is_empty() {
-            return Err(ParseError::new(
+            return Err(self.error(
                 "Empty character literal".to_string(),
                 start_pos,
             ));
@@ -534,7 +568,7 @@ impl Tokenizer {
                 u32::from_str_radix(hex_str, 16)
                     .ok()
                     .and_then(std::char::from_u32)
-                    .ok_or_else(|| ParseError::new(
+                    .ok_or_else(|| self.error(
                         format!("Invalid Unicode character literal: #\\{}", name),
                         start_pos,
                     ))
@@ -542,7 +576,7 @@ impl Tokenizer {
             // Accept any single Unicode character (handles UTF-8 multi-byte sequences)
             // OpenJade accepts UTF-8 characters in character literals for define-language
             s if s.chars().count() == 1 => Ok(s.chars().next().unwrap()),
-            _ => Err(ParseError::new(
+            _ => Err(self.error(
                 format!("Invalid character literal: #\\{}", name),
                 start_pos,
             )),
@@ -564,7 +598,7 @@ impl Tokenizer {
         loop {
             match self.peek_char() {
                 None => {
-                    return Err(ParseError::new(
+                    return Err(self.error(
                         "Unclosed CDATA section: missing ]]>".to_string(),
                         start_pos,
                     ));
@@ -693,7 +727,7 @@ impl Tokenizer {
                         self.next_char(); // Consume b
                         self.parse_binary_number(start_pos)
                     }
-                    _ => Err(ParseError::new(
+                    _ => Err(self.error(
                         format!("Invalid # syntax: #{:?}", self.peek_char()),
                         start_pos,
                     )),
@@ -789,6 +823,7 @@ impl Tokenizer {
 /// ```
 pub struct Parser {
     tokenizer: Tokenizer,
+    filename: Option<String>,
 }
 
 impl Parser {
@@ -796,6 +831,24 @@ impl Parser {
     pub fn new(input: &str) -> Self {
         Parser {
             tokenizer: Tokenizer::new(input),
+            filename: None,
+        }
+    }
+
+    /// Create a new parser from source code with a filename for error reporting
+    pub fn new_with_filename(input: &str, filename: String) -> Self {
+        Parser {
+            tokenizer: Tokenizer::new_with_filename(input, filename.clone()),
+            filename: Some(filename),
+        }
+    }
+
+    /// Helper to create a ParseError with the current filename
+    fn error(&self, message: String, position: Position) -> ParseError {
+        if let Some(ref filename) = self.filename {
+            ParseError::with_filename(message, position, filename.clone())
+        } else {
+            ParseError::new(message, position)
         }
     }
 
@@ -897,17 +950,17 @@ impl Parser {
             }
 
             // Unexpected tokens
-            Token::RightParen | Token::RightBracket => Err(ParseError::new(
+            Token::RightParen | Token::RightBracket => Err(self.error(
                 format!("Unexpected closing delimiter: {}", tok),
                 start_pos,
             )),
 
-            Token::Dot => Err(ParseError::new(
+            Token::Dot => Err(self.error(
                 "Unexpected dot outside of list".to_string(),
                 start_pos,
             )),
 
-            Token::Eof => Err(ParseError::new(
+            Token::Eof => Err(self.error(
                 "Unexpected end of input".to_string(),
                 start_pos,
             )),
@@ -937,7 +990,7 @@ impl Parser {
                     // Expect closing paren
                     let tok = self.tokenizer.next_token()?;
                     if !matches!(tok, Token::RightParen | Token::RightBracket) {
-                        return Err(ParseError::new(
+                        return Err(self.error(
                             format!("Expected ) after dotted tail, got {}", tok),
                             start_pos,
                         ));
@@ -946,7 +999,7 @@ impl Parser {
                 }
 
                 Token::Eof => {
-                    return Err(ParseError::new(
+                    return Err(self.error(
                         "Unexpected EOF in list".to_string(),
                         start_pos,
                     ))
@@ -981,7 +1034,7 @@ impl Parser {
                 }
 
                 Token::Eof => {
-                    return Err(ParseError::new(
+                    return Err(self.error(
                         "Unexpected EOF in vector".to_string(),
                         start_pos,
                     ))
@@ -1332,6 +1385,34 @@ mod tests {
         } else {
             panic!("Expected keyword");
         }
+    }
+
+    #[test]
+    fn test_parse_error_with_filename() {
+        // Test that parser errors include the filename when provided
+        let mut parser = Parser::new_with_filename("(define x", "test.scm".to_string());
+        let err = parser.parse().unwrap_err();
+        let err_string = err.to_string();
+
+        // Error should include filename
+        assert!(err_string.contains("test.scm"), "Error should contain filename: {}", err_string);
+        // Error should include line and column (error is at the opening paren position)
+        assert!(err_string.contains("1:1"), "Error should contain position: {}", err_string);
+        // Error should use format: filename:line:column:E: message
+        assert!(err_string.contains("test.scm:1:1:E:"), "Error should use OpenJade format: {}", err_string);
+    }
+
+    #[test]
+    fn test_parse_error_without_filename() {
+        // Test that parser errors still work without filename
+        let mut parser = Parser::new("(define x");
+        let err = parser.parse().unwrap_err();
+        let err_string = err.to_string();
+
+        // Error should NOT include filename
+        assert!(!err_string.contains("test.scm"), "Error should not contain filename when not provided");
+        // But should still include position (error is at the opening paren position)
+        assert!(err_string.contains("1:1"), "Error should still contain position: {}", err_string);
     }
 }
 

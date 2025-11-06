@@ -1872,8 +1872,8 @@ impl Evaluator {
         let contents = std::fs::read_to_string(&filename)
             .map_err(|e| EvalError::new(format!("load: cannot read file '{}': {}", filename, e)))?;
 
-        // Parse the file contents
-        let mut parser = crate::scheme::parser::Parser::new(&contents);
+        // Parse the file contents with filename for error reporting
+        let mut parser = crate::scheme::parser::Parser::new_with_filename(&contents, filename.clone());
         let mut result = Value::Unspecified;
 
         // Save current source file and position, set to the loaded file for error reporting
