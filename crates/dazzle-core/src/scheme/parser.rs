@@ -982,6 +982,20 @@ impl Parser {
                 }
 
                 Token::Dot => {
+                    // Check if we have any elements before the dot
+                    // A dot immediately after ( is invalid: (.foo) is not valid Scheme
+                    // Valid dotted pairs require at least one element: (a . b)
+                    if elements.is_empty() {
+                        let dot_pos = self.tokenizer.position();
+                        return Err(self.error(
+                            "Invalid syntax: dot cannot appear immediately after opening parenthesis\n\
+                            Note: Identifiers cannot start with '.' (dot character is reserved for dotted pairs)\n\
+                            Example of valid dotted pair: (a . b)\n\
+                            Example of invalid syntax: (.gitignore)".to_string(),
+                            dot_pos,
+                        ));
+                    }
+
                     self.tokenizer.next_token()?; // Consume dot
 
                     // Parse the tail
@@ -1413,6 +1427,58 @@ mod tests {
         assert!(!err_string.contains("test.scm"), "Error should not contain filename when not provided");
         // But should still include position (error is at the opening paren position)
         assert!(err_string.contains("1:1"), "Error should still contain position: {}", err_string);
+    }
+
+    #[test]
+    fn test_parse_error_dot_after_open_paren() {
+        // Test that (.gitignore) gives a clear error
+        // This is invalid Scheme syntax - identifiers cannot start with dot
+        let mut parser = Parser::new("(.gitignore)");
+        let err = parser.parse().unwrap_err();
+        let err_string = err.to_string();
+
+        // Error should mention that dot cannot appear after opening paren
+        assert!(err_string.contains("dot cannot appear immediately after opening parenthesis"),
+                "Error should mention invalid dot position: {}", err_string);
+        // Error should mention that identifiers cannot start with dot
+        assert!(err_string.contains("Identifiers cannot start with '.'"),
+                "Error should explain why: {}", err_string);
+    }
+
+    #[test]
+    fn test_parse_error_dot_function_definition() {
+        // Test that (define (.gitignore) ...) gives a clear error
+        let mut parser = Parser::new("(define (.gitignore) (list))");
+        let err = parser.parse().unwrap_err();
+        let err_string = err.to_string();
+
+        // Should get same error about invalid dot syntax
+        assert!(err_string.contains("dot cannot appear immediately after opening parenthesis"),
+                "Error should mention invalid dot position: {}", err_string);
+    }
+
+    #[test]
+    fn test_parse_valid_dotted_pair_still_works() {
+        // Verify that valid dotted pairs like (a . b) still work
+        let mut parser = Parser::new("(a . b)");
+        let val = parser.parse().unwrap();
+
+        // Should successfully parse as a dotted pair
+        if let Value::Pair(ref p) = val {
+            let pair = p.borrow();
+            if let Value::Symbol(s) = &pair.car {
+                assert_eq!(&**s, "a");
+            } else {
+                panic!("Expected symbol 'a'");
+            }
+            if let Value::Symbol(s) = &pair.cdr {
+                assert_eq!(&**s, "b");
+            } else {
+                panic!("Expected symbol 'b'");
+            }
+        } else {
+            panic!("Expected pair");
+        }
     }
 }
 

@@ -223,13 +223,37 @@ fn evaluate_template(
                         // Results are now handled by `make` flow objects directly
                     }
                     Err(e) => {
-                        // Parse error - fail immediately
+                        // Parse error - find the source file from line mappings
+                        if !line_mappings.is_empty() {
+                            if let Some(mapping) = line_mappings.iter().find(|m| m.output_line == e.position.line) {
+                                return Err(anyhow::anyhow!(
+                                    "{}:{}:{}: {}",
+                                    mapping.source_file,
+                                    mapping.source_line,
+                                    e.position.column,
+                                    e.message
+                                ));
+                            }
+                        }
+                        // No mapping found or no mappings, use original position
                         return Err(anyhow::anyhow!("Parse error at {}: {}", e.position, e.message));
                     }
                 }
             }
             Err(e) => {
-                // Tokenizer error - fail immediately
+                // Tokenizer error - find the source file from line mappings
+                if !line_mappings.is_empty() {
+                    if let Some(mapping) = line_mappings.iter().find(|m| m.output_line == e.position.line) {
+                        return Err(anyhow::anyhow!(
+                            "{}:{}:{}: {}",
+                            mapping.source_file,
+                            mapping.source_line,
+                            e.position.column,
+                            e.message
+                        ));
+                    }
+                }
+                // No mapping found or no mappings, use original position
                 return Err(anyhow::anyhow!("Tokenizer error at {}: {}", e.position, e.message));
             }
         }
