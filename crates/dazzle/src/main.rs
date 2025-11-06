@@ -57,13 +57,8 @@ fn run(args: Args) -> Result<()> {
 
     debug!("XML parsed successfully");
 
-    // 2. Determine output directory (same as input file directory, or current dir)
-    let output_dir = args
-        .input
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())  // Filter out empty path
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("."));
+    // 2. Use current working directory for output (matches OpenJade behavior)
+    let output_dir = PathBuf::from(".");
 
     // 3. Initialize SGML backend (wrapped in Rc<RefCell> for shared mutable access)
     let backend = std::rc::Rc::new(std::cell::RefCell::new(SgmlBackend::new(&output_dir)));

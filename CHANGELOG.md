@@ -210,13 +210,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.1] - 2025-11-06
+
+### Changed
+- Output directory behavior now matches OpenJade: files are created in the current working directory instead of the input XML file's directory
+
+---
+
 ## [Unreleased]
 
-### Planned for v0.3.0
+### Planned for v0.5.0
 - Full flow object support (`make paragraph`, `make sequence`, etc.)
 - External procedure interface
 - Additional grove implementations (OpenSP for full SGML)
 - Additional backends (RTF, TeX, MIF, HTML)
 
+[0.4.1]: https://github.com/rschleitzer/dazzle/releases/tag/v0.4.1
 [0.2.0]: https://github.com/rschleitzer/dazzle/releases/tag/v0.2.0
 [0.1.0]: https://github.com/rschleitzer/dazzle/releases/tag/v0.1.0

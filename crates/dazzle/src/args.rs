@@ -6,7 +6,7 @@ use std::path::PathBuf;
 /// Dazzle: A Rust-based code generation tool powered by Scheme templates
 #[derive(Parser, Debug)]
 #[command(name = "dazzle")]
-#[command(about, long_about = None, disable_version_flag = true)]
+#[command(about, long_about = None, version)]
 pub struct Args {
     /// Template file (.scm)
     #[arg(short = 'd', long = "template", required = true)]
