@@ -1,6 +1,6 @@
 [package]
 name = "dazzle"
-version = "0.4.2"
+version = "0.4.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -14,9 +14,9 @@ path = "src/main.rs"
 
 [dependencies]
 # Core Dazzle functionality
-dazzle-core = { version = "0.4.2", path = "../dazzle-core" }
-dazzle-grove-libxml2 = { version = "0.4.2", path = "../dazzle-grove-libxml2" }
-dazzle-backend-sgml = { version = "0.4.2", path = "../dazzle-backend-sgml" }
+dazzle-core = { version = "0.4.3", path = "../dazzle-core" }
+dazzle-grove-libxml2 = { version = "0.4.3", path = "../dazzle-grove-libxml2" }
+dazzle-backend-sgml = { version = "0.4.3", path = "../dazzle-backend-sgml" }
 
 # CLI argument parsing
 clap = { workspace = true }

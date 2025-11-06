@@ -227,10 +227,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Provides examples of valid dotted pairs: `(a . b)` and invalid syntax: `(.gitignore)`
   - OpenJade also rejects this syntax with error: "unexpected token"
   - Added 3 test cases to verify error handling
-- **Filename reporting in parse errors**: Parse errors now show the actual source file and line number
-  - Previously: "Parse error at 502:11: ..." (concatenated line number)
+- **Filename and line number reporting in errors**: Parse errors and evaluation errors now show the actual source file and line number
+  - Previously: "Parse error at 502:11: ..." (concatenated line number, no filename)
   - Now: "codegen/boilerplate.scm:358:11: ..." (actual source file and line)
   - Works with XML template wrappers that load multiple .scm files via entity references
+  - The evaluator now dynamically translates output line numbers to source file coordinates using line mappings stored in the evaluator
+  - Both parse-time and evaluation-time errors benefit from accurate file/line reporting
+
+---
+
+## [0.4.3] - 2025-11-06
+
+### Fixed
+- **Accurate position tracking in parser**: Fixed parser to track individual element positions in lists for precise error reporting
+  - Previously: All elements in a list got the position of the opening `(`, causing errors to report wrong line numbers (e.g., line 270 instead of 797)
+  - Now: Each element gets its own position, so errors point to the exact location where the problem occurs
+  - Example: `($ "text" undefined-var "more")` now reports the error at the position of `undefined-var`, not at the `($`
+  - This fix complements the line mapping feature from v0.4.2, providing end-to-end accurate error reporting from multi-file templates to individual expression positions
+  - Benefits all list-based code, especially template strings with variable interpolation
 
 ---
 
@@ -242,6 +256,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Additional grove implementations (OpenSP for full SGML)
 - Additional backends (RTF, TeX, MIF, HTML)
 
+[0.4.3]: https://github.com/rschleitzer/dazzle/releases/tag/v0.4.3
 [0.4.2]: https://github.com/rschleitzer/dazzle/releases/tag/v0.4.2
 [0.4.1]: https://github.com/rschleitzer/dazzle/releases/tag/v0.4.1
 [0.2.0]: https://github.com/rschleitzer/dazzle/releases/tag/v0.2.0

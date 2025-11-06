@@ -284,6 +284,24 @@ pub struct Evaluator {
     ///
     /// Tracks line and column for the expression being evaluated.
     current_position: Option<Position>,
+
+    /// Line mappings for translating output lines to source files
+    ///
+    /// When templates are loaded from XML wrappers that concatenate multiple files,
+    /// this maps output line numbers to (source_file, source_line) pairs.
+    /// Used to provide accurate file names and line numbers in error messages.
+    line_mappings: Vec<LineMapping>,
+}
+
+/// Line mapping entry - maps a line number in concatenated code to its source file and line
+#[derive(Debug, Clone)]
+pub struct LineMapping {
+    /// Line number in the concatenated output (1-indexed)
+    pub output_line: usize,
+    /// Source file path
+    pub source_file: String,
+    /// Line number in the source file (1-indexed)
+    pub source_line: usize,
 }
 
 impl Evaluator {
@@ -297,6 +315,7 @@ impl Evaluator {
             call_stack: Vec::new(),
             current_source_file: None,
             current_position: None,
+            line_mappings: Vec::new(),
         }
     }
 
@@ -310,7 +329,13 @@ impl Evaluator {
             call_stack: Vec::new(),
             current_source_file: None,
             current_position: None,
+            line_mappings: Vec::new(),
         }
+    }
+
+    /// Set line mappings for error reporting
+    pub fn set_line_mappings(&mut self, mappings: Vec<LineMapping>) {
+        self.line_mappings = mappings;
     }
 
     /// Set the current source file (for error reporting)
@@ -541,7 +566,22 @@ impl Evaluator {
         if let Value::Pair(ref p) = expr {
             let pair_data = p.borrow();
             if let Some(ref pos) = pair_data.pos {
-                self.current_position = Some(pos.clone());
+                // If we have line mappings, translate the position to source file coordinates
+                if !self.line_mappings.is_empty() {
+                    if let Some(mapping) = self.line_mappings.iter().find(|m| m.output_line == pos.line) {
+                        self.current_source_file = Some(mapping.source_file.clone());
+                        self.current_position = Some(Position {
+                            line: mapping.source_line,
+                            column: pos.column,
+                        });
+                    } else {
+                        // No mapping found, use original position
+                        self.current_position = Some(pos.clone());
+                    }
+                } else {
+                    // No line mappings, use original position
+                    self.current_position = Some(pos.clone());
+                }
             }
         }
 
@@ -1936,17 +1976,43 @@ impl Evaluator {
         // Evaluate operator
         let proc = self.eval_inner(operator, env.clone())?;
 
-        // Evaluate arguments
-        let args_vec = self.list_to_vec(args)?;
+        // Evaluate arguments - extract position from the pair containing each argument
         let mut evaled_args = Vec::new();
-        for arg in args_vec {
-            // Update position to this argument's position before evaluating it
-            if let Value::Pair(ref p) = arg {
-                if let Some(ref pos) = p.borrow().pos {
-                    self.current_position = Some(pos.clone());
+        let mut current_args = args;
+        loop {
+            match current_args {
+                Value::Nil => break,
+                Value::Pair(ref p) => {
+                    let pair_borrow = p.borrow();
+
+                    // Extract position from this pair (which contains the argument)
+                    // This gives us the position where the argument appears in the source
+                    if let Some(ref pos) = pair_borrow.pos {
+                        // Translate output position to source position using line mappings
+                        if !self.line_mappings.is_empty() {
+                            if let Some(mapping) = self.line_mappings.iter().find(|m| m.output_line == pos.line) {
+                                self.current_source_file = Some(mapping.source_file.clone());
+                                self.current_position = Some(Position {
+                                    line: mapping.source_line,
+                                    column: pos.column,
+                                });
+                            } else {
+                                self.current_position = Some(pos.clone());
+                            }
+                        } else {
+                            self.current_position = Some(pos.clone());
+                        }
+                    }
+
+                    let arg = pair_borrow.car.clone();
+                    let cdr = pair_borrow.cdr.clone();
+                    drop(pair_borrow); // Release borrow before evaluating
+
+                    evaled_args.push(self.eval_inner(arg, env.clone())?);
+                    current_args = cdr;
                 }
+                _ => return Err(EvalError::new("Improper argument list".to_string())),
             }
-            evaled_args.push(self.eval_inner(arg, env.clone())?);
         }
 
         // Restore the application position before calling apply
