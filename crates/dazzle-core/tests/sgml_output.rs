@@ -400,3 +400,68 @@ fn test_directory_with_relative_entity_paths() {
     let controller_content = fs::read_to_string(&controller_path).unwrap();
     assert_eq!(controller_content, "pub struct UserController {}\n");
 }
+
+#[test]
+fn test_directory_with_path_in_system_id() {
+    let temp_dir = TempDir::new().unwrap();
+
+    let xml = r#"<?xml version="1.0"?><root/>"#;
+    let (mut evaluator, env, backend) = setup_full_pipeline(xml, temp_dir.path());
+
+    // Set backend on evaluator (wrap in Rc<RefCell<>>)
+    let backend_rc = Rc::new(RefCell::new(backend)) as Rc<RefCell<dyn FotBuilder>>;
+    evaluator.set_backend(backend_rc);
+
+    // Create directory and write file with path in system-id
+    let code = r#"
+        (make directory path: "generated"
+          (make entity system-id: "subdir/nested/File.rs"
+            (make formatting-instruction data: "pub struct File {}\n")))
+    "#;
+
+    eval_scheme(&mut evaluator, env, code);
+
+    // Verify nested directory structure was created from system-id path
+    assert!(temp_dir.path().join("generated/subdir/nested").exists());
+    assert!(temp_dir.path().join("generated/subdir/nested").is_dir());
+
+    // Verify file was created with correct content
+    let file_path = temp_dir.path().join("generated/subdir/nested/File.rs");
+    assert!(file_path.exists());
+    let file_content = fs::read_to_string(&file_path).unwrap();
+    assert_eq!(file_content, "pub struct File {}\n");
+}
+
+#[test]
+fn test_directory_with_helper_function() {
+    let temp_dir = TempDir::new().unwrap();
+
+    let xml = r#"<?xml version="1.0"?><root/>"#;
+    let (mut evaluator, env, backend) = setup_full_pipeline(xml, temp_dir.path());
+
+    // Set backend on evaluator (wrap in Rc<RefCell<>>)
+    let backend_rc = Rc::new(RefCell::new(backend)) as Rc<RefCell<dyn FotBuilder>>;
+    evaluator.set_backend(backend_rc);
+
+    // Define a helper function that creates entities
+    let helper_code = r#"
+        (define (create-file filename content)
+          (make entity system-id: filename
+            (make formatting-instruction data: content)))
+    "#;
+    eval_scheme(&mut evaluator, env.clone(), helper_code);
+
+    // Create directory and call helper function inside it
+    let code = r#"
+        (make directory path: "generated"
+          (create-file "test.rs" "pub struct Test {}\n"))
+    "#;
+
+    eval_scheme(&mut evaluator, env, code);
+
+    // Verify file was created in the correct directory
+    let file_path = temp_dir.path().join("generated/test.rs");
+    assert!(file_path.exists(), "File should be in generated/test.rs");
+    let file_content = fs::read_to_string(&file_path).unwrap();
+    assert_eq!(file_content, "pub struct Test {}\n");
+}
