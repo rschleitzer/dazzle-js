@@ -341,8 +341,11 @@ fn resolve_xml_template(
                         if content.starts_with("<![CDATA[") {
                             content = content[9..].to_string(); // Strip "<![CDATA["
 
-                            // Strip ]]> suffix - handle both "]]>" and "]]>\n"
-                            if content.ends_with("]]>\n") {
+                            // Strip ]]> suffix - handle Windows (CRLF), Unix (LF), and no newline
+                            if content.ends_with("]]>\r\n") {
+                                content = content[..content.len() - 5].to_string(); // Strip "]]>\r\n"
+                                content.push_str("\r\n"); // Keep the final newline for correct line counting
+                            } else if content.ends_with("]]>\n") {
                                 content = content[..content.len() - 4].to_string(); // Strip "]]>\n"
                                 content.push('\n'); // Keep the final newline for correct line counting
                             } else if content.ends_with("]]>") {

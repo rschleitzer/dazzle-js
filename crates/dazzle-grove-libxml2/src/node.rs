@@ -119,8 +119,33 @@ impl Node for LibXml2Node {
     }
 
     fn children(&self) -> Box<dyn NodeList> {
-        // Just delegate to all_children() - they should be the same
-        self.all_children()
+        // OpenJade semantics: Return element children and non-whitespace text nodes
+        // This matches observed OpenJade behavior:
+        // - For Icons: filters out whitespace-only text between elements
+        // - For Reha-Portal: includes meaningful text content in elements
+
+        if !self.is_element() {
+            return Box::new(LibXml2NodeList::empty());
+        }
+
+        let mut filtered_children = Vec::new();
+
+        // Include elements and non-whitespace text nodes
+        for child in self.node.get_child_nodes() {
+            let child_type = child.get_type();
+            if child_type == Some(libxml::tree::NodeType::ElementNode) {
+                // Always include element nodes
+                filtered_children.push(LibXml2Node::from_libxml_node(child));
+            } else if child_type == Some(libxml::tree::NodeType::TextNode) {
+                // Only include text nodes with non-whitespace content
+                let content = child.get_content();
+                if !content.trim().is_empty() {
+                    filtered_children.push(LibXml2Node::from_libxml_node(child));
+                }
+            }
+        }
+
+        Box::new(LibXml2NodeList::from_vec(filtered_children))
     }
 
     fn all_children(&self) -> Box<dyn NodeList> {
