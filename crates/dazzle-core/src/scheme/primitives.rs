@@ -5516,11 +5516,11 @@ pub fn prim_literal(args: &[Value]) -> PrimitiveResult {
 
     match &args[0] {
         Value::String(s) => {
-            // Get backend from evaluator context and append text
+            // Get backend from evaluator context and write literal text
             if let Some(ctx) = crate::scheme::evaluator::get_evaluator_context() {
                 if let Some(ref backend) = ctx.backend {
                     backend.borrow_mut()
-                        .formatting_instruction(s)
+                        .literal(s)
                         .map_err(|e| format!("literal: backend error: {}", e))?;
                 }
             }

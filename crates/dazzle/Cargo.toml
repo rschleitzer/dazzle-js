@@ -17,6 +17,7 @@ path = "src/main.rs"
 dazzle-core = { version = "0.4.4", path = "../dazzle-core" }
 dazzle-grove-libxml2 = { version = "0.4.4", path = "../dazzle-grove-libxml2" }
 dazzle-backend-sgml = { version = "0.4.4", path = "../dazzle-backend-sgml" }
+dazzle-backend-rtf = { version = "0.4.4", path = "../dazzle-backend-rtf" }
 
 # CLI argument parsing
 clap = { workspace = true }

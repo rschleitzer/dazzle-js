@@ -186,6 +186,11 @@ impl FotBuilder for SgmlBackend {
         self.current_buffer.clear();
     }
 
+    fn literal(&mut self, text: &str) -> Result<()> {
+        // For SGML backend, literal is the same as formatting-instruction
+        self.formatting_instruction(text)
+    }
+
     /// Create a directory
     ///
     /// Creates the directory and all necessary parent directories.

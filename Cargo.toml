@@ -3,6 +3,7 @@ members = [
     "crates/dazzle-core",
     "crates/dazzle-grove-libxml2",
     "crates/dazzle-backend-sgml",
+    "crates/dazzle-backend-rtf",
     "crates/dazzle",
 ]
 resolver = "2"
