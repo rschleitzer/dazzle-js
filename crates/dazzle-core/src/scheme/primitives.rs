@@ -3032,6 +3032,14 @@ pub fn prim_node_list_empty_p(args: &[Value]) -> PrimitiveResult {
             // Now implemented with real grove support
             Ok(Value::bool(nl.is_empty()))
         }
+        Value::Bool(false) => {
+            // #f is treated as an empty node-list (OpenJade behavior)
+            Ok(Value::bool(true))
+        }
+        Value::Node(_) => {
+            // A single node is a non-empty singleton node-list
+            Ok(Value::bool(false))
+        }
         _ => Err(format!("node-list-empty?: not a node-list: {:?}", args[0])),
     }
 }
@@ -3431,8 +3439,11 @@ pub fn prim_gi(args: &[Value]) -> PrimitiveResult {
             }
         }
         Value::NodeList(nl) => {
-            // Handle single-element node-lists (OpenJade compatibility)
-            if nl.length() == 1 {
+            // Handle optional singleton node-lists (OpenJade compatibility)
+            if nl.is_empty() {
+                // Empty node-list -> #f
+                Ok(Value::bool(false))
+            } else if nl.length() == 1 {
                 if let Some(node) = nl.first() {
                     if let Some(gi) = node.gi() {
                         Ok(Value::string(gi))
@@ -3443,7 +3454,7 @@ pub fn prim_gi(args: &[Value]) -> PrimitiveResult {
                     Ok(Value::bool(false))
                 }
             } else {
-                Err(format!("gi: node-list must have exactly 1 element, got {}", nl.length()))
+                Err(format!("gi: node-list must have 0 or 1 element, got {}", nl.length()))
             }
         }
         _ => Err(format!(
@@ -3712,7 +3723,9 @@ pub fn prim_parent(args: &[Value]) -> PrimitiveResult {
     if let Some(parent) = node.parent() {
         Ok(Value::node(parent))
     } else {
-        Ok(Value::bool(false))
+        // DSSSL: When there's no parent, return empty node-list (not #f)
+        // This allows node-list operations to work correctly
+        Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
     }
 }
 
@@ -3786,15 +3799,24 @@ pub fn prim_id(args: &[Value]) -> PrimitiveResult {
         return Err("id requires exactly 1 argument".to_string());
     }
 
-    match &args[0] {
-        Value::Node(node) => {
-            if let Some(id) = node.id() {
-                Ok(Value::string(id))
+    let node: Box<dyn crate::grove::Node> = match &args[0] {
+        Value::Node(n) => n.clone_node(),
+        Value::NodeList(nl) => {
+            // DSSSL: id accepts optional singleton node lists
+            if let Some(n) = nl.first() {
+                n
             } else {
-                Ok(Value::bool(false))
+                // Empty node-list -> #f
+                return Ok(Value::bool(false));
             }
         }
-        _ => Err(format!("id: not a node: {:?}", args[0])),
+        _ => return Err(format!("id: not a node: {:?}", args[0])),
+    };
+
+    if let Some(id) = node.id() {
+        Ok(Value::string(id))
+    } else {
+        Ok(Value::bool(false))
     }
 }
 
@@ -3927,6 +3949,102 @@ pub fn prim_preced(args: &[Value]) -> PrimitiveResult {
 
     // TODO: Implement preceding siblings traversal
     // For now, return empty node-list (stub)
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+}
+
+/// (ifollow node) → node | empty-node-list
+///
+/// Returns the immediately following sibling node.
+/// If no following sibling exists, returns an empty node-list.
+///
+/// **DSSSL**: Grove primitive - "immediate follow"
+pub fn prim_ifollow(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("ifollow requires exactly 1 argument".to_string());
+    }
+
+    let node = match &args[0] {
+        Value::Node(n) => n,
+        _ => return Err(format!("ifollow: argument not a node: {:?}", args[0])),
+    };
+
+    // Get parent
+    let parent = match node.parent() {
+        Some(p) => p,
+        None => return Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))),
+    };
+
+    // Get all children of parent
+    let siblings = parent.children();
+
+    // Find current node and return next sibling
+    let mut found_current = false;
+    let mut index = 0;
+    loop {
+        if let Some(sibling) = siblings.get(index) {
+            if found_current {
+                // This is the next sibling - return as a node-list
+                return Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(vec![sibling]))));
+            }
+            if node.node_eq(&*sibling) {
+                found_current = true;
+            }
+            index += 1;
+        } else {
+            break;
+        }
+    }
+
+    // No following sibling found
+    Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
+}
+
+/// (ipreced node) → node | empty-node-list
+///
+/// Returns the immediately preceding sibling node.
+/// If no preceding sibling exists, returns an empty node-list.
+///
+/// **DSSSL**: Grove primitive - "immediate precede"
+pub fn prim_ipreced(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("ipreced requires exactly 1 argument".to_string());
+    }
+
+    let node = match &args[0] {
+        Value::Node(n) => n,
+        _ => return Err(format!("ipreced: argument not a node: {:?}", args[0])),
+    };
+
+    // Get parent
+    let parent = match node.parent() {
+        Some(p) => p,
+        None => return Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))),
+    };
+
+    // Get all children of parent
+    let siblings = parent.children();
+
+    // Find current node and return previous sibling
+    let mut prev_sibling: Option<Box<dyn crate::grove::Node>> = None;
+    let mut index = 0;
+    loop {
+        if let Some(sibling) = siblings.get(index) {
+            if node.node_eq(&*sibling) {
+                // Found current node, return previous as a node-list
+                if let Some(prev) = prev_sibling {
+                    return Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(vec![prev]))));
+                } else {
+                    return Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())));
+                }
+            }
+            prev_sibling = Some(sibling);
+            index += 1;
+        } else {
+            break;
+        }
+    }
+
+    // Current node not found in parent's children (shouldn't happen)
     Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
 }
 
@@ -4705,7 +4823,8 @@ pub fn prim_child_number(args: &[Value]) -> PrimitiveResult {
                     }
                     std::rc::Rc::new(node)
                 } else {
-                    return Err("child-number: empty node-list".to_string());
+                    // Empty node-list -> #f (DSSSL optional singleton node list behavior)
+                    return Ok(Value::bool(false));
                 }
             }
             _ => return Err(format!("child-number: not a node: {:?}", args[0])),
@@ -5868,6 +5987,8 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("descendants", Value::primitive("descendants", prim_descendants));
     env.define("follow", Value::primitive("follow", prim_follow));
     env.define("preced", Value::primitive("preced", prim_preced));
+    env.define("ifollow", Value::primitive("ifollow", prim_ifollow));
+    env.define("ipreced", Value::primitive("ipreced", prim_ipreced));
     env.define("attributes", Value::primitive("attributes", prim_attributes));
     env.define("select-elements", Value::primitive("select-elements", prim_select_elements));
     env.define("element-with-id", Value::primitive("element-with-id", prim_element_with_id));

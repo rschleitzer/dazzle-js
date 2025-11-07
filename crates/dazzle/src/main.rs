@@ -75,13 +75,7 @@ fn run(args: Args) -> Result<()> {
     primitives::register_all_primitives(&env);
     debug!("Primitives registered");
 
-    // 6. Add variables to environment
-    for (key, value) in &args.variables {
-        env.define(key, dazzle_core::scheme::value::Value::string(value.clone()));
-        debug!("Variable defined: {} = {}", key, value);
-    }
-
-    // 7. Add simple get-variable helper function
+    // 6. Add simple get-variable helper function
     // This returns a variable value or a default if not defined
     let get_var_code = r#"
 (define (get-variable name . rest)
@@ -118,6 +112,20 @@ fn run(args: Args) -> Result<()> {
         evaluator.set_line_mappings(line_mappings.clone());
     }
     evaluate_template(&mut evaluator, env.clone(), &scheme_code, &line_mappings)?;
+
+    // 8. Override variables from command line (-V flags)
+    // These take precedence over any (define ...) statements in the template
+    for (key, value) in &args.variables {
+        // Use set! to update existing bindings, or define if not exists
+        match env.set(key, dazzle_core::scheme::value::Value::string(value.clone())) {
+            Ok(_) => debug!("Variable overridden: {} = {}", key, value),
+            Err(_) => {
+                // Variable doesn't exist, define it
+                env.define(key, dazzle_core::scheme::value::Value::string(value.clone()));
+                debug!("Variable defined: {} = {}", key, value);
+            }
+        }
+    }
 
     // 9. Start DSSSL processing from root (OpenJade's ProcessContext::process)
     // After template loading, construction rules are defined.

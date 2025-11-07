@@ -86,12 +86,17 @@ impl Node for LibXml2Node {
 
     fn id(&self) -> Option<String> {
         // DSSSL: ID is the value of an ID-type attribute
-        // For now, check for "id" attribute (proper DTD-based ID lookup needs more work)
+        // Check for xml:id first (XML standard), then "id" attribute
         if !self.is_element() {
             return None;
         }
 
-        // Check for "id" attribute
+        // Check for xml:id first (XML 1.0 standard ID attribute)
+        if let Some(xml_id) = self.node.get_attribute("xml:id") {
+            return Some(xml_id);
+        }
+
+        // Fall back to "id" attribute
         self.node.get_attribute("id")
     }
 
@@ -114,27 +119,32 @@ impl Node for LibXml2Node {
     }
 
     fn children(&self) -> Box<dyn NodeList> {
-        // DSSSL CRITICAL SEMANTICS:
-        // `children` returns ONLY element nodes, not text nodes!
+        // Just delegate to all_children() - they should be the same
+        self.all_children()
+    }
+
+    fn all_children(&self) -> Box<dyn NodeList> {
+        // Return ALL child nodes including text nodes
         //
-        // This is different from DOM's childNodes which includes text.
-        // Text content is accessed via the `data` property.
+        // This is used internally by process-children to iterate over all content,
+        // not just element children.
 
         if !self.is_element() {
-            // Non-elements have no children in DSSSL
             return Box::new(LibXml2NodeList::empty());
         }
 
-        let mut child_elements = Vec::new();
+        let mut all_child_nodes = Vec::new();
 
-        // Iterate through child nodes, keeping only elements
+        // Include ALL child nodes (elements and text)
         for child in self.node.get_child_nodes() {
-            if child.get_type() == Some(libxml::tree::NodeType::ElementNode) {
-                child_elements.push(LibXml2Node::from_libxml_node(child));
+            let child_type = child.get_type();
+            if child_type == Some(libxml::tree::NodeType::ElementNode) ||
+               child_type == Some(libxml::tree::NodeType::TextNode) {
+                all_child_nodes.push(LibXml2Node::from_libxml_node(child));
             }
         }
 
-        Box::new(LibXml2NodeList::from_vec(child_elements))
+        Box::new(LibXml2NodeList::from_vec(all_child_nodes))
     }
 
     fn parent(&self) -> Option<Box<dyn Node>> {
