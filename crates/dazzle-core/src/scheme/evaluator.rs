@@ -866,7 +866,11 @@ impl Evaluator {
     }
 
     /// DSSSL element construction rule (OpenJade SchemeParser::doElement)
-    /// Syntax: (element element-name construction-expression)
+    /// Syntax: (element element-pattern construction-expression)
+    ///
+    /// Element pattern can be:
+    /// - A symbol: (element foo ...)
+    /// - A list for context matching: (element (parent child) ...)
     ///
     /// Stores the rule in processing mode WITHOUT evaluating the body.
     /// The body will be evaluated later during tree processing when a matching element is found.
@@ -875,7 +879,7 @@ impl Evaluator {
 
         if args_vec.len() < 2 {
             return Err(self.error_with_stack(
-                "element requires at least 2 arguments (element-name and construction-expression)".to_string(),
+                "element requires at least 2 arguments (element-pattern and construction-expression)".to_string(),
             ));
         }
 
@@ -885,13 +889,32 @@ impl Evaluator {
             ));
         }
 
-        // First argument is the element name (symbol)
-        let element_name = if let Value::Symbol(ref name) = args_vec[0] {
-            name.clone()
-        } else {
-            return Err(self.error_with_stack(
-                "First argument to element must be a symbol".to_string(),
-            ));
+        // First argument is the element pattern (symbol or list)
+        // For context matching like (parent child), extract the last element
+        let element_name = match &args_vec[0] {
+            Value::Symbol(ref name) => name.clone(),
+            Value::Pair(_) => {
+                // List pattern like (parent child) - extract last element
+                let pattern_list = self.list_to_vec(args_vec[0].clone())?;
+                if pattern_list.is_empty() {
+                    return Err(self.error_with_stack(
+                        "Element pattern list cannot be empty".to_string(),
+                    ));
+                }
+                // Last element in the list is the actual element being matched
+                if let Value::Symbol(ref name) = pattern_list[pattern_list.len() - 1] {
+                    name.clone()
+                } else {
+                    return Err(self.error_with_stack(
+                        "Element pattern must contain only symbols".to_string(),
+                    ));
+                }
+            }
+            _ => {
+                return Err(self.error_with_stack(
+                    "First argument to element must be a symbol or list of symbols".to_string(),
+                ));
+            }
         };
 
         // Second argument is the construction expression (NOT evaluated yet!)
