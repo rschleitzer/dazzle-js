@@ -547,9 +547,13 @@ impl Evaluator {
                     if let Some(text) = node.data() {
                         // Skip if text is only whitespace
                         if !text.trim().is_empty() {
-                            // Output text to backend
+                            // Output text to backend with HTML escaping
                             if let Some(ref backend) = self.backend {
-                                backend.borrow_mut().formatting_instruction(&text)
+                                let escaped_text = text
+                                    .replace('&', "&amp;")
+                                    .replace('<', "&lt;")
+                                    .replace('>', "&gt;");
+                                backend.borrow_mut().formatting_instruction(&escaped_text)
                                     .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
                             }
                         }
@@ -1471,8 +1475,12 @@ impl Evaluator {
                                 if pair_vec.len() == 2 {
                                     if let (Value::String(name), Value::String(value)) =
                                         (&pair_vec[0], &pair_vec[1]) {
-                                        // Escape quotes in attribute value
-                                        let escaped_value = value.replace('"', "&quot;");
+                                        // Escape special characters in attribute value
+                                        let escaped_value = value
+                                            .replace('&', "&amp;")
+                                            .replace('"', "&quot;")
+                                            .replace('<', "&lt;")
+                                            .replace('>', "&gt;");
                                         backend.borrow_mut().formatting_instruction(&format!("{}=\"{}\"\n", name, escaped_value))
                                             .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
                                     }
