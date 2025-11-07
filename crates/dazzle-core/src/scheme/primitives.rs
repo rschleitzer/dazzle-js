@@ -3345,8 +3345,18 @@ pub fn prim_node_list_contains_p(args: &[Value]) -> PrimitiveResult {
         return Err("node-list-contains? requires exactly 2 arguments".to_string());
     }
 
-    let search_node = match &args[1] {
-        Value::Node(n) => n,
+    // Get the search node - accept both Node and singleton NodeList (DSSSL semantics)
+    let search_node: Box<dyn crate::grove::Node> = match &args[1] {
+        Value::Node(n) => n.clone_node(),
+        Value::NodeList(nl) => {
+            // Accept singleton node-lists
+            if let Some(n) = nl.first() {
+                n
+            } else {
+                // Empty node-list -> always return #f (nothing to search for)
+                return Ok(Value::bool(false));
+            }
+        }
         _ => return Err(format!("node-list-contains?: second argument not a node: {:?}", args[1])),
     };
 
@@ -3357,7 +3367,7 @@ pub fn prim_node_list_contains_p(args: &[Value]) -> PrimitiveResult {
             loop {
                 if let Some(node) = nl.get(index) {
                     // Check if nodes are equal using node_eq
-                    if node.node_eq(search_node.as_ref().as_ref()) {
+                    if node.node_eq(&*search_node) {
                         return Ok(Value::bool(true));
                     }
                     index += 1;
@@ -3387,7 +3397,7 @@ pub fn prim_node_list_contains_p(args: &[Value]) -> PrimitiveResult {
 
                         // Check if car is the node we're looking for
                         if let Value::Node(ref n) = car {
-                            if n.as_ref().node_eq(search_node.as_ref().as_ref()) {
+                            if n.as_ref().node_eq(&*search_node) {
                                 return Ok(Value::bool(true));
                             }
                         }
@@ -3768,24 +3778,34 @@ pub fn prim_ancestors(args: &[Value]) -> PrimitiveResult {
         return Err("ancestors requires exactly 1 argument".to_string());
     }
 
-    match &args[0] {
-        Value::Node(node) => {
-            // Collect all ancestors by walking up the parent chain
-            let mut ancestor_nodes = Vec::new();
-            let mut current = node.clone_node();
-
-            while let Some(parent) = current.parent() {
-                ancestor_nodes.push(parent.clone_node());
-                current = parent;
+    // Get the node - accept both Node and singleton NodeList (DSSSL semantics)
+    let node: Box<dyn crate::grove::Node> = match &args[0] {
+        Value::Node(n) => n.clone_node(),
+        Value::NodeList(nl) => {
+            // DSSSL: ancestors accepts optional singleton node lists
+            if let Some(n) = nl.first() {
+                n
+            } else {
+                // Empty node-list -> return empty node-list
+                return Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())));
             }
-
-            Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(ancestor_nodes))))
         }
-        _ => Err(format!(
+        _ => return Err(format!(
             "1st argument for primitive \"ancestors\" of wrong type: {:?} not an optional singleton node list",
             args[0]
         )),
+    };
+
+    // Collect all ancestors by walking up the parent chain
+    let mut ancestor_nodes = Vec::new();
+    let mut current = node;
+
+    while let Some(parent) = current.parent() {
+        ancestor_nodes.push(parent.clone_node());
+        current = parent;
     }
+
+    Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(ancestor_nodes))))
 }
 
 /// (id node) → string | #f
@@ -4111,11 +4131,15 @@ pub fn prim_select_elements(args: &[Value]) -> PrimitiveResult {
     Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(result_nodes))))
 }
 
-/// (element-with-id id) → node | #f
+/// (element-with-id id) → node-list
 ///
-/// Returns the element with the given ID attribute.
+/// Returns a singleton node-list containing the element with the given ID attribute.
 /// Uses the DTD to determine which attributes are of type ID.
-/// Returns #f if no element has that ID.
+/// Returns an empty node-list if no element has that ID.
+///
+/// **Note**: While some documentation suggests this returns `#f` when not found,
+/// OpenJade's actual behavior returns an empty node-list, which is required for
+/// code that uses `node-list-count` on the result.
 ///
 /// **DSSSL**: Grove primitive
 pub fn prim_element_with_id(args: &[Value]) -> PrimitiveResult {
@@ -4142,8 +4166,8 @@ pub fn prim_element_with_id(args: &[Value]) -> PrimitiveResult {
 
     // Use the grove's element_with_id method
     match grove.element_with_id(id) {
-        Some(node) => Ok(Value::node(node)),
-        None => Ok(Value::bool(false)),
+        Some(node) => Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(vec![node])))),
+        None => Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new()))),
     }
 }
 
