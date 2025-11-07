@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use dazzle::Args;
 use dazzle_backend_sgml::SgmlBackend;
+use dazzle_backend_rtf::RtfBackend;
 use dazzle_core::fot::FotBuilder;
 use dazzle_core::grove::Grove;
 use dazzle_core::scheme::environment::Environment;
@@ -29,6 +30,12 @@ fn main() -> Result<()> {
 
     // Parse command-line arguments
     let args = Args::parse();
+
+    // Handle version flag
+    if args.version {
+        println!("dazzle {}", dazzle_core::VERSION);
+        return Ok(());
+    }
 
     if args.verbose {
         info!("Dazzle v{}", dazzle_core::VERSION);
@@ -59,9 +66,24 @@ fn run(args: Args) -> Result<()> {
     // 2. Use current working directory for output (matches OpenJade behavior)
     let output_dir = PathBuf::from(".");
 
-    // 3. Initialize SGML backend (wrapped in Rc<RefCell> for shared mutable access)
+    // 3. Initialize backend based on -t flag
+    match args.backend.as_str() {
+        "text" | "xml" => {
+            run_sgml_backend(args, grove_rc, output_dir)
+        }
+        "rtf" => {
+            run_rtf_backend(args, grove_rc)
+        }
+        _ => {
+            anyhow::bail!("Unknown backend: {} (supported: text, xml, rtf)", args.backend);
+        }
+    }
+}
+
+fn run_sgml_backend(args: Args, grove_rc: Rc<LibXml2Grove>, output_dir: PathBuf) -> Result<()> {
+    // Initialize SGML backend (wrapped in Rc<RefCell> for shared mutable access)
     let backend = std::rc::Rc::new(std::cell::RefCell::new(SgmlBackend::new(&output_dir)));
-    debug!("Backend initialized: output_dir={}", output_dir.display());
+    debug!("SGML backend initialized: output_dir={}", output_dir.display());
 
     // 4. Create evaluator with grove
     let mut evaluator = Evaluator::with_grove(grove_rc.clone());
@@ -153,6 +175,93 @@ fn run(args: Args) -> Result<()> {
         debug!("Generated {} file(s) in {}", num_files, output_dir.display());
     }
 
+    Ok(())
+}
+
+fn run_rtf_backend(args: Args, grove_rc: Rc<LibXml2Grove>) -> Result<()> {
+    // Initialize RTF backend writing to stdout
+    let backend = std::rc::Rc::new(std::cell::RefCell::new(
+        RtfBackend::new(std::io::stdout())
+            .context("Failed to create RTF backend")?
+    ));
+    debug!("RTF backend initialized");
+
+    // Create evaluator with grove
+    let mut evaluator = Evaluator::with_grove(grove_rc.clone());
+    let root = grove_rc.root();
+    evaluator.set_current_node(root);
+    evaluator.set_backend(backend.clone());
+    debug!("Evaluator initialized with grove root and backend");
+
+    // Create environment and register all primitives
+    let env = Environment::new_global();
+    primitives::register_all_primitives(&env);
+    debug!("Primitives registered");
+
+    // Add simple get-variable helper function
+    let get_var_code = r#"
+(define (get-variable name . rest)
+  (if (null? rest)
+      name
+      (if (null? name) (car rest) name)))
+"#;
+
+    let mut parser = SchemeParser::new(get_var_code);
+    if let Ok(expr) = parser.parse() {
+        let _ = evaluator.eval(expr, env.clone());
+    }
+
+    // Load and evaluate template
+    debug!("Loading template: {}", args.template.display());
+    let template_path = find_template(&args.template, &args.search_dirs)?;
+    let template_content = fs::read_to_string(&template_path)
+        .with_context(|| format!("Failed to read template: {}", template_path.display()))?;
+
+    // Check if this is an XML template wrapper (.dsl format)
+    let (scheme_code, line_mappings) = if template_content.trim_start().starts_with("<!DOCTYPE")
+        || template_content.trim_start().starts_with("<?xml") {
+        debug!("Detected XML template wrapper, resolving entities...");
+        resolve_xml_template(&template_content, &template_path, &args.search_dirs)?
+    } else {
+        (template_content, Vec::new())
+    };
+
+    debug!("Template loaded, evaluating...");
+    // Set source file for error reporting
+    evaluator.set_source_file(template_path.to_string_lossy().to_string());
+    // Set line mappings for accurate error reporting
+    if !line_mappings.is_empty() {
+        evaluator.set_line_mappings(line_mappings.clone());
+    }
+    evaluate_template(&mut evaluator, env.clone(), &scheme_code, &line_mappings)?;
+
+    // Override variables from command line (-V flags)
+    for (key, value) in &args.variables {
+        match env.set(key, dazzle_core::scheme::value::Value::string(value.clone())) {
+            Ok(_) => debug!("Variable overridden: {} = {}", key, value),
+            Err(_) => {
+                env.define(key, dazzle_core::scheme::value::Value::string(value.clone()));
+                debug!("Variable defined: {} = {}", key, value);
+            }
+        }
+    }
+
+    // Start DSSSL processing from root
+    debug!("Starting DSSSL processing from root...");
+    let processing_result = evaluator
+        .process_root(env.clone())
+        .map_err(|e| anyhow::anyhow!("Processing error:\n{}", e))?;
+
+    // If processing returned a string, write it to backend
+    if let dazzle_core::scheme::value::Value::String(s) = processing_result {
+        backend
+            .borrow_mut()
+            .formatting_instruction(&s)
+            .context("Failed to write processing result to backend")?;
+    }
+
+    // Drop will automatically call finish() on the backend
+    debug!("RTF generation complete");
     Ok(())
 }
 

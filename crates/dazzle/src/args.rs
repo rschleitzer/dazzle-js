@@ -7,12 +7,16 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(name = "dazzle")]
 #[command(about, long_about = None, version)]
+#[command(disable_version_flag = true)]
 pub struct Args {
+    /// Print version information
+    #[arg(long = "version")]
+    pub version: bool,
     /// Template file (.scm)
     #[arg(short = 'd', long = "template", required = true)]
     pub template: PathBuf,
 
-    /// Backend selection (xml or text)
+    /// Backend selection (text, xml, or rtf)
     #[arg(short = 't', long = "backend", default_value = "text")]
     pub backend: String,
 

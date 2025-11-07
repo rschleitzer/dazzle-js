@@ -1501,6 +1501,33 @@ impl Evaluator {
                         backend.borrow_mut().formatting_instruction(&format!("</{}\n>", gi))
                             .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
                     }
+                    "paragraph" => {
+                        // RTF paragraph flow object
+                        // Start paragraph
+                        backend.borrow_mut().start_paragraph()
+                            .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+
+                        // Evaluate body expressions (literal text, etc.)
+                        for expr in body_exprs {
+                            self.eval(expr, env.clone())?;
+                        }
+
+                        // End paragraph
+                        backend.borrow_mut().end_paragraph()
+                            .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+                    }
+                    "display-group" => {
+                        // RTF display-group flow object
+                        backend.borrow_mut().start_display_group()
+                            .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+
+                        for expr in body_exprs {
+                            self.eval(expr, env.clone())?;
+                        }
+
+                        backend.borrow_mut().end_display_group()
+                            .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+                    }
                     _ => {
                         // Unknown flow object type - error
                         return Err(EvalError::new(
