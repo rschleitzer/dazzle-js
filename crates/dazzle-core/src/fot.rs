@@ -210,7 +210,44 @@ pub trait FotBuilder: Debug {
         ))
     }
 
-    // More flow objects (line-field, paragraph-break, etc.) would go here
+    /// Start a simple page sequence (main page layout container)
+    ///
+    /// **DSSSL**: `simple-page-sequence` flow object
+    /// This is the main container for page-based output in RTF/print backends.
+    fn start_simple_page_sequence(&mut self) -> Result<()> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "simple-page-sequence flow object not supported by this backend",
+        ))
+    }
+
+    /// End a simple page sequence
+    fn end_simple_page_sequence(&mut self) -> Result<()> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "simple-page-sequence flow object not supported by this backend",
+        ))
+    }
+
+    /// Start a line-field (inline text container)
+    ///
+    /// **DSSSL**: `line-field` flow object
+    fn start_line_field(&mut self) -> Result<()> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "line-field flow object not supported by this backend",
+        ))
+    }
+
+    /// End a line-field
+    fn end_line_field(&mut self) -> Result<()> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "line-field flow object not supported by this backend",
+        ))
+    }
+
+    // More flow objects (paragraph-break, etc.) would go here
     // when implementing document formatting backends.
 }
 

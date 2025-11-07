@@ -304,6 +304,45 @@ impl<W: Write + std::fmt::Debug> FotBuilder for RtfBackend<W> {
         // Display group - no special RTF output needed yet
         Ok(())
     }
+
+    fn start_simple_page_sequence(&mut self) -> Result<()> {
+        // Ensure header is written
+        self.write_header()?;
+
+        // Simple page sequence is the main content container
+        // In RTF, this translates to a section with properties
+        // Match OpenJade's output: \sectd\plain followed by page properties
+        write!(self.output, "\\sectd\\plain")?;
+
+        // TODO: Parse and output page-width, page-height, margins from characteristics
+        // For now, use OpenJade's default page properties (8.5x11 inches, 1.5" left margin, 1" others)
+        // \pgwsxn12240 = page width (8.5 * 1440 twips/inch)
+        // \pghsxn15840 = page height (11 * 1440 twips/inch)
+        // \marglsxn2160 = left margin (1.5 * 1440)
+        // \margrsxn1440 = right margin (1 * 1440)
+        // \margtsxn1440 = top margin
+        // \margbsxn1920 = bottom margin (1.33 * 1440)
+        write!(self.output, "\\pgwsxn12240\\pghsxn15840\\marglsxn2160\\margrsxn1440\\margtsxn1440\\margbsxn1920")?;
+        write!(self.output, "\\headery0\\footery0\\pgndec")?;
+
+        Ok(())
+    }
+
+    fn end_simple_page_sequence(&mut self) -> Result<()> {
+        // End of page sequence - no special action needed for now
+        Ok(())
+    }
+
+    fn start_line_field(&mut self) -> Result<()> {
+        // Line-field is an inline container
+        // In RTF, this doesn't need special markup
+        Ok(())
+    }
+
+    fn end_line_field(&mut self) -> Result<()> {
+        // End of line-field
+        Ok(())
+    }
 }
 
 impl<W: Write + std::fmt::Debug> Drop for RtfBackend<W> {
