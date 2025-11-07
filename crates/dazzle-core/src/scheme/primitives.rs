@@ -3977,14 +3977,16 @@ pub fn prim_ifollow(args: &[Value]) -> PrimitiveResult {
     // Get all children of parent
     let siblings = parent.children();
 
-    // Find current node and return next sibling
+    // Find current node and return next ELEMENT sibling (skip text nodes)
     let mut found_current = false;
     let mut index = 0;
     loop {
         if let Some(sibling) = siblings.get(index) {
             if found_current {
-                // This is the next sibling - return as a node-list
-                return Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(vec![sibling]))));
+                // This is the next sibling - but only return if it's an element
+                if sibling.is_element() {
+                    return Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(vec![sibling]))));
+                }
             }
             if node.node_eq(&*sibling) {
                 found_current = true;
@@ -3995,7 +3997,7 @@ pub fn prim_ifollow(args: &[Value]) -> PrimitiveResult {
         }
     }
 
-    // No following sibling found
+    // No following element sibling found
     Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())))
 }
 
@@ -4024,20 +4026,23 @@ pub fn prim_ipreced(args: &[Value]) -> PrimitiveResult {
     // Get all children of parent
     let siblings = parent.children();
 
-    // Find current node and return previous sibling
+    // Find current node and return previous ELEMENT sibling (skip text nodes)
     let mut prev_sibling: Option<Box<dyn crate::grove::Node>> = None;
     let mut index = 0;
     loop {
         if let Some(sibling) = siblings.get(index) {
             if node.node_eq(&*sibling) {
-                // Found current node, return previous as a node-list
+                // Found current node, return previous element sibling as a node-list
                 if let Some(prev) = prev_sibling {
                     return Ok(Value::node_list(Box::new(crate::grove::VecNodeList::new(vec![prev]))));
                 } else {
                     return Ok(Value::node_list(Box::new(crate::grove::EmptyNodeList::new())));
                 }
             }
-            prev_sibling = Some(sibling);
+            // Only consider element siblings (skip text nodes)
+            if sibling.is_element() {
+                prev_sibling = Some(sibling);
+            }
             index += 1;
         } else {
             break;
