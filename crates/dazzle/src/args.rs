@@ -34,11 +34,17 @@ pub struct Args {
 }
 
 /// Parse a single key=value pair
+///
+/// Supports OpenJade-compatible syntax:
+/// - `key=value` - sets key to value
+/// - `key` - sets key to "#t" (boolean true)
 fn parse_key_val(s: &str) -> Result<(String, String), String> {
-    let pos = s
-        .find('=')
-        .ok_or_else(|| format!("invalid KEY=value: no `=` found in `{s}`"))?;
-    Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
+    if let Some(pos) = s.find('=') {
+        Ok((s[..pos].to_string(), s[pos + 1..].to_string()))
+    } else {
+        // OpenJade compatibility: `-V name` sets name to #t
+        Ok((s.to_string(), "#t".to_string()))
+    }
 }
 
 #[cfg(test)]

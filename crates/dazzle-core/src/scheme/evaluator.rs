@@ -174,8 +174,13 @@ pub type EvalResult = Result<Value, EvalError>;
 /// Stores the pattern (element name) and action (expression to evaluate).
 #[derive(Clone)]
 pub struct ConstructionRule {
-    /// Element name pattern (GI)
+    /// Element name pattern (GI) - the actual element being matched
     pub element_name: String,
+
+    /// Context pattern - parent element names (empty for simple patterns)
+    /// For `(part title)`, this would be vec!["part"]
+    /// For simple `title`, this would be empty
+    pub context: Vec<String>,
 
     /// Construction expression (returns sosofo when evaluated)
     pub expr: Value,
@@ -209,9 +214,10 @@ impl ProcessingMode {
     }
 
     /// Add a construction rule
-    pub fn add_rule(&mut self, element_name: String, expr: Value, source_file: Option<String>, source_pos: Option<Position>) {
+    pub fn add_rule(&mut self, element_name: String, context: Vec<String>, expr: Value, source_file: Option<String>, source_pos: Option<Position>) {
         self.rules.push(ConstructionRule {
             element_name,
+            context,
             expr,
             source_file,
             source_pos
@@ -226,9 +232,77 @@ impl ProcessingMode {
     /// Find matching rule for an element
     ///
     /// Corresponds to OpenJade's `ProcessingMode::findMatch()`.
-    /// Returns the first rule matching the given element name.
-    pub fn find_match(&self, gi: &str) -> Option<&ConstructionRule> {
-        self.rules.iter().find(|rule| rule.element_name == gi)
+    /// Returns the first rule matching the given element name and context.
+    pub fn find_match(&self, gi: &str, node: &dyn crate::grove::Node) -> Option<&ConstructionRule> {
+        self.rules.iter().find(|rule| {
+            // Element name must match
+            if rule.element_name != gi {
+                return false;
+            }
+
+            // If rule has no context, it matches any parent
+            if rule.context.is_empty() {
+                return true;
+            }
+
+            // Check if parent chain matches the context
+            let mut current = node.parent();
+            for expected_parent in rule.context.iter().rev() {
+                match current {
+                    Some(ref parent_node) => {
+                        if let Some(parent_gi) = parent_node.gi() {
+                            if parent_gi != *expected_parent {
+                                return false;
+                            }
+                            current = parent_node.parent();
+                        } else {
+                            return false;
+                        }
+                    }
+                    None => return false,
+                }
+            }
+
+            true
+        })
+    }
+}
+
+/// Manager for multiple processing modes
+///
+/// DSSSL supports multiple named modes for different processing contexts.
+/// The unnamed mode (empty string key) is the initial/default mode.
+pub struct ModeManager {
+    /// Map of mode name to processing mode
+    modes: std::collections::HashMap<String, ProcessingMode>,
+}
+
+impl ModeManager {
+    /// Create a new mode manager with an empty default mode
+    pub fn new() -> Self {
+        let mut modes = std::collections::HashMap::new();
+        modes.insert(String::new(), ProcessingMode::new());
+        ModeManager { modes }
+    }
+
+    /// Get or create a mode by name
+    pub fn get_or_create_mode(&mut self, name: &str) -> &mut ProcessingMode {
+        self.modes.entry(name.to_string()).or_insert_with(ProcessingMode::new)
+    }
+
+    /// Get a mode by name (read-only)
+    pub fn get_mode(&self, name: &str) -> Option<&ProcessingMode> {
+        self.modes.get(name)
+    }
+
+    /// Get the default (unnamed) mode
+    pub fn default_mode(&mut self) -> &mut ProcessingMode {
+        self.get_or_create_mode("")
+    }
+
+    /// Get the default (unnamed) mode (read-only)
+    pub fn get_default_mode(&self) -> Option<&ProcessingMode> {
+        self.get_mode("")
     }
 }
 
@@ -257,11 +331,25 @@ pub struct Evaluator {
     /// When processing children, it changes to each child node.
     current_node: Option<Rc<Box<dyn Node>>>,
 
-    /// Processing mode containing construction rules
+    /// Manager for multiple processing modes
     ///
-    /// Corresponds to OpenJade's `Interpreter::initialProcessingMode_`.
-    /// Rules are stored here during template loading, then used during processing.
-    processing_mode: ProcessingMode,
+    /// Corresponds to OpenJade's mode management.
+    /// DSSSL supports multiple named modes for different processing contexts.
+    mode_manager: ModeManager,
+
+    /// Current mode name for rule definition
+    ///
+    /// When defining rules with `(element ...)` or `(default ...)`, they go into this mode.
+    /// Empty string means the unnamed/default mode.
+    /// Set by `(mode name ...)` special form.
+    current_mode: String,
+
+    /// Current processing mode for rule lookup
+    ///
+    /// When processing nodes with `process-children`, rules are looked up in this mode.
+    /// Empty string means the unnamed/default mode.
+    /// Set by `(with-mode name ...)` special form.
+    current_processing_mode: String,
 
     /// Backend for output generation (FotBuilder)
     ///
@@ -310,7 +398,9 @@ impl Evaluator {
         Evaluator {
             grove: None,
             current_node: None,
-            processing_mode: ProcessingMode::new(),
+            mode_manager: ModeManager::new(),
+            current_mode: String::new(), // Start with unnamed/default mode
+            current_processing_mode: String::new(), // Start with unnamed/default mode
             backend: None,
             call_stack: Vec::new(),
             current_source_file: None,
@@ -324,7 +414,9 @@ impl Evaluator {
         Evaluator {
             grove: Some(grove),
             current_node: None,
-            processing_mode: ProcessingMode::new(),
+            mode_manager: ModeManager::new(),
+            current_mode: String::new(), // Start with unnamed/default mode
+            current_processing_mode: String::new(), // Start with unnamed/default mode
             backend: None,
             call_stack: Vec::new(),
             current_source_file: None,
@@ -449,13 +541,28 @@ impl Evaluator {
             Some(gi) => gi,
             None => {
                 // Not an element (e.g., text node, comment, etc.)
-                // For code generation, we typically ignore non-elements
+                // For text nodes, output their data content
+                // Skip whitespace-only text nodes (OpenJade behavior)
+                if node.is_text() {
+                    if let Some(text) = node.data() {
+                        // Skip if text is only whitespace
+                        if !text.trim().is_empty() {
+                            // Output text to backend
+                            if let Some(ref backend) = self.backend {
+                                backend.borrow_mut().formatting_instruction(&text)
+                                    .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+                            }
+                        }
+                    }
+                }
                 return Ok(Value::Unspecified);
             }
         };
 
-        // Find matching construction rule
-        let rule = self.processing_mode.find_match(&gi);
+        // Find matching construction rule (in current processing mode)
+        let mode_name = self.current_processing_mode.clone();
+        let mode = self.mode_manager.get_mode(&mode_name);
+        let rule = mode.and_then(|m| m.find_match(&gi, &**node));
 
         if let Some(rule) = rule {
             // Rule found - evaluate the construction expression
@@ -480,9 +587,9 @@ impl Evaluator {
             self.current_position = saved_pos;
 
             result
-        } else if let Some(ref default_expr) = self.processing_mode.default_rule {
+        } else if let Some(default_expr) = mode.and_then(|m| m.default_rule.as_ref()).cloned() {
             // No specific rule found - use default rule
-            self.eval(default_expr.clone(), env)
+            self.eval(default_expr, env)
         } else {
             // No rule found (and no default) - OpenJade's implicit default behavior:
             // Process children automatically (DSSSL §10.1.5)
@@ -616,9 +723,12 @@ impl Evaluator {
                 "define-language" => self.eval_define_language(args, env),
                 "declare-flow-object-class" => self.eval_declare_flow_object_class(args, env),
                 "declare-characteristic" => self.eval_declare_characteristic(args, env),
+                "mode" => self.eval_mode(args, env),
+                "with-mode" => self.eval_with_mode(args, env),
                 "element" => self.eval_element(args, env),
                 "default" => self.eval_default(args, env),
                 "process-children" => self.eval_process_children(env),
+                "process-node-list" => self.eval_process_node_list(args, env),
                 "make" => self.eval_make(args, env),
 
                 // Not a special form - evaluate as function call
@@ -883,18 +993,12 @@ impl Evaluator {
             ));
         }
 
-        if args_vec.len() > 2 {
-            return Err(self.error_with_stack(
-                "element construction rule can only contain one sosofo expression\nTo combine multiple sosofos, use (sosofo-append ...)".to_string(),
-            ));
-        }
-
         // First argument is the element pattern (symbol or list)
-        // For context matching like (parent child), extract the last element
-        let element_name = match &args_vec[0] {
-            Value::Symbol(ref name) => name.clone(),
+        // For context matching like (parent child), extract the last element and context
+        let (element_name, context) = match &args_vec[0] {
+            Value::Symbol(ref name) => (name.clone(), Vec::new()),
             Value::Pair(_) => {
-                // List pattern like (parent child) - extract last element
+                // List pattern like (parent child) - extract context and element
                 let pattern_list = self.list_to_vec(args_vec[0].clone())?;
                 if pattern_list.is_empty() {
                     return Err(self.error_with_stack(
@@ -902,13 +1006,25 @@ impl Evaluator {
                     ));
                 }
                 // Last element in the list is the actual element being matched
-                if let Value::Symbol(ref name) = pattern_list[pattern_list.len() - 1] {
+                let element_name = if let Value::Symbol(ref name) = pattern_list[pattern_list.len() - 1] {
                     name.clone()
                 } else {
                     return Err(self.error_with_stack(
                         "Element pattern must contain only symbols".to_string(),
                     ));
+                };
+                // Elements before the last one are the context (parent chain)
+                let mut context = Vec::new();
+                for i in 0..pattern_list.len() - 1 {
+                    if let Value::Symbol(ref parent_name) = pattern_list[i] {
+                        context.push(parent_name.to_string());
+                    } else {
+                        return Err(self.error_with_stack(
+                            "Element pattern must contain only symbols".to_string(),
+                        ));
+                    }
                 }
+                (element_name, context)
             }
             _ => {
                 return Err(self.error_with_stack(
@@ -917,12 +1033,27 @@ impl Evaluator {
             }
         };
 
-        // Second argument is the construction expression (NOT evaluated yet!)
-        // Store it for later evaluation during processing
+        // Remaining arguments are the construction expressions
+        // If multiple expressions, wrap them in sosofo-append (OpenJade behavior)
+        let construction_expr = if args_vec.len() == 2 {
+            // Single expression - use as is
+            args_vec[1].clone()
+        } else {
+            // Multiple expressions - wrap in (sosofo-append expr1 expr2 ...)
+            let sosofo_append_sym = Value::symbol("sosofo-append");
+            let mut exprs = vec![sosofo_append_sym];
+            exprs.extend_from_slice(&args_vec[1..]);
+            self.vec_to_list(exprs)
+        };
+
+        // Store the construction expression for later evaluation
         // Capture the current source position (where the 'element' form is)
-        self.processing_mode.add_rule(
+        // Add the rule to the current mode
+        let mode_name = self.current_mode.clone();
+        self.mode_manager.get_or_create_mode(&mode_name).add_rule(
             element_name.to_string(),
-            args_vec[1].clone(),
+            context,
+            construction_expr,
             self.current_source_file.clone(),
             self.current_position.clone()
         );
@@ -944,16 +1075,102 @@ impl Evaluator {
             ));
         }
 
-        if args_vec.len() > 1 {
+        // If multiple expressions, wrap them in sosofo-append (OpenJade behavior)
+        let construction_expr = if args_vec.len() == 1 {
+            // Single expression - use as is
+            args_vec[0].clone()
+        } else {
+            // Multiple expressions - wrap in (sosofo-append expr1 expr2 ...)
+            let sosofo_append_sym = Value::symbol("sosofo-append");
+            let mut exprs = vec![sosofo_append_sym];
+            exprs.extend_from_slice(&args_vec);
+            self.vec_to_list(exprs)
+        };
+
+        // Store the default rule in the current mode
+        let mode_name = self.current_mode.clone();
+        self.mode_manager.get_or_create_mode(&mode_name).add_default_rule(construction_expr);
+
+        Ok(Value::Unspecified)
+    }
+
+    /// DSSSL mode definition
+    /// Syntax: (mode mode-name rule1 rule2 ...)
+    ///
+    /// Defines a named processing mode with its own construction rules.
+    /// All element and default rules within the mode body are added to the specified mode.
+    fn eval_mode(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+
+        if args_vec.is_empty() {
             return Err(self.error_with_stack(
-                "default construction rule can only contain one sosofo expression\nTo combine multiple sosofos, use (sosofo-append ...)".to_string(),
+                "mode requires at least 1 argument (mode-name)".to_string(),
             ));
         }
 
-        // Store the default rule (use empty string as the key for default)
-        self.processing_mode.add_default_rule(args_vec[0].clone());
+        // First argument is the mode name (symbol)
+        let mode_name = if let Value::Symbol(ref name) = args_vec[0] {
+            name.clone()
+        } else {
+            return Err(self.error_with_stack(
+                "First argument to mode must be a symbol".to_string(),
+            ));
+        };
 
-        Ok(Value::Unspecified)
+        // Save the current mode
+        let saved_mode = self.current_mode.clone();
+
+        // Switch to the new mode
+        self.current_mode = mode_name.to_string();
+
+        // Evaluate all the body expressions (element/default definitions)
+        let mut result = Value::Unspecified;
+        for expr in args_vec.iter().skip(1) {
+            result = self.eval(expr.clone(), env.clone())?;
+        }
+
+        // Restore the previous mode
+        self.current_mode = saved_mode;
+
+        Ok(result)
+    }
+
+    /// DSSSL with-mode - temporarily switch processing mode
+    /// Syntax: (with-mode mode-name expr)
+    ///
+    /// Evaluates expr with the processing mode temporarily switched to mode-name.
+    /// Rules are looked up in the specified mode during processing.
+    fn eval_with_mode(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+
+        if args_vec.len() < 2 {
+            return Err(self.error_with_stack(
+                "with-mode requires 2 arguments (mode-name and expression)".to_string(),
+            ));
+        }
+
+        // First argument is the mode name (symbol)
+        let mode_name = if let Value::Symbol(ref name) = args_vec[0] {
+            name.clone()
+        } else {
+            return Err(self.error_with_stack(
+                "First argument to with-mode must be a symbol".to_string(),
+            ));
+        };
+
+        // Save the current processing mode
+        let saved_processing_mode = self.current_processing_mode.clone();
+
+        // Switch to the new processing mode
+        self.current_processing_mode = mode_name.to_string();
+
+        // Evaluate the expression in the new mode
+        let result = self.eval(args_vec[1].clone(), env);
+
+        // Restore the previous processing mode
+        self.current_processing_mode = saved_processing_mode;
+
+        result
     }
 
     /// DSSSL process-children (OpenJade ProcessContext::processChildren)
@@ -968,8 +1185,9 @@ impl Evaluator {
             None => return Err(EvalError::new("No current node".to_string())),
         };
 
-        // Get children
-        let mut children = current_node.children();
+        // Get ALL children (including text nodes)
+        // Note: all_children() returns elements AND text, not just elements like children()
+        let mut children = current_node.all_children();
 
         // Process each child (using DSSSL node-list iteration pattern)
         let mut result = Value::Unspecified;
@@ -991,6 +1209,58 @@ impl Evaluator {
 
             // Move to rest of children
             children = children.rest();
+        }
+
+        Ok(result)
+    }
+
+    /// DSSSL (process-node-list node-list)
+    /// Syntax: (process-node-list node-list)
+    ///
+    /// Processes all nodes in the given node-list.
+    /// For each node, matches construction rules and evaluates them.
+    fn eval_process_node_list(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+        if args_vec.len() != 1 {
+            return Err(EvalError::new(
+                "process-node-list requires exactly 1 argument".to_string(),
+            ));
+        }
+
+        // Evaluate the argument to get the node-list
+        let node_list_value = self.eval(args_vec[0].clone(), env.clone())?;
+
+        // Get the node-list
+        let mut nodes = match node_list_value {
+            Value::NodeList(ref nl) => nl.clone(),
+            _ => {
+                return Err(EvalError::new(format!(
+                    "process-node-list: not a node-list: {:?}",
+                    node_list_value
+                )))
+            }
+        };
+
+        // Process each node (using DSSSL node-list iteration pattern)
+        let mut result = Value::Unspecified;
+        while !nodes.is_empty() {
+            // Get first node
+            if let Some(node) = nodes.first() {
+                // Save current node
+                let saved_node = self.current_node.clone();
+
+                // Set this node as current node
+                self.current_node = Some(Rc::new(node));
+
+                // Process the node
+                result = self.process_node(env.clone())?;
+
+                // Restore current node
+                self.current_node = saved_node;
+            }
+
+            // Move to rest of nodes
+            nodes = Rc::new(nodes.rest());
         }
 
         Ok(result)
@@ -1023,6 +1293,8 @@ impl Evaluator {
         let mut system_id = None;
         let mut data = None;
         let mut path = None;
+        let mut gi = None;
+        let mut attributes = None;
         let mut body_exprs = Vec::new();
 
         while i < args_vec.len() {
@@ -1051,7 +1323,7 @@ impl Evaluator {
                                 data = Some(s);
                             } else {
                                 return Err(EvalError::new(
-                                    "make: data must be a string".to_string(),
+                                    format!("make: data must be a string, got {:?}", value),
                                 ));
                             }
                         }
@@ -1063,6 +1335,19 @@ impl Evaluator {
                                     "make: path must be a string".to_string(),
                                 ));
                             }
+                        }
+                        "gi" => {
+                            if let Value::String(s) = value {
+                                gi = Some(s);
+                            } else {
+                                return Err(EvalError::new(
+                                    "make element: gi must be a string".to_string(),
+                                ));
+                            }
+                        }
+                        "attributes" => {
+                            // attributes can be a list or #f
+                            attributes = Some(value);
                         }
                         _ => {
                             // Ignore unknown keywords for now
@@ -1085,6 +1370,10 @@ impl Evaluator {
                 match fo_type {
                     "entity" => {
                         if let Some(sid) = system_id {
+                            // Save current buffer (for nested entities)
+                            let saved_buffer = backend.borrow().current_output().to_string();
+                            backend.borrow_mut().clear_buffer();
+
                             // Evaluate body expressions (they append to buffer)
                             for expr in body_exprs {
                                 self.eval(expr, env.clone())?;
@@ -1094,8 +1383,11 @@ impl Evaluator {
                             let content = backend.borrow().current_output().to_string();
                             backend.borrow_mut().entity(&sid, &content)
                                 .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
-                            // Clear buffer after writing file
+
+                            // Restore saved buffer (for parent entity context)
                             backend.borrow_mut().clear_buffer();
+                            backend.borrow_mut().formatting_instruction(&saved_buffer)
+                                .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
                         } else {
                             return Err(EvalError::new(
                                 "make entity requires system-id: keyword".to_string(),
@@ -1148,9 +1440,64 @@ impl Evaluator {
                             ));
                         }
                     }
+                    "sequence" => {
+                        // Sequence evaluates all body expressions in order
+                        // This is the primary composition mechanism for flow objects
+                        for expr in body_exprs {
+                            self.eval(expr, env.clone())?;
+                        }
+                    }
+                    "element" => {
+                        // OpenJade extension: (make element gi: "name" attributes: '(("key" "val")) body...)
+                        // Outputs: <name\nkey="val"\n>body</name\n>
+                        //
+                        // This is a compound flow object that generates HTML-like tags
+                        // with OpenJade's special formatting (newline after tag name and each attribute)
+
+                        let gi = gi.ok_or_else(|| EvalError::new(
+                            "make element requires gi: keyword".to_string()
+                        ))?;
+
+                        // Start tag with newline after tag name
+                        backend.borrow_mut().formatting_instruction(&format!("<{}\n", gi))
+                            .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+
+                        // Add attributes if present, each on its own line
+                        if let Some(attrs_val) = attributes {
+                            // attributes should be a list of (name value) pairs
+                            let attrs_list = self.list_to_vec(attrs_val)?;
+                            for attr_pair in attrs_list {
+                                let pair_vec = self.list_to_vec(attr_pair)?;
+                                if pair_vec.len() == 2 {
+                                    if let (Value::String(name), Value::String(value)) =
+                                        (&pair_vec[0], &pair_vec[1]) {
+                                        // Escape quotes in attribute value
+                                        let escaped_value = value.replace('"', "&quot;");
+                                        backend.borrow_mut().formatting_instruction(&format!("{}=\"{}\"\n", name, escaped_value))
+                                            .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Closing > for opening tag
+                        backend.borrow_mut().formatting_instruction(">")
+                            .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+
+                        // Evaluate body expressions
+                        for expr in body_exprs {
+                            self.eval(expr, env.clone())?;
+                        }
+
+                        // End tag with OpenJade's line break pattern
+                        backend.borrow_mut().formatting_instruction(&format!("</{}\n>", gi))
+                            .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+                    }
                     _ => {
-                        // Unknown flow object type - just return unspecified for now
-                        return Ok(Value::Unspecified);
+                        // Unknown flow object type - error
+                        return Err(EvalError::new(
+                            format!("make: unknown flow object type '{}'", fo_type),
+                        ));
                     }
                 }
             }

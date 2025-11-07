@@ -83,6 +83,15 @@ pub trait Node: Debug + Any {
     /// DSSSL: `children` property
     fn children(&self) -> Box<dyn NodeList>;
 
+    /// Get ALL child nodes (including text nodes)
+    ///
+    /// This is an internal method used by `process-children` to iterate over
+    /// all child nodes including text. This is NOT the DSSSL `children` property,
+    /// which returns only element nodes.
+    ///
+    /// **Internal use only**: Used by evaluator's process_children implementation.
+    fn all_children(&self) -> Box<dyn NodeList>;
+
     /// Get parent node
     ///
     /// Returns `None` for the root node.
