@@ -107,10 +107,11 @@
 4. **SGML backend** (only `entity` + `formatting-instruction`)
 5. **Template parser** (XML + entity references)
 
-**Dazzle Does NOT Need**:
-- Other FOT builders (RTF, TeX, MIF, HTML)
-- Document formatting primitives (quantities, colors, spacing) - stub only
-- OpenSP (use libxml2)
+**Dazzle Roadmap**:
+- ✅ SGML backend (code generation) - COMPLETE
+- 🔄 RTF backend (document formatting) - IN PROGRESS
+- 🚧 PDF backend (via RTF foundation)
+- 🚧 Additional backends (TeX, MIF, HTML) - FUTURE
 
 ---
 
@@ -189,12 +190,13 @@ Parser resolves entities, extracts `<style-specification>` content, passes to in
 **Workspace** (multi-crate):
 ```
 dazzle-core/          → Interpreter + traits (scheme, dsssl, grove, fot)
-dazzle-grove-libxml2/ → XML grove (priority 1)
-dazzle-backend-sgml/  → Code gen backend (priority 1)
-dazzle-cli/           → CLI
+dazzle-grove-libxml2/ → XML grove ✅ COMPLETE
+dazzle-backend-sgml/  → Code gen backend ✅ COMPLETE
+dazzle-backend-rtf/   → RTF backend 🔄 IN PROGRESS
+dazzle/               → CLI ✅ COMPLETE
 ```
 
-Future: `dazzle-grove-opensp`, `dazzle-backend-{rtf,tex,mif,html}`
+Future: `dazzle-backend-pdf`
 
 **Key Traits**:
 
@@ -247,20 +249,24 @@ pub struct Interpreter {
 - Clean separation (groves don't know backends, etc.)
 - Testable components
 
-**Migration**:
-1. Phase 1: SGML backend + libxml2 (code gen)
-2. Phase 2: RTF/TeX/MIF/HTML backends
-3. Phase 3: OpenSP grove (full SGML)
+**Implementation Phases**:
+1. ✅ Phase 1: SGML backend + libxml2 (code gen) - COMPLETE
+2. 🔄 Phase 2: RTF backend (document formatting) - IN PROGRESS
+3. 🚧 Phase 3: PDF backend (via RTF)
 
 ---
 
 ## CLI Design
 
 ```bash
-dazzle -d template.scm [-t xml] [-V key=value]... [-D dir]... input.xml
+dazzle -d template.scm [-t sgml|rtf] [-V key=value]... [-D dir]... input.xml
 ```
 
-**Flags**: `-d` (template, required), `-V` (variables), `-D` (search paths), `-t` (backend: xml/text)
+**Flags**:
+- `-d` (template, required)
+- `-t` (backend: `sgml` for code gen, `rtf` for document formatting)
+- `-V` (variables), `-D` (search paths)
+
 **Auto**: DTD validation if `<!DOCTYPE>`, output via template (no `-o`)
 
 **Examples**:
@@ -342,21 +348,25 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 
 ---
 
-## Current Status (October 21, 2025)
+## Current Status (November 7, 2025)
 
-### 🚀 v0.2.0 - PRODUCTION READY
+### 🚀 v0.4.4 - SGML Backend Complete, RTF Backend Starting
 
-**Published to crates.io**: https://crates.io/crates/dazzle
+**Phase 1 Complete**: SGML backend production-ready
+**Phase 2 In Progress**: RTF backend for document formatting
 
-**All 8 Phases Completed:**
-- ✅ Phase 1: Architecture & Traits (Oct 17-19)
-- ✅ Phase 2: Scheme Interpreter (Oct 17-19)
-- ✅ Phase 3: libxml2 Grove (Oct 17-19)
-- ✅ Phase 4: SGML Backend & Processing (Oct 19-20)
-- ✅ Phase 5: 258 Primitives + 2 Special Forms (Oct 19-20)
-- ✅ Phase 6: CLI & Loading (Oct 19)
-- ✅ Phase 7: Testing & Documentation (Oct 19)
-- ✅ Phase 8: Distribution (Oct 20 - **PUBLISHED TO CRATES.IO**)
+**SGML Backend (v0.2.0-v0.4.4) - COMPLETE:**
+- ✅ R4RS Scheme interpreter with 260 language features
+- ✅ Full DSSSL processing model (rules, modes, process-root)
+- ✅ libxml2 grove with DTD validation
+- ✅ SGML backend for code generation
+- ✅ Production-validated on 4 real-world projects (100% OpenJade compatible)
+- ✅ Published to crates.io
+
+**RTF Backend (Nov 2025) - IN PROGRESS:**
+- 🔄 Document formatting flow objects
+- 🔄 RTF output generation
+- 🔄 Byte-for-byte OpenJade compatibility
 
 **Implementation Stats:**
 - **Lines of Code**: ~10,000 Rust (vs 72,000 C++ in OpenJade)
@@ -483,11 +493,28 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 cargo install dazzle
 ```
 
-**Next Steps:**
-- Create GitHub v0.2.0 release with binaries
-- Submit to Homebrew core
-- Submit to MacPorts
-- Create AUR package
-- Begin work on v0.3.0 (full flow object support)
+**Current Work (Nov 2025): RTF Backend**
+
+Implementing OpenJade-compatible RTF backend for document formatting:
+
+**Reference**:
+- OpenJade: `RtfFOTBuilder.cxx` (4,391 lines)
+- Test case: `/Users/r.schleitzer/repos/dazzzledoc/dsssl.rtf` (1.0 MB)
+- Goal: Byte-for-byte compatibility with OpenJade RTF output
+
+**Implementation Plan**:
+1. ✅ Phase 1: SGML backend (code generation) - **COMPLETE**
+2. 🔄 **Phase 2: RTF backend (document formatting) - IN PROGRESS**
+   - Architecture: `dazzle-backend-rtf` crate
+   - Core flow objects: paragraph, sequence, display-group
+   - Document structure: page setup, headers/footers, sections
+   - Advanced: links, TOC, lists, tables
+   - Character/paragraph properties
+3. 🚧 Phase 3: PDF backend (via RTF foundation)
+
+**RTF Backend Scope**:
+- Full DSSSL flow object support (vs SGML's entity+formatting-instruction only)
+- Document formatting primitives (quantities, colors, spacing)
+- First step toward full print/PDF output pipeline
 
 ---
