@@ -1528,6 +1528,30 @@ impl Evaluator {
                         backend.borrow_mut().end_display_group()
                             .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
                     }
+                    "simple-page-sequence" => {
+                        // RTF simple-page-sequence flow object (main page container)
+                        backend.borrow_mut().start_simple_page_sequence()
+                            .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+
+                        for expr in body_exprs {
+                            self.eval(expr, env.clone())?;
+                        }
+
+                        backend.borrow_mut().end_simple_page_sequence()
+                            .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+                    }
+                    "line-field" => {
+                        // RTF line-field flow object (inline text container)
+                        backend.borrow_mut().start_line_field()
+                            .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+
+                        for expr in body_exprs {
+                            self.eval(expr, env.clone())?;
+                        }
+
+                        backend.borrow_mut().end_line_field()
+                            .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+                    }
                     _ => {
                         // Unknown flow object type - error
                         return Err(EvalError::new(
