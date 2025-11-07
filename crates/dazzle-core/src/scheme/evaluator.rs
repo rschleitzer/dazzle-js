@@ -874,8 +874,14 @@ impl Evaluator {
         let args_vec = self.list_to_vec(args)?;
 
         if args_vec.len() < 2 {
-            return Err(EvalError::new(
+            return Err(self.error_with_stack(
                 "element requires at least 2 arguments (element-name and construction-expression)".to_string(),
+            ));
+        }
+
+        if args_vec.len() > 2 {
+            return Err(self.error_with_stack(
+                "element construction rule can only contain one sosofo expression\nTo combine multiple sosofos, use (sosofo-append ...)".to_string(),
             ));
         }
 
@@ -883,7 +889,7 @@ impl Evaluator {
         let element_name = if let Value::Symbol(ref name) = args_vec[0] {
             name.clone()
         } else {
-            return Err(EvalError::new(
+            return Err(self.error_with_stack(
                 "First argument to element must be a symbol".to_string(),
             ));
         };
@@ -910,8 +916,14 @@ impl Evaluator {
         let args_vec = self.list_to_vec(args)?;
 
         if args_vec.is_empty() {
-            return Err(EvalError::new(
+            return Err(self.error_with_stack(
                 "default requires at least 1 argument (construction-expression)".to_string(),
+            ));
+        }
+
+        if args_vec.len() > 1 {
+            return Err(self.error_with_stack(
+                "default construction rule can only contain one sosofo expression\nTo combine multiple sosofos, use (sosofo-append ...)".to_string(),
             ));
         }
 
@@ -2028,7 +2040,7 @@ impl Evaluator {
     fn apply(&mut self, proc: Value, args: Vec<Value>) -> EvalResult {
         if let Value::Procedure(ref p) = proc {
             match &**p {
-                Procedure::Primitive { name, func } => {
+                Procedure::Primitive { name: _, func } => {
                     // Don't push call frames for primitives - only for user lambdas
                     // This matches OpenJade's behavior
                     func(&args).map_err(|e| self.error_with_stack(e))
@@ -2443,5 +2455,83 @@ mod tests {
         } else {
             panic!("Expected integer 99");
         }
+    }
+
+    #[test]
+    fn test_element_rule_multiple_sosofos_error() {
+        let mut eval = Evaluator::new();
+        let env = make_env();
+
+        // (element foo expr1 expr2) - should error
+        let expr = Value::cons(
+            Value::symbol("element"),
+            Value::cons(
+                Value::symbol("foo"),
+                Value::cons(
+                    Value::symbol("expr1"),
+                    Value::cons(Value::symbol("expr2"), Value::Nil),
+                ),
+            ),
+        );
+
+        let result = eval.eval(expr, env);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("can only contain one sosofo expression"));
+        assert!(err_msg.contains("sosofo-append"));
+    }
+
+    #[test]
+    fn test_element_rule_single_sosofo_ok() {
+        let mut eval = Evaluator::new();
+        let env = make_env();
+
+        // (element foo expr) - should succeed
+        let expr = Value::cons(
+            Value::symbol("element"),
+            Value::cons(
+                Value::symbol("foo"),
+                Value::cons(Value::symbol("expr"), Value::Nil),
+            ),
+        );
+
+        let result = eval.eval(expr, env);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_default_rule_multiple_sosofos_error() {
+        let mut eval = Evaluator::new();
+        let env = make_env();
+
+        // (default expr1 expr2) - should error
+        let expr = Value::cons(
+            Value::symbol("default"),
+            Value::cons(
+                Value::symbol("expr1"),
+                Value::cons(Value::symbol("expr2"), Value::Nil),
+            ),
+        );
+
+        let result = eval.eval(expr, env);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("can only contain one sosofo expression"));
+        assert!(err_msg.contains("sosofo-append"));
+    }
+
+    #[test]
+    fn test_default_rule_single_sosofo_ok() {
+        let mut eval = Evaluator::new();
+        let env = make_env();
+
+        // (default expr) - should succeed
+        let expr = Value::cons(
+            Value::symbol("default"),
+            Value::cons(Value::symbol("expr"), Value::Nil),
+        );
+
+        let result = eval.eval(expr, env);
+        assert!(result.is_ok());
     }
 }

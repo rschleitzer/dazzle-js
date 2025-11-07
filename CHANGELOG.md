@@ -248,6 +248,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.4] - 2025-11-07
+
+### Fixed
+- **DSSSL compliance: Element construction rule validation**: Element and default construction rules now properly reject multiple sosofo expressions
+  - DSSSL standard requires exactly one sosofo expression per construction rule
+  - Previously: Multiple sosofo expressions were silently accepted, but only the first was processed
+  - Now: Clear error message when multiple sosofos detected: "element construction rule can only contain one sosofo expression. To combine multiple sosofos, use (sosofo-append ...)"
+  - Improves on OpenJade's cryptic grammar-level error ("missing closing parenthesis", "unknown top level form")
+  - Helps users write correct DSSSL code with actionable guidance
+
+### Changed
+- **Code cleanup**: Removed unused code and fixed compiler warnings
+  - Removed dead `translate_positions` function (replaced by evaluator-based position translation in v0.4.2)
+  - Fixed unused variable and import warnings
+  - Only benign warnings from gc_derive dependency remain (not actionable)
+
+---
+
 ## [Unreleased]
 
 ### Planned for v0.5.0
@@ -256,6 +274,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Additional grove implementations (OpenSP for full SGML)
 - Additional backends (RTF, TeX, MIF, HTML)
 
+[0.4.4]: https://github.com/rschleitzer/dazzle/releases/tag/v0.4.4
 [0.4.3]: https://github.com/rschleitzer/dazzle/releases/tag/v0.4.3
 [0.4.2]: https://github.com/rschleitzer/dazzle/releases/tag/v0.4.2
 [0.4.1]: https://github.com/rschleitzer/dazzle/releases/tag/v0.4.1

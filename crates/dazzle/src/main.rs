@@ -12,7 +12,6 @@ use dazzle_core::scheme::environment::Environment;
 use dazzle_core::scheme::evaluator::{Evaluator, LineMapping};
 use dazzle_core::scheme::parser::Parser as SchemeParser;
 use dazzle_core::scheme::primitives;
-use dazzle_core::scheme::value::Value;
 use dazzle_grove_libxml2::LibXml2Grove;
 use std::fs;
 use std::path::PathBuf;
@@ -247,43 +246,6 @@ fn evaluate_template(
     }
 
     Ok(())
-}
-
-/// Translate all positions in an expression tree using line mappings
-///
-/// Recursively walks the expression tree and translates positions in all pairs.
-fn translate_positions(expr: Value, line_mappings: &[LineMapping]) {
-    match expr {
-        Value::Pair(ref p) => {
-            let mut pair_data = p.borrow_mut();
-
-            // Translate the position if present
-            if let Some(ref pos) = pair_data.pos {
-                if let Some(mapping) = line_mappings.iter().find(|m| m.output_line == pos.line) {
-                    pair_data.pos = Some(dazzle_core::scheme::parser::Position {
-                        line: mapping.source_line,
-                        column: pos.column,
-                    });
-                }
-            }
-
-            // Recursively translate car and cdr (clone before recursing to avoid borrow issues)
-            let car = pair_data.car.clone();
-            let cdr = pair_data.cdr.clone();
-            drop(pair_data); // Release the borrow before recursing
-            translate_positions(car, line_mappings);
-            translate_positions(cdr, line_mappings);
-        }
-        Value::Vector(ref v) => {
-            let vec_data = v.borrow();
-            let elements: Vec<Value> = vec_data.iter().cloned().collect();
-            drop(vec_data); // Release the borrow
-            for elem in elements {
-                translate_positions(elem, line_mappings);
-            }
-        }
-        _ => {},
-    }
 }
 
 /// Resolve XML template wrapper (.dsl format) to plain Scheme code
