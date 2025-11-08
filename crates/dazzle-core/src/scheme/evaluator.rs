@@ -850,24 +850,9 @@ impl Evaluator {
                 let (name_val, params) = self.list_car_cdr(&args_vec[0])?;
 
                 if let Value::Symbol(ref name) = name_val {
-                    // Extract parameter names
-                    let params_vec = if params.is_nil() {
-                        Vec::new()
-                    } else {
-                        self.list_to_vec(params)?
-                    };
-
-                    let mut param_names = Vec::new();
-                    for param in params_vec {
-                        if let Value::Symbol(ref pname) = param {
-                            param_names.push(pname.to_string());
-                        } else {
-                            return Err(EvalError::new(format!(
-                                "Parameter must be a symbol, got: {:?}",
-                                param
-                            )));
-                        }
-                    }
+                    // Parse parameters (handles #!optional)
+                    let (param_names, required_count, optional_defaults) =
+                        self.parse_lambda_params(params)?;
 
                     // Build body
                     let body = if args_vec.len() == 2 {
@@ -885,13 +870,26 @@ impl Evaluator {
                         use crate::scheme::parser::Position;
                         SourceInfo::new(file.clone(), Position::new())
                     });
-                    let lambda_value = Value::lambda_with_source(
-                        param_names,
-                        body,
-                        env.clone(),
-                        source_info,
-                        Some(name.to_string()),
-                    );
+
+                    let lambda_value = if optional_defaults.is_empty() {
+                        Value::lambda_with_source(
+                            param_names,
+                            body,
+                            env.clone(),
+                            source_info,
+                            Some(name.to_string()),
+                        )
+                    } else {
+                        Value::lambda_with_optional(
+                            param_names,
+                            required_count,
+                            optional_defaults,
+                            body,
+                            env.clone(),
+                            source_info,
+                            Some(name.to_string()),
+                        )
+                    };
 
                     env.define(name, lambda_value);
                     Ok(Value::Unspecified)
@@ -1658,27 +1656,10 @@ impl Evaluator {
             ));
         }
 
-        // Extract parameter list
+        // Parse parameter list (handles #!optional parameters)
         let params_list = &args_vec[0];
-        let params_vec = if params_list.is_nil() {
-            // No parameters: (lambda () body)
-            Vec::new()
-        } else {
-            self.list_to_vec(params_list.clone())?
-        };
-
-        // Convert parameter values to strings
-        let mut param_names = Vec::new();
-        for param in params_vec {
-            if let Value::Symbol(ref name) = param {
-                param_names.push(name.to_string());
-            } else {
-                return Err(EvalError::new(format!(
-                    "Lambda parameter must be a symbol, got: {:?}",
-                    param
-                )));
-            }
-        }
+        let (param_names, required_count, optional_defaults) =
+            self.parse_lambda_params(params_list.clone())?;
 
         // Extract body (one or more expressions)
         let body = if args_vec.len() == 2 {
@@ -1706,7 +1687,100 @@ impl Evaluator {
             }
             _ => None,
         };
-        Ok(Value::lambda_with_source(param_names, body, env, source_info, None))
+
+        // Create lambda with optional parameters if present
+        if optional_defaults.is_empty() {
+            Ok(Value::lambda_with_source(param_names, body, env, source_info, None))
+        } else {
+            Ok(Value::lambda_with_optional(
+                param_names,
+                required_count,
+                optional_defaults,
+                body,
+                env,
+                source_info,
+                None,
+            ))
+        }
+    }
+
+    /// Parse lambda parameter list, handling #!optional parameters
+    ///
+    /// Returns: (param_names, required_count, optional_defaults)
+    fn parse_lambda_params(
+        &mut self,
+        params: Value,
+    ) -> Result<(Vec<String>, usize, Vec<Value>), EvalError> {
+        if params.is_nil() {
+            return Ok((Vec::new(), 0, Vec::new()));
+        }
+
+        let params_vec = self.list_to_vec(params)?;
+        let mut param_names = Vec::new();
+        let mut required_count = 0;
+        let mut optional_defaults = Vec::new();
+        let mut in_optional = false;
+
+        for param in params_vec {
+            // Check for #!optional marker
+            if let Value::Symbol(ref sym) = param {
+                if sym.as_ref() == "#!optional" {
+                    in_optional = true;
+                    continue;
+                }
+            }
+
+            if !in_optional {
+                // Required parameter - must be a symbol
+                if let Value::Symbol(ref name) = param {
+                    param_names.push(name.to_string());
+                    required_count += 1;
+                } else {
+                    return Err(EvalError::new(format!(
+                        "Parameter must be a symbol, got: {:?}",
+                        param
+                    )));
+                }
+            } else {
+                // Optional parameter - can be symbol or (symbol default)
+                match param {
+                    Value::Symbol(ref name) => {
+                        // Optional with no default: use #<unspecified>
+                        param_names.push(name.to_string());
+                        optional_defaults.push(Value::Unspecified);
+                    }
+                    Value::Pair(_) => {
+                        // (name default-expr)
+                        let opt_list = self.list_to_vec(param)?;
+                        if opt_list.len() != 2 {
+                            return Err(EvalError::new(format!(
+                                "Optional parameter must be (name default), got list of length {}",
+                                opt_list.len()
+                            )));
+                        }
+
+                        if let Value::Symbol(ref name) = opt_list[0] {
+                            param_names.push(name.to_string());
+                            // Store the unevaluated default expression
+                            optional_defaults.push(opt_list[1].clone());
+                        } else {
+                            return Err(EvalError::new(format!(
+                                "Optional parameter name must be a symbol, got: {:?}",
+                                opt_list[0]
+                            )));
+                        }
+                    }
+                    _ => {
+                        return Err(EvalError::new(format!(
+                            "Optional parameter must be symbol or (symbol default), got: {:?}",
+                            param
+                        )));
+                    }
+                }
+            }
+        }
+
+        Ok((param_names, required_count, optional_defaults))
     }
 
     /// (let ((var val)...) body...)
@@ -2523,11 +2597,18 @@ impl Evaluator {
                     // This matches OpenJade's behavior
                     func(&args).map_err(|e| self.error_with_stack(e))
                 }
-                Procedure::Lambda { params, body, env, source, name } => {
-                    // Check argument count
-                    if args.len() != params.len() {
+                Procedure::Lambda { params, required_count, optional_defaults, body, env, source, name } => {
+                    // Check argument count - must have at least required_count, at most params.len()
+                    if args.len() < *required_count {
                         return Err(self.error_with_stack(format!(
-                            "Lambda expects {} arguments, got {}",
+                            "Lambda expects at least {} arguments, got {}",
+                            required_count,
+                            args.len()
+                        )));
+                    }
+                    if args.len() > params.len() {
+                        return Err(self.error_with_stack(format!(
+                            "Lambda expects at most {} arguments, got {}",
                             params.len(),
                             args.len()
                         )));
@@ -2562,9 +2643,25 @@ impl Evaluator {
                     // Create new environment extending the closure environment
                     let lambda_env = Environment::extend(env.clone());
 
-                    // Bind parameters to arguments
+                    // Bind required and provided arguments
                     for (param_name, arg_value) in params.iter().zip(args.iter()) {
                         lambda_env.define(param_name, arg_value.clone());
+                    }
+
+                    // Bind optional parameters that weren't provided with their defaults
+                    if args.len() < params.len() {
+                        let num_optional_provided = args.len().saturating_sub(*required_count);
+                        let num_optional_defaults_needed = (params.len() - *required_count) - num_optional_provided;
+
+                        for i in 0..num_optional_defaults_needed {
+                            let param_idx = *required_count + num_optional_provided + i;
+                            let param_name = &params[param_idx];
+                            let default_expr = &optional_defaults[num_optional_provided + i];
+
+                            // Evaluate default expression in the closure environment
+                            let default_value = self.eval_inner(default_expr.clone(), env.clone())?;
+                            lambda_env.define(param_name, default_value);
+                        }
                     }
 
                     // Evaluate body in the new environment

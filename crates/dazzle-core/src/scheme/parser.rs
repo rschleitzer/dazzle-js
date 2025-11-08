@@ -360,7 +360,7 @@ impl Tokenizer {
         if let Some(ch1) = self.peek_char_at(0) {
             if let Some(ch2) = self.peek_char_at(1) {
                 match (ch1, ch2) {
-                    ('p', 't') | ('p', 'i') | ('p', 'c') |
+                    ('p', 't') | ('p', 'i') | ('p', 'c') | ('p', 'x') |
                     ('i', 'n') | ('m', 'm') | ('c', 'm') | ('e', 'm') => return 2,
                     _ => {}
                 }

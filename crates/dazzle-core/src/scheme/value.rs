@@ -89,6 +89,8 @@ pub enum Unit {
     Millimeter,
     /// Centimeter (10mm = 10/25.4 inch)
     Centimeter,
+    /// Pixel (1/96 inch - CSS pixel standard)
+    Pixel,
     /// Em (relative to font size - context-dependent)
     Em,
 }
@@ -105,6 +107,7 @@ impl Unit {
             Unit::Pica => magnitude / 6.0,
             Unit::Millimeter => magnitude / 25.4,
             Unit::Centimeter => magnitude / 2.54,
+            Unit::Pixel => magnitude / 96.0, // CSS pixel: 1px = 1/96 inch
             Unit::Em => magnitude * 12.0 / 72.0, // Default: 1em = 12pt
         }
     }
@@ -117,6 +120,7 @@ impl Unit {
             Unit::Pica => inches * 6.0,
             Unit::Millimeter => inches * 25.4,
             Unit::Centimeter => inches * 2.54,
+            Unit::Pixel => inches * 96.0, // CSS pixel: 1px = 1/96 inch
             Unit::Em => inches * 72.0 / 12.0, // Default: 1em = 12pt
         }
     }
@@ -129,6 +133,7 @@ impl Unit {
             "in" => Some(Unit::Inch),
             "mm" => Some(Unit::Millimeter),
             "cm" => Some(Unit::Centimeter),
+            "px" => Some(Unit::Pixel),
             "em" => Some(Unit::Em),
             _ => None,
         }
@@ -142,6 +147,7 @@ impl Unit {
             Unit::Inch => "in",
             Unit::Millimeter => "mm",
             Unit::Centimeter => "cm",
+            Unit::Pixel => "px",
             Unit::Em => "em",
         }
     }
@@ -327,13 +333,17 @@ pub enum Procedure {
     /// User-defined lambda
     ///
     /// Captures:
-    /// - `params`: Parameter names (formal parameters)
+    /// - `params`: Parameter names (formal parameters, both required and optional)
+    /// - `required_count`: Number of required parameters (rest are optional)
+    /// - `optional_defaults`: Default expressions for optional parameters
     /// - `body`: Expression to evaluate when called
     /// - `env`: Closure environment (captures lexical scope)
     /// - `source`: Source location (for error reporting)
     /// - `name`: Optional name (for named procedures defined with `define`)
     Lambda {
         params: Gc<Vec<String>>,
+        required_count: usize,
+        optional_defaults: Gc<Vec<Value>>,
         body: Gc<Value>,
         env: Gc<crate::scheme::environment::Environment>,
         source: Option<SourceInfo>,
@@ -348,8 +358,10 @@ impl Clone for Procedure {
                 name,
                 func: *func,
             },
-            Procedure::Lambda { params, body, env, source, name } => Procedure::Lambda {
+            Procedure::Lambda { params, required_count, optional_defaults, body, env, source, name } => Procedure::Lambda {
                 params: params.clone(),
+                required_count: *required_count,
+                optional_defaults: optional_defaults.clone(),
                 body: body.clone(),
                 env: env.clone(),
                 source: source.clone(),
@@ -366,10 +378,11 @@ unsafe impl gc::Trace for Procedure {
             Procedure::Primitive { .. } => {
                 // Primitives don't have GC'd data
             }
-            Procedure::Lambda { params, body, env, source: _, name: _ } => {
+            Procedure::Lambda { params, optional_defaults, body, env, source: _, name: _, required_count: _ } => {
                 // Trace the lambda's garbage-collected fields
-                // Note: source and name are not GC'd, so we don't trace them
+                // Note: source, name, and required_count are not GC'd, so we don't trace them
                 params.trace();
+                optional_defaults.trace();
                 body.trace();
                 env.trace();
             }
@@ -379,8 +392,9 @@ unsafe impl gc::Trace for Procedure {
     unsafe fn root(&self) {
         match self {
             Procedure::Primitive { .. } => {}
-            Procedure::Lambda { params, body, env, source: _, name: _ } => {
+            Procedure::Lambda { params, optional_defaults, body, env, source: _, name: _, required_count: _ } => {
                 params.root();
+                optional_defaults.root();
                 body.root();
                 env.root();
             }
@@ -390,8 +404,9 @@ unsafe impl gc::Trace for Procedure {
     unsafe fn unroot(&self) {
         match self {
             Procedure::Primitive { .. } => {}
-            Procedure::Lambda { params, body, env, source: _, name: _ } => {
+            Procedure::Lambda { params, optional_defaults, body, env, source: _, name: _, required_count: _ } => {
                 params.unroot();
+                optional_defaults.unroot();
                 body.unroot();
                 env.unroot();
             }
@@ -469,8 +484,11 @@ impl Value {
         body: Value,
         env: Gc<crate::scheme::environment::Environment>,
     ) -> Self {
+        let required_count = params.len();
         Value::Procedure(Gc::new(Procedure::Lambda {
             params: Gc::new(params),
+            required_count,
+            optional_defaults: Gc::new(Vec::new()),
             body: Gc::new(body),
             env,
             source: None,
@@ -486,8 +504,32 @@ impl Value {
         source: Option<SourceInfo>,
         name: Option<String>,
     ) -> Self {
+        let required_count = params.len();
         Value::Procedure(Gc::new(Procedure::Lambda {
             params: Gc::new(params),
+            required_count,
+            optional_defaults: Gc::new(Vec::new()),
+            body: Gc::new(body),
+            env,
+            source,
+            name,
+        }))
+    }
+
+    /// Create a user-defined lambda procedure with optional parameters
+    pub fn lambda_with_optional(
+        params: Vec<String>,
+        required_count: usize,
+        optional_defaults: Vec<Value>,
+        body: Value,
+        env: Gc<crate::scheme::environment::Environment>,
+        source: Option<SourceInfo>,
+        name: Option<String>,
+    ) -> Self {
+        Value::Procedure(Gc::new(Procedure::Lambda {
+            params: Gc::new(params),
+            required_count,
+            optional_defaults: Gc::new(optional_defaults),
             body: Gc::new(body),
             env,
             source,
