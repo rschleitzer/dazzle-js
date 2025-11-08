@@ -252,10 +252,8 @@ fn run_rtf_backend(args: Args, grove_rc: Rc<LibXml2Grove>) -> Result<()> {
     };
 
     // Load external specifications first (e.g., dbparam.dsl, dblib.dsl)
-    eprintln!("[DEBUG] Loading {} external specifications...", external_specs.len());
     debug!("Loading {} external specifications...", external_specs.len());
     for (spec_id, spec_file) in &external_specs {
-        eprintln!("[DEBUG] Loading external specification: {} from {}", spec_id, spec_file);
         debug!("Loading external specification: {} from {}", spec_id, spec_file);
         let spec_path = template_path.parent().unwrap_or(std::path::Path::new(".")).join(spec_file);
         if let Ok(spec_content) = fs::read_to_string(&spec_path) {
@@ -505,7 +503,6 @@ fn resolve_xml_template(
                         if let Some(doc_end) = line[doc_start + 10..].find('"') {
                             let spec_file = &line[doc_start + 10..doc_start + 10 + doc_end];
                             external_specs.push((spec_id.to_string(), spec_file.to_string()));
-                            eprintln!("[DEBUG] Found external spec: {} -> {}", spec_id, spec_file);
                             debug!("Found external spec: {} -> {}", spec_id, spec_file);
                         }
                     }
@@ -524,9 +521,16 @@ fn resolve_xml_template(
     let mut line_mappings = Vec::new();
     let mut current_output_line = 1;
     let mut inside_body = false;
+    let mut past_doctype = false;
 
     for line in xml_content.lines() {
         let trimmed = line.trim();
+
+        // Track when DOCTYPE declaration ends (marked by ]>)
+        if trimmed.contains("]>") {
+            past_doctype = true;
+            continue;
+        }
 
         // Track when we enter/exit <style-specification-body>
         if trimmed.starts_with("<style-specification-body") || trimmed.starts_with("<style-specification>") {
@@ -538,8 +542,15 @@ fn resolve_xml_template(
             continue;
         }
 
-        // Only process content when inside <style-specification-body>
-        if !inside_body {
+        // Skip other XML tags (like <style-sheet>, </style-sheet>)
+        if trimmed.starts_with('<') && trimmed != "" {
+            continue;
+        }
+
+        // Process content when:
+        // 1. Inside <style-specification-body> or <style-specification>, OR
+        // 2. Past DOCTYPE and not inside any XML tags (root-level entity references)
+        if !inside_body && !past_doctype {
             continue;
         }
 
@@ -595,6 +606,12 @@ fn resolve_xml_template(
                         // - Line 1 of stripped content = Line 1 of original file (content after <![CDATA[)
                         // - The ]]> line is removed, keeping line numbers aligned with the original file
 
+                        // Also strip inline CDATA markers (common in .scm files that embed XML content)
+                        // These appear as: ($<![CDATA[ ... ]]>)
+                        // We replace them with empty strings to preserve line numbers
+                        content = content.replace("<![CDATA[", "");
+                        content = content.replace("]]>", "");
+
                         // Track line mappings for this entity file
                         let source_file = entity_path.to_string_lossy().to_string();
                         for (source_line_idx, _) in content.lines().enumerate() {
@@ -641,9 +658,6 @@ fn resolve_xml_template(
     if result.is_empty() {
         anyhow::bail!("No Scheme code extracted from XML template");
     }
-
-    eprintln!("[DEBUG] Extracted {} bytes of Scheme code from XML template", result.len());
-    eprintln!("[DEBUG] First 200 chars: {}", &result.chars().take(200).collect::<String>());
 
     Ok((result, line_mappings, external_specs))
 }
