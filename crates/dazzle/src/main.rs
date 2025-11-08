@@ -545,6 +545,52 @@ fn evaluate_template(
     Ok(())
 }
 
+/// Strip SGML conditional section markers
+///
+/// SGML conditional sections like `<![%entity[ content ]]>` are used in DocBook stylesheets
+/// for localization. We treat all as INCLUDE (strip markers, keep content).
+///
+/// Example: `<![%l10n-en[ (define x 1) ]]>` → `(define x 1) `
+fn strip_sgml_conditionals(content: &str) -> String {
+    let mut result = String::with_capacity(content.len());
+    let mut chars = content.char_indices().peekable();
+
+    while let Some((i, ch)) = chars.next() {
+        if ch == '<' && content[i..].starts_with("<![%") {
+            // Found conditional section marker: <![%entity-name[
+            // We need to skip everything until the SECOND '[' (after entity name)
+            // Pattern: <![%entity-name[
+            //          ^   ^          ^
+            //          |   |          +-- This is the '[' we want to find
+            //          |   +-- First '[' (part of <![)
+            //          +-- Already consumed by outer loop
+
+            let mut bracket_count = 0;
+            let mut found_end = false;
+            while let Some((_, ch)) = chars.next() {
+                if ch == '[' {
+                    bracket_count += 1;
+                    if bracket_count == 2 {
+                        // Found the second '[' - end of marker
+                        found_end = true;
+                        break;
+                    }
+                }
+            }
+
+            if !found_end {
+                // Malformed marker, just add the '<' and continue
+                result.push('<');
+            }
+            // Skip the marker entirely (don't add anything to result)
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result
+}
+
 /// Resolve XML template wrapper (.dsl format) to plain Scheme code
 ///
 /// Parses entity declarations from DOCTYPE and resolves entity references
@@ -702,6 +748,13 @@ fn resolve_xml_template(
                         // We replace them with empty strings to preserve line numbers
                         content = content.replace("<![CDATA[", "");
                         content = content.replace("]]>", "");
+
+                        // Strip SGML conditional section markers
+                        // DocBook stylesheets use these for localization: <![%l10n-en[ ... ]]>
+                        // We treat all conditionals as INCLUDE (strip the markers but keep the content)
+                        // Pattern: <![%entity-name[  ->  empty string
+                        // Pattern: ]]>               ->  already handled above
+                        content = strip_sgml_conditionals(&content);
 
                         // Track line mappings for this entity file
                         let source_file = entity_path.to_string_lossy().to_string();
