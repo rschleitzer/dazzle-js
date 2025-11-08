@@ -261,6 +261,69 @@ impl FotBuilder for SgmlBackend {
     fn set_current_directory(&mut self, path: Option<String>) {
         self.current_dir = path.map(PathBuf::from);
     }
+
+    /// Start a simple page sequence (stub for SGML backend)
+    ///
+    /// The SGML backend is for code generation, not document formatting.
+    /// Page layout flow objects are silently ignored.
+    fn start_simple_page_sequence(&mut self) -> Result<()> {
+        // Stub: SGML backend ignores page layout
+        Ok(())
+    }
+
+    /// End a simple page sequence (stub for SGML backend)
+    fn end_simple_page_sequence(&mut self) -> Result<()> {
+        // Stub: SGML backend ignores page layout
+        Ok(())
+    }
+
+    /// Start a sequence (stub for SGML backend)
+    fn start_sequence(&mut self) -> Result<()> {
+        // Stub: SGML backend ignores formatting flow objects
+        Ok(())
+    }
+
+    /// End a sequence (stub for SGML backend)
+    fn end_sequence(&mut self) -> Result<()> {
+        // Stub: SGML backend ignores formatting flow objects
+        Ok(())
+    }
+
+    /// Start a paragraph (stub for SGML backend)
+    fn start_paragraph(&mut self) -> Result<()> {
+        // Stub: SGML backend ignores formatting flow objects
+        Ok(())
+    }
+
+    /// End a paragraph (stub for SGML backend)
+    fn end_paragraph(&mut self) -> Result<()> {
+        // Stub: SGML backend ignores formatting flow objects
+        Ok(())
+    }
+
+    /// Start a display group (stub for SGML backend)
+    fn start_display_group(&mut self) -> Result<()> {
+        // Stub: SGML backend ignores formatting flow objects
+        Ok(())
+    }
+
+    /// End a display group (stub for SGML backend)
+    fn end_display_group(&mut self) -> Result<()> {
+        // Stub: SGML backend ignores formatting flow objects
+        Ok(())
+    }
+
+    /// Start a line field (stub for SGML backend)
+    fn start_line_field(&mut self) -> Result<()> {
+        // Stub: SGML backend ignores formatting flow objects
+        Ok(())
+    }
+
+    /// End a line field (stub for SGML backend)
+    fn end_line_field(&mut self) -> Result<()> {
+        // Stub: SGML backend ignores formatting flow objects
+        Ok(())
+    }
 }
 
 #[cfg(test)]
