@@ -118,13 +118,38 @@ fn run_sgml_backend(args: Args, grove_rc: Rc<LibXml2Grove>, output_dir: PathBuf)
         .with_context(|| format!("Failed to read template: {}", template_path.display()))?;
 
     // Check if this is an XML template wrapper (.dsl format)
-    let (scheme_code, line_mappings) = if template_content.trim_start().starts_with("<!DOCTYPE")
+    let (scheme_code, line_mappings, external_specs) = if template_content.trim_start().starts_with("<!DOCTYPE")
         || template_content.trim_start().starts_with("<?xml") {
         debug!("Detected XML template wrapper, resolving entities...");
         resolve_xml_template(&template_content, &template_path, &args.search_dirs)?
     } else {
-        (template_content, Vec::new())
+        (template_content, Vec::new(), Vec::new())
     };
+
+    // Load external specifications first (e.g., dbparam.dsl, dblib.dsl)
+    debug!("Loading {} external specifications...", external_specs.len());
+    for (spec_id, spec_file) in &external_specs {
+        debug!("Loading external specification: {} from {}", spec_id, spec_file);
+        let spec_path = template_path.parent().unwrap_or(std::path::Path::new(".")).join(spec_file);
+        if let Ok(spec_content) = fs::read_to_string(&spec_path) {
+            // External specs may also be XML wrappers - resolve them recursively
+            let (resolved_content, spec_mappings, _nested_specs) = if spec_content.trim_start().starts_with("<!DOCTYPE")
+                || spec_content.trim_start().starts_with("<?xml") {
+                debug!("  External spec is also an XML wrapper, resolving...");
+                resolve_xml_template(&spec_content, &spec_path, &args.search_dirs)?
+            } else {
+                (spec_content, Vec::new(), Vec::new())
+            };
+
+            evaluator.set_source_file(spec_path.to_string_lossy().to_string());
+            if !spec_mappings.is_empty() {
+                evaluator.set_line_mappings(spec_mappings.clone());
+            }
+            evaluate_template(&mut evaluator, env.clone(), &resolved_content, &spec_mappings)?;
+        } else {
+            debug!("External specification not found: {}", spec_path.display());
+        }
+    }
 
     debug!("Template loaded, evaluating...");
     // Set source file for error reporting
@@ -218,13 +243,40 @@ fn run_rtf_backend(args: Args, grove_rc: Rc<LibXml2Grove>) -> Result<()> {
         .with_context(|| format!("Failed to read template: {}", template_path.display()))?;
 
     // Check if this is an XML template wrapper (.dsl format)
-    let (scheme_code, line_mappings) = if template_content.trim_start().starts_with("<!DOCTYPE")
+    let (scheme_code, line_mappings, external_specs) = if template_content.trim_start().starts_with("<!DOCTYPE")
         || template_content.trim_start().starts_with("<?xml") {
         debug!("Detected XML template wrapper, resolving entities...");
         resolve_xml_template(&template_content, &template_path, &args.search_dirs)?
     } else {
-        (template_content, Vec::new())
+        (template_content, Vec::new(), Vec::new())
     };
+
+    // Load external specifications first (e.g., dbparam.dsl, dblib.dsl)
+    eprintln!("[DEBUG] Loading {} external specifications...", external_specs.len());
+    debug!("Loading {} external specifications...", external_specs.len());
+    for (spec_id, spec_file) in &external_specs {
+        eprintln!("[DEBUG] Loading external specification: {} from {}", spec_id, spec_file);
+        debug!("Loading external specification: {} from {}", spec_id, spec_file);
+        let spec_path = template_path.parent().unwrap_or(std::path::Path::new(".")).join(spec_file);
+        if let Ok(spec_content) = fs::read_to_string(&spec_path) {
+            // External specs may also be XML wrappers - resolve them recursively
+            let (resolved_content, spec_mappings, _nested_specs) = if spec_content.trim_start().starts_with("<!DOCTYPE")
+                || spec_content.trim_start().starts_with("<?xml") {
+                debug!("  External spec is also an XML wrapper, resolving...");
+                resolve_xml_template(&spec_content, &spec_path, &args.search_dirs)?
+            } else {
+                (spec_content, Vec::new(), Vec::new())
+            };
+
+            evaluator.set_source_file(spec_path.to_string_lossy().to_string());
+            if !spec_mappings.is_empty() {
+                evaluator.set_line_mappings(spec_mappings.clone());
+            }
+            evaluate_template(&mut evaluator, env.clone(), &resolved_content, &spec_mappings)?;
+        } else {
+            debug!("External specification not found: {}", spec_path.display());
+        }
+    }
 
     debug!("Template loaded, evaluating...");
     // Set source file for error reporting
@@ -288,7 +340,10 @@ fn find_template(template: &PathBuf, search_dirs: &[PathBuf]) -> Result<PathBuf>
     )
 }
 
-/// Evaluate template code
+/// Evaluate template code with two-pass evaluation for top-level defines
+///
+/// R5RS semantics: All top-level defines create bindings first, then RHS expressions are evaluated.
+/// This allows forward references between defines.
 fn evaluate_template(
     evaluator: &mut Evaluator,
     env: gc::Gc<Environment>,
@@ -296,37 +351,27 @@ fn evaluate_template(
     line_mappings: &[LineMapping],
 ) -> Result<()> {
     use dazzle_core::scheme::parser::Token;
+    use dazzle_core::scheme::value::Value;
 
     let mut parser = SchemeParser::new(template);
 
-    // Parse and evaluate all expressions in the template
-    // Use peek_token() to detect clean EOF vs syntax errors
+    // TWO-PASS EVALUATION for R5RS top-level define semantics
+    // Pass 1: Parse all expressions and collect defines
+    let mut expressions = Vec::new();
+    let mut positions = Vec::new();
+
     loop {
-        // Peek at next token - if EOF, we're done
         let peek_result = parser.peek_token();
         match peek_result {
-            Ok(tok) if matches!(*tok, Token::Eof) => {
-                // Clean EOF - all expressions parsed successfully
-                break;
-            }
+            Ok(tok) if matches!(*tok, Token::Eof) => break,
             Ok(_) => {
-                // Get position before parsing this expression
                 let pos = parser.current_position();
-
-                // More tokens available, try to parse
                 match parser.parse() {
                     Ok(expr) => {
-                        // Don't translate positions - let eval_list do it dynamically
-                        // Just set the position from the parser
-                        evaluator.set_position(pos);
-
-                        let _result = evaluator
-                            .eval(expr, env.clone())
-                            .map_err(|e| anyhow::anyhow!("Evaluation error: {}", e))?;
-                        // Results are now handled by `make` flow objects directly
+                        expressions.push(expr);
+                        positions.push(pos);
                     }
                     Err(e) => {
-                        // Parse error - find the source file from line mappings
                         if !line_mappings.is_empty() {
                             if let Some(mapping) = line_mappings.iter().find(|m| m.output_line == e.position.line) {
                                 return Err(anyhow::anyhow!(
@@ -338,13 +383,11 @@ fn evaluate_template(
                                 ));
                             }
                         }
-                        // No mapping found or no mappings, use original position
                         return Err(anyhow::anyhow!("Parse error at {}: {}", e.position, e.message));
                     }
                 }
             }
             Err(e) => {
-                // Tokenizer error - find the source file from line mappings
                 if !line_mappings.is_empty() {
                     if let Some(mapping) = line_mappings.iter().find(|m| m.output_line == e.position.line) {
                         return Err(anyhow::anyhow!(
@@ -356,10 +399,58 @@ fn evaluate_template(
                         ));
                     }
                 }
-                // No mapping found or no mappings, use original position
                 return Err(anyhow::anyhow!("Tokenizer error at {}: {}", e.position, e.message));
             }
         }
+    }
+
+    // Pass 2: Create bindings for all top-level defines with undefined placeholders
+    for expr in expressions.iter() {
+        if let Value::Pair(_) = expr {
+            // Check if it's a (define name ...) form
+            if let Ok(list) = evaluator.list_to_vec(expr.clone()) {
+                if !list.is_empty() {
+                    if let Value::Symbol(ref sym) = list[0] {
+                        if sym.as_ref() == "define" && list.len() >= 2 {
+                            // Extract the variable name
+                            let var_name = match &list[1] {
+                                Value::Symbol(name) => Some(name.clone()),
+                                Value::Pair(_) => {
+                                    // (define (func args...) body)
+                                    if let Ok(func_list) = evaluator.list_to_vec(list[1].clone()) {
+                                        if !func_list.is_empty() {
+                                            if let Value::Symbol(name) = &func_list[0] {
+                                                Some(name.clone())
+                                            } else {
+                                                None
+                                            }
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                }
+                                _ => None,
+                            };
+
+                            if let Some(name) = var_name {
+                                // Create binding with unspecified value as placeholder
+                                env.define(name.as_ref(), Value::Unspecified);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Pass 3: Evaluate all expressions (defines will now update existing bindings)
+    for (expr, pos) in expressions.iter().zip(positions.iter()) {
+        evaluator.set_position(pos.clone());
+        let _result = evaluator
+            .eval(expr.clone(), env.clone())
+            .map_err(|e| anyhow::anyhow!("Evaluation error: {}", e))?;
     }
 
     Ok(())
@@ -370,12 +461,12 @@ fn evaluate_template(
 /// Parses entity declarations from DOCTYPE and resolves entity references
 /// by loading external .scm files, then concatenates all Scheme code.
 ///
-/// Returns (concatenated_code, line_mappings)
+/// Returns (concatenated_code, line_mappings, external_specs)
 fn resolve_xml_template(
     xml_content: &str,
     template_path: &PathBuf,
     _search_dirs: &[PathBuf],
-) -> Result<(String, Vec<LineMapping>)> {
+) -> Result<(String, Vec<LineMapping>, Vec<(String, String)>)> {
     use std::collections::HashMap;
 
     // Extract entity declarations from DOCTYPE
@@ -401,6 +492,28 @@ fn resolve_xml_template(
         }
     }
 
+    // Extract external-specification declarations
+    // Format: <external-specification id="dbparam" document="dbparam.dsl">
+    let mut external_specs = Vec::new();
+    for line in xml_content.lines() {
+        let line = line.trim();
+        if line.starts_with("<external-specification") {
+            if let Some(id_start) = line.find("id=\"") {
+                if let Some(id_end) = line[id_start + 4..].find('"') {
+                    let spec_id = &line[id_start + 4..id_start + 4 + id_end];
+                    if let Some(doc_start) = line.find("document=\"") {
+                        if let Some(doc_end) = line[doc_start + 10..].find('"') {
+                            let spec_file = &line[doc_start + 10..doc_start + 10 + doc_end];
+                            external_specs.push((spec_id.to_string(), spec_file.to_string()));
+                            eprintln!("[DEBUG] Found external spec: {} -> {}", spec_id, spec_file);
+                            debug!("Found external spec: {} -> {}", spec_id, spec_file);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Find the template's directory for resolving relative paths
     let template_dir = template_path
         .parent()
@@ -410,21 +523,38 @@ fn resolve_xml_template(
     let mut result = String::new();
     let mut line_mappings = Vec::new();
     let mut current_output_line = 1;
+    let mut inside_body = false;
 
     for line in xml_content.lines() {
-        let line = line.trim();
+        let trimmed = line.trim();
 
-        // Skip XML/DOCTYPE lines and DOCTYPE closing bracket
-        if line.starts_with("<!") || line.starts_with("<?") || line.starts_with("<")
-            || line.starts_with("]>") || line == "]" || line.is_empty() {
+        // Track when we enter/exit <style-specification-body>
+        if trimmed.starts_with("<style-specification-body") || trimmed.starts_with("<style-specification>") {
+            inside_body = true;
+            continue;
+        }
+        if trimmed.starts_with("</style-specification-body>") || trimmed.starts_with("</style-specification>") {
+            inside_body = false;
             continue;
         }
 
-        // Check for entity reference: &name;
-        if line.starts_with('&') && line.ends_with(';') {
-            let entity_name = &line[1..line.len() - 1];
+        // Only process content when inside <style-specification-body>
+        if !inside_body {
+            continue;
+        }
 
-            if let Some(filename) = entities.get(entity_name) {
+        // Skip empty lines and comments
+        if trimmed.is_empty() || trimmed.starts_with("<!--") {
+            continue;
+        }
+
+        // Check for entity reference: &name; (may have trailing comment)
+        if trimmed.starts_with('&') {
+            // Extract entity reference, ignoring any trailing comment
+            if let Some(end_pos) = trimmed.find(';') {
+                let entity_name = &trimmed[1..end_pos];
+
+                if let Some(filename) = entities.get(entity_name) {
                 // Try to load the entity file
                 let entity_path = template_dir.join(filename);
 
@@ -487,7 +617,24 @@ fn resolve_xml_template(
                         ));
                     }
                 }
+                } else {
+                    // Entity reference not found in declared entities - skip it
+                    eprintln!("[WARNING] Undeclared entity reference: {}", entity_name);
+                }
             }
+        } else {
+            // Not an entity reference - this is inline Scheme code
+            // Add it to the result, preserving the original line (not trimmed)
+            result.push_str(line);
+            result.push('\n');
+
+            // Track line mapping for inline code
+            line_mappings.push(LineMapping {
+                output_line: current_output_line,
+                source_file: template_path.to_string_lossy().to_string(),
+                source_line: current_output_line, // Direct 1:1 mapping for inline code
+            });
+            current_output_line += 1;
         }
     }
 
@@ -495,5 +642,8 @@ fn resolve_xml_template(
         anyhow::bail!("No Scheme code extracted from XML template");
     }
 
-    Ok((result, line_mappings))
+    eprintln!("[DEBUG] Extracted {} bytes of Scheme code from XML template", result.len());
+    eprintln!("[DEBUG] First 200 chars: {}", &result.chars().take(200).collect::<String>());
+
+    Ok((result, line_mappings, external_specs))
 }

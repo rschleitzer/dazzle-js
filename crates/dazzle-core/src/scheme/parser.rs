@@ -350,24 +350,93 @@ impl Tokenizer {
             )
     }
 
+    /// Check if the next characters form a DSSSL quantity suffix
+    /// Returns the number of characters in the suffix (0 if no suffix found)
+    fn peek_quantity_suffix(&self) -> usize {
+        // DSSSL quantity units: pt (points), pi (picas), in (inches), mm (millimeters), cm (centimeters), pc (picas), em (ems)
+        // Check for 2-letter suffixes
+        if let Some(ch1) = self.peek_char_at(0) {
+            if let Some(ch2) = self.peek_char_at(1) {
+                match (ch1, ch2) {
+                    ('p', 't') | ('p', 'i') | ('p', 'c') |
+                    ('i', 'n') | ('m', 'm') | ('c', 'm') | ('e', 'm') => return 2,
+                    _ => {}
+                }
+            }
+        }
+        0
+    }
+
     /// Parse an integer or real number
     fn parse_number(&mut self, start_pos: Position) -> ParseResult<Token> {
         let mut num_str = String::new();
 
         // Collect digits and special characters
         while let Some(ch) = self.peek_char() {
-            if ch.is_ascii_digit() || matches!(ch, '.' | 'e' | 'E' | '+' | '-') {
+            if ch.is_ascii_digit() || matches!(ch, '.' | '+' | '-') {
                 num_str.push(ch);
                 self.next_char();
+            } else if matches!(ch, 'e' | 'E') {
+                // Check if this is scientific notation (1e5) or quantity suffix (1em)
+                // Peek ahead: if next char is 'm', it's the 'em' unit
+                if self.peek_char_at(1) == Some('m') {
+                    // This is a quantity like 1em, 2.5em
+                    // Don't consume 'e', let quantity suffix handler deal with it
+                    break;
+                } else {
+                    // This is scientific notation like 1e5, 2.3e-10
+                    num_str.push(ch);
+                    self.next_char();
+                }
             } else if Self::is_delimiter(ch) {
                 break;
             } else {
+                // Check for DSSSL quantity suffix (pt, pi, in, mm, cm, pc, em)
+                // These are not delimiters but indicate a quantity literal
+                let suffix_len = self.peek_quantity_suffix();
+                if suffix_len > 0 {
+                    // Consume the suffix
+                    for _ in 0..suffix_len {
+                        self.next_char();
+                    }
+                    // Parse as quantity (for now, just convert to Real and ignore unit)
+                    // DSSSL quantities: 12pt, 0.5in, 210mm, 1pi, 1em, etc.
+                    if let Ok(n) = num_str.parse::<f64>() {
+                        return Ok(Token::Real(n));
+                    } else if let Ok(n) = num_str.parse::<i64>() {
+                        return Ok(Token::Real(n as f64));
+                    }
+                    return Err(self.error(
+                        format!("Invalid quantity: {}", num_str),
+                        start_pos,
+                    ));
+                }
+
                 // Invalid character in number
                 return Err(self.error(
                     format!("Invalid character in number: {}", ch),
                     start_pos,
                 ));
             }
+        }
+
+        // After loop: check for quantity suffix (handles em, pt, mm, etc.)
+        let suffix_len = self.peek_quantity_suffix();
+        if suffix_len > 0 {
+            // Consume the suffix
+            for _ in 0..suffix_len {
+                self.next_char();
+            }
+            // Parse as quantity
+            if let Ok(n) = num_str.parse::<f64>() {
+                return Ok(Token::Real(n));
+            } else if let Ok(n) = num_str.parse::<i64>() {
+                return Ok(Token::Real(n as f64));
+            }
+            return Err(self.error(
+                format!("Invalid quantity: {}", num_str),
+                start_pos,
+            ));
         }
 
         // Try parsing as integer first
@@ -726,6 +795,13 @@ impl Tokenizer {
                     Some('b') | Some('B') => {
                         self.next_char(); // Consume b
                         self.parse_binary_number(start_pos)
+                    }
+                    Some('!') => {
+                        // OpenJade extension: #!optional, #!key, #!rest
+                        // Parse as a symbol starting with #!
+                        self.next_char(); // Consume !
+                        let name = self.parse_symbol();
+                        Ok(Token::Symbol(format!("#!{}", name)))
                     }
                     _ => Err(self.error(
                         format!("Invalid # syntax: #{:?}", self.peek_char()),
