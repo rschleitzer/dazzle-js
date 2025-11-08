@@ -5179,8 +5179,18 @@ pub fn prim_entity_generated_system_id(_args: &[Value]) -> PrimitiveResult {
 }
 
 /// (entity-name-normalize name node) → string
-pub fn prim_entity_name_normalize(_args: &[Value]) -> PrimitiveResult {
-    Ok(Value::string("".to_string())) // Stub
+///
+/// Normalize an entity name according to SGML declaration.
+pub fn prim_entity_name_normalize(args: &[Value]) -> PrimitiveResult {
+    if args.is_empty() {
+        return Err("entity-name-normalize requires at least 1 argument".into());
+    }
+
+    // Same as general-name-normalize for XML
+    match &args[0] {
+        Value::String(s) => Ok(Value::string(s.to_string())),
+        _ => Err("entity-name-normalize: first argument must be a string".into()),
+    }
 }
 
 /// (entity-notation name node) → string | #f
@@ -5204,8 +5214,22 @@ pub fn prim_notation_generated_system_id(_args: &[Value]) -> PrimitiveResult {
 }
 
 /// (general-name-normalize name node) → string
-pub fn prim_general_name_normalize(_args: &[Value]) -> PrimitiveResult {
-    Ok(Value::string("".to_string())) // Stub
+///
+/// Normalize a general name (element or attribute name) according to SGML declaration.
+/// For XML (case-sensitive), returns the string as-is.
+/// For SGML with case folding, would lowercase the name.
+pub fn prim_general_name_normalize(args: &[Value]) -> PrimitiveResult {
+    if args.is_empty() {
+        return Err("general-name-normalize requires at least 1 argument".into());
+    }
+
+    // For XML processing (dazzle's primary use case), names are case-sensitive
+    // so we return the string unchanged. For SGML with NAMECASE GENERAL YES,
+    // this would lowercase the string.
+    match &args[0] {
+        Value::String(s) => Ok(Value::string(s.to_string())),
+        _ => Err("general-name-normalize: first argument must be a string".into()),
+    }
 }
 
 /// (sgml-document-address doc-name node-id) → address
@@ -6196,6 +6220,8 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("entity-public-id", Value::primitive("entity-public-id", prim_entity_public_id));
     env.define("notation-system-id", Value::primitive("notation-system-id", prim_notation_system_id));
     env.define("notation-public-id", Value::primitive("notation-public-id", prim_notation_public_id));
+    env.define("general-name-normalize", Value::primitive("general-name-normalize", prim_general_name_normalize));
+    env.define("entity-name-normalize", Value::primitive("entity-name-normalize", prim_entity_name_normalize));
 
     // Grove Position/Numbering (stubs)
     env.define("absolute-first-sibling?", Value::primitive("absolute-first-sibling?", prim_absolute_first_sibling_p));
