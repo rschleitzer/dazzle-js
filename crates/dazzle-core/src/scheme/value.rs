@@ -565,6 +565,10 @@ impl Value {
             (Value::Bool(b1), Value::Bool(b2)) => b1 == b2,
             (Value::Integer(n1), Value::Integer(n2)) => n1 == n2,
             (Value::Real(n1), Value::Real(n2)) => n1 == n2,
+            (Value::Quantity { magnitude: m1, unit: u1 }, Value::Quantity { magnitude: m2, unit: u2 }) => {
+                // Compare quantities: same value and same unit
+                (m1 - m2).abs() < 1e-10 && u1 == u2
+            }
             (Value::Char(c1), Value::Char(c2)) => c1 == c2,
 
             // Symbols and keywords: compare by content

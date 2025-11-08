@@ -443,12 +443,103 @@ fn evaluate_template(
         }
     }
 
-    // Pass 3: Evaluate all expressions (defines will now update existing bindings)
-    for (expr, pos) in expressions.iter().zip(positions.iter()) {
+    // Pass 3: Iteratively evaluate simple variable defines until fixed point
+    // This handles forward references by re-evaluating until all resolve
+    let mut simple_defines: Vec<(usize, String, Value, dazzle_core::scheme::parser::Position)> = Vec::new();
+    let mut non_define_exprs: Vec<(Value, dazzle_core::scheme::parser::Position)> = Vec::new();
+
+    // Collect simple variable defines and non-define expressions
+    for (idx, (expr, pos)) in expressions.iter().zip(positions.iter()).enumerate() {
+        if let Value::Pair(_) = expr {
+            if let Ok(list) = evaluator.list_to_vec(expr.clone()) {
+                if !list.is_empty() {
+                    if let Value::Symbol(ref sym) = list[0] {
+                        if sym.as_ref() == "define" && list.len() >= 2 {
+                            match &list[1] {
+                                Value::Symbol(name) => {
+                                    // Simple define: (define x value)
+                                    simple_defines.push((idx, name.to_string(), list[2].clone(), pos.clone()));
+                                    continue;
+                                }
+                                Value::Pair(_) => {
+                                    // Function define: (define (f x) body)
+                                    // Fall through to normal evaluation
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Not a simple variable define - evaluate normally later
+        non_define_exprs.push((expr.clone(), pos.clone()));
+    }
+
+    // Iteratively evaluate simple defines until all resolve (max 100 iterations)
+    let max_iterations = 100;
+    for iteration in 0..max_iterations {
+        let mut any_updated = false;
+
+        for (_idx, name, rhs_expr, pos) in simple_defines.iter() {
+            evaluator.set_position(pos.clone());
+
+            // Try to evaluate the RHS
+            match evaluator.eval(rhs_expr.clone(), env.clone()) {
+                Ok(new_value) => {
+                    // Check if the value changed from current binding
+                    if let Some(current_value) = env.lookup(name) {
+                        if !values_equal(&new_value, &current_value) {
+                            env.define(name, new_value);
+                            any_updated = true;
+                        }
+                    } else {
+                        // Should not happen - binding created in Pass 2
+                        env.define(name, new_value);
+                        any_updated = true;
+                    }
+                }
+                Err(_) => {
+                    // Still has unresolved references, skip for now
+                    // Will be caught in Pass 4 if it doesn't resolve
+                }
+            }
+        }
+
+        // If nothing changed, we've reached fixed point
+        if !any_updated {
+            break;
+        }
+
+        // Safeguard against infinite loops
+        if iteration == max_iterations - 1 {
+            return Err(anyhow::anyhow!(
+                "Two-pass evaluation did not converge after {} iterations - possible circular dependency",
+                max_iterations
+            ));
+        }
+    }
+
+    // Pass 4: Final evaluation of all simple defines (should all succeed now)
+    for (_idx, name, rhs_expr, pos) in simple_defines.iter() {
         evaluator.set_position(pos.clone());
-        let _result = evaluator
-            .eval(expr.clone(), env.clone())
+        let value = evaluator.eval(rhs_expr.clone(), env.clone())
             .map_err(|e| anyhow::anyhow!("Evaluation error: {}", e))?;
+        env.define(name, value);
+    }
+
+    // Pass 5: Evaluate non-define expressions (function defines, other top-level forms)
+    for (expr, pos) in non_define_exprs {
+        evaluator.set_position(pos);
+        let _result = evaluator
+            .eval(expr, env.clone())
+            .map_err(|e| anyhow::anyhow!("Evaluation error: {}", e))?;
+    }
+
+    // Helper to compare values for equality
+    fn values_equal(a: &Value, b: &Value) -> bool {
+        a.equal(b)
     }
 
     Ok(())

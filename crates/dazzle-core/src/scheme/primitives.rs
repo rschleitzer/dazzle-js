@@ -377,7 +377,6 @@ pub fn prim_subtract(args: &[Value]) -> PrimitiveResult {
         }
     } else {
         // Subtraction
-
         let mut result_int: i64 = 0; // Initialize to 0 (may be dummy if quantity)
         let mut result_real: f64 = 0.0; // Initialize to 0.0 (may be dummy if quantity)
         let mut has_real = false;
