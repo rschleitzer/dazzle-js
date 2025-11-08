@@ -126,6 +126,16 @@ fn run_sgml_backend(args: Args, grove_rc: Rc<LibXml2Grove>, output_dir: PathBuf)
         (template_content, Vec::new(), Vec::new())
     };
 
+    // DEBUG: Write resolved content to file for inspection
+    if let Ok(debug_path) = std::env::var("DAZZLE_DEBUG_RESOLVED") {
+        if let Err(e) = std::fs::write(&debug_path, &scheme_code) {
+            eprintln!("WARNING: Failed to write debug file {}: {}", debug_path, e);
+        } else {
+            eprintln!("DEBUG: [main.rs] Wrote resolved content ({} bytes, {} lines) to {}",
+                     scheme_code.len(), scheme_code.lines().count(), debug_path);
+        }
+    }
+
     // Load external specifications first (e.g., dbparam.dsl, dblib.dsl)
     debug!("Loading {} external specifications...", external_specs.len());
     for (spec_id, spec_file) in &external_specs {
@@ -251,6 +261,16 @@ fn run_rtf_backend(args: Args, grove_rc: Rc<LibXml2Grove>) -> Result<()> {
         (template_content, Vec::new(), Vec::new())
     };
 
+    // DEBUG: Write resolved content to file for inspection
+    if let Ok(debug_path) = std::env::var("DAZZLE_DEBUG_RESOLVED") {
+        if let Err(e) = std::fs::write(&debug_path, &scheme_code) {
+            eprintln!("WARNING: Failed to write debug file {}: {}", debug_path, e);
+        } else {
+            eprintln!("DEBUG: [main.rs] Wrote resolved content ({} bytes, {} lines) to {}",
+                     scheme_code.len(), scheme_code.lines().count(), debug_path);
+        }
+    }
+
     // Load external specifications first (e.g., dbparam.dsl, dblib.dsl)
     debug!("Loading {} external specifications...", external_specs.len());
     for (spec_id, spec_file) in &external_specs {
@@ -355,6 +375,7 @@ fn evaluate_template(
 
     // TWO-PASS EVALUATION for R5RS top-level define semantics
     // Pass 1: Parse all expressions and collect defines
+    eprintln!("Pass 1: Parsing expressions...");
     let mut expressions = Vec::new();
     let mut positions = Vec::new();
 
@@ -444,6 +465,7 @@ fn evaluate_template(
     }
 
     // Pass 2.5: Evaluate function defines first (they don't have forward references)
+    eprintln!("Pass 2.5: Evaluating function definitions...");
     for (expr, pos) in expressions.iter().zip(positions.iter()) {
         if let Value::Pair(_) = expr {
             if let Ok(list) = evaluator.list_to_vec(expr.clone()) {
@@ -499,9 +521,14 @@ fn evaluate_template(
         non_define_exprs.push((expr.clone(), pos.clone()));
     }
 
-    // Iteratively evaluate simple defines until all resolve (max 100 iterations)
-    let max_iterations = 100;
+    // Iteratively evaluate simple defines until all resolve
+    // DocBook stylesheets have deep dependency chains, so we need many iterations
+    let max_iterations = 1000;
+    eprintln!("Starting iterative evaluation of {} variable definitions...", simple_defines.len());
     for iteration in 0..max_iterations {
+        if iteration % 100 == 0 && iteration > 0 {
+            eprintln!("  Iteration {}/{}...", iteration, max_iterations);
+        }
         let mut any_updated = false;
 
         for (_idx, name, rhs_expr, pos) in simple_defines.iter() {
@@ -531,6 +558,7 @@ fn evaluate_template(
 
         // If nothing changed, we've reached fixed point
         if !any_updated {
+            eprintln!("Converged after {} iterations", iteration + 1);
             break;
         }
 
@@ -567,6 +595,101 @@ fn evaluate_template(
     Ok(())
 }
 
+/// Resolve SGML character entity references in content
+///
+/// SGML uses entity references like `&#RE` for special characters.
+/// These appear in character literals like `#\&#RE` and need to be resolved.
+///
+/// Handles two types of entities:
+/// 1. Named entities: `&#RE`, `&#RS`, `&#SPACE`
+/// 2. Numeric entities: `&#60;` (decimal), `&#x3C;` (hexadecimal)
+///
+/// Special handling for character literals:
+/// - `#\&#RE` becomes `#\newline` (Scheme character literal syntax)
+/// - `#\&#RS` becomes `#\return`
+/// - `#\&#SPACE` becomes `#\space`
+///
+/// Outside character literals:
+/// - `&#RE` becomes actual newline character
+/// - `&#RS` becomes actual carriage return
+/// - `&#SPACE` becomes actual space
+/// - `&#60;` becomes `<`
+/// - `&#38;` becomes `&`
+fn resolve_sgml_entities(content: &str) -> String {
+    // First, handle character literal contexts (#\&#ENTITY)
+    // These need to become Scheme character names, not actual characters
+    let mut result = content
+        .replace("#\\&#RE", "#\\newline")
+        .replace("#\\&#RS", "#\\return")
+        .replace("#\\&#SPACE", "#\\space");
+
+    // Then handle entity references outside character literals
+    result = result
+        .replace("&#RE", "\n")
+        .replace("&#RS", "\r")
+        .replace("&#SPACE", " ");
+
+    // Now handle numeric character references: &#DIGITS; (decimal) or &#xHEX; (hexadecimal)
+    // We need to parse these and replace with the actual character
+    let mut final_result = String::with_capacity(result.len());
+    let mut chars = result.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '&' && chars.peek() == Some(&'#') {
+            // Found potential numeric entity: &#...;
+            chars.next(); // consume '#'
+
+            let mut entity_chars = String::new();
+            let mut found_semicolon = false;
+
+            // Collect characters until semicolon or invalid character
+            while let Some(&next_ch) = chars.peek() {
+                if next_ch == ';' {
+                    chars.next(); // consume ';'
+                    found_semicolon = true;
+                    break;
+                } else if next_ch.is_ascii_alphanumeric() || next_ch == 'x' {
+                    entity_chars.push(next_ch);
+                    chars.next();
+                } else {
+                    // Invalid entity reference, treat as literal text
+                    break;
+                }
+            }
+
+            if found_semicolon && !entity_chars.is_empty() {
+                // Try to parse as decimal or hexadecimal
+                let code: Option<u32> = if entity_chars.starts_with('x') || entity_chars.starts_with('X') {
+                    // Hexadecimal: &#xHEX;
+                    u32::from_str_radix(&entity_chars[1..], 16).ok()
+                } else {
+                    // Decimal: &#DIGITS;
+                    entity_chars.parse().ok()
+                };
+
+                if let Some(code) = code {
+                    if let Some(decoded_ch) = char::from_u32(code) {
+                        final_result.push(decoded_ch);
+                        continue;
+                    }
+                }
+            }
+
+            // If parsing failed, output the original text
+            final_result.push('&');
+            final_result.push('#');
+            final_result.push_str(&entity_chars);
+            if found_semicolon {
+                final_result.push(';');
+            }
+        } else {
+            final_result.push(ch);
+        }
+    }
+
+    final_result
+}
+
 /// Strip SGML conditional section markers
 ///
 /// SGML conditional sections like `<![%entity[ content ]]>` are used in DocBook stylesheets
@@ -579,7 +702,7 @@ fn strip_sgml_conditionals(content: &str) -> String {
 
     while let Some((i, ch)) = chars.next() {
         if ch == '<' && content[i..].starts_with("<![%") {
-            // Found conditional section marker: <![%entity-name[
+            // Found conditional section opening marker: <![%entity-name[
             // We need to skip everything until the SECOND '[' (after entity name)
             // Pattern: <![%entity-name[
             //          ^   ^          ^
@@ -605,6 +728,12 @@ fn strip_sgml_conditionals(content: &str) -> String {
                 result.push('<');
             }
             // Skip the marker entirely (don't add anything to result)
+        } else if ch == ']' && content[i..].starts_with("]]>") {
+            // Found conditional section closing marker: ]]>
+            // Skip all three characters
+            chars.next(); // Skip second ']'
+            chars.next(); // Skip '>'
+            // Don't add anything to result
         } else {
             result.push(ch);
         }
@@ -744,11 +873,24 @@ fn resolve_xml_template(
             if let Ok(spec_bytes) = fs::read(&spec_path) {
                 eprintln!("DEBUG: Successfully read {} bytes from {}", spec_bytes.len(), spec_path.display());
                 // Try UTF-8 first, then Latin-1
-                let spec_content = if let Ok(utf8_str) = String::from_utf8(spec_bytes.clone()) {
+                let mut spec_content = if let Ok(utf8_str) = String::from_utf8(spec_bytes.clone()) {
                     utf8_str
                 } else {
                     spec_bytes.iter().map(|&b| b as char).collect()
                 };
+
+                // Resolve SGML character entity references (&#RE, &#RS, etc.)
+                spec_content = resolve_sgml_entities(&spec_content);
+
+                // DEBUG: Check if entity resolution worked
+                if spec_content.contains("&#") {
+                    eprintln!("DEBUG: Still contains SGML entities after resolution in {}", spec_path.display());
+                    for (i, line) in spec_content.lines().enumerate() {
+                        if line.contains("&#") {
+                            eprintln!("  Line {}: {}", i+1, line);
+                        }
+                    }
+                }
 
                 // Recursively resolve external spec if it's XML-wrapped
                 let (resolved_content, mut resolved_mappings, _) = if spec_content.contains("<style-sheet>") || spec_content.contains("<style-specification>") {
@@ -773,10 +915,32 @@ fn resolve_xml_template(
                     mapping.output_line += current_output_line - 1;
                 }
 
+                eprintln!("DEBUG: Adding {} lines ({} bytes) from external spec {} to result",
+                         resolved_content.lines().count(), resolved_content.len(), spec_id);
+
+                // DEBUG: Search for the problem line with string-append
+                if spec_id == "dblib" {
+                    let lines: Vec<&str> = resolved_content.lines().collect();
+                    for (i, line) in lines.iter().enumerate() {
+                        if line.contains("string-append") && line.contains("literal") {
+                            eprintln!("  Found string-append line at {}: {}", i+1, &line[..line.len().min(100)]);
+                            // Show next 3 lines
+                            for j in 1..=3 {
+                                if i + j < lines.len() {
+                                    eprintln!("    +{}: {}", j, &lines[i + j][..lines[i + j].len().min(100)]);
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+
                 current_output_line += resolved_content.lines().count();
                 line_mappings.extend(resolved_mappings);
                 result.push_str(&resolved_content);
                 result.push('\n'); // Add separator between specs
+            } else {
+                eprintln!("DEBUG: Failed to read spec file {}", spec_path.display());
             }
         }
     }
@@ -784,8 +948,9 @@ fn resolve_xml_template(
     for line in xml_content.lines() {
         let trimmed = line.trim();
 
-        // Track when DOCTYPE declaration ends (marked by ]>)
-        if trimmed.contains("]>") {
+        // Track when DOCTYPE declaration ends (marked by ]> on its own line)
+        // Only match lines that are JUST "]>" (not lines containing ]> in strings)
+        if trimmed == "]>" {
             past_doctype = true;
             continue;
         }
@@ -811,7 +976,8 @@ fn resolve_xml_template(
         }
 
         // Skip other XML tags (like <style-sheet>, </style-sheet>)
-        if trimmed.starts_with('<') && trimmed != "" {
+        // BUT do NOT skip CDATA markers <![CDATA[ - they need to be processed
+        if trimmed.starts_with('<') && !trimmed.starts_with("<![CDATA[") && trimmed != "" {
             continue;
         }
 
@@ -887,6 +1053,9 @@ fn resolve_xml_template(
                         // Pattern: ]]>               ->  already handled above
                         content = strip_sgml_conditionals(&content);
 
+                        // Resolve SGML character entity references (&#RE, &#RS, etc.)
+                        content = resolve_sgml_entities(&content);
+
                         // Track line mappings for this entity file
                         let source_file = entity_path.to_string_lossy().to_string();
                         for (source_line_idx, _) in content.lines().enumerate() {
@@ -916,8 +1085,15 @@ fn resolve_xml_template(
             }
         } else {
             // Not an entity reference - this is inline Scheme code
-            // Add it to the result, preserving the original line (not trimmed)
-            result.push_str(line);
+            // Process the line to remove SGML markers
+            let mut processed_line = line.to_string();
+
+            // Strip CDATA markers (may appear in inline code)
+            processed_line = processed_line.replace("<![CDATA[", "");
+            processed_line = processed_line.replace("]]>", "");
+
+            // Add it to the result
+            result.push_str(&processed_line);
             result.push('\n');
 
             // Track line mapping for inline code
