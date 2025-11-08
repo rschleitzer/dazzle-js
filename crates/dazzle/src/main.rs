@@ -521,75 +521,27 @@ fn evaluate_template(
         non_define_exprs.push((expr.clone(), pos.clone()));
     }
 
-    // Iteratively evaluate simple defines until all resolve
-    // DocBook stylesheets have deep dependency chains, so we need many iterations
-    let max_iterations = 1000;
-    eprintln!("Starting iterative evaluation of {} variable definitions...", simple_defines.len());
-    for iteration in 0..max_iterations {
-        if iteration % 100 == 0 && iteration > 0 {
-            eprintln!("  Iteration {}/{}...", iteration, max_iterations);
-        }
-        let mut any_updated = false;
-
-        for (_idx, name, rhs_expr, pos) in simple_defines.iter() {
-            evaluator.set_position(pos.clone());
-
-            // Try to evaluate the RHS
-            match evaluator.eval(rhs_expr.clone(), env.clone()) {
-                Ok(new_value) => {
-                    // Check if the value changed from current binding
-                    if let Some(current_value) = env.lookup(name) {
-                        if !values_equal(&new_value, &current_value) {
-                            env.define(name, new_value);
-                            any_updated = true;
-                        }
-                    } else {
-                        // Should not happen - binding created in Pass 2
-                        env.define(name, new_value);
-                        any_updated = true;
-                    }
-                }
-                Err(_) => {
-                    // Still has unresolved references, skip for now
-                    // Will be caught in Pass 4 if it doesn't resolve
-                }
-            }
-        }
-
-        // If nothing changed, we've reached fixed point
-        if !any_updated {
-            eprintln!("Converged after {} iterations", iteration + 1);
-            break;
-        }
-
-        // Safeguard against infinite loops
-        if iteration == max_iterations - 1 {
-            return Err(anyhow::anyhow!(
-                "Two-pass evaluation did not converge after {} iterations - possible circular dependency",
-                max_iterations
-            ));
-        }
-    }
-
-    // Pass 4: Final evaluation of all simple defines (should all succeed now)
+    // Pass 3: Evaluate simple variable defines once, in order
+    // This matches OpenJade's behavior: evaluate sequentially, no iteration
+    // Variables that can't be evaluated stay as #<unspecified>
+    eprintln!("Pass 3: Evaluating {} variable definitions...", simple_defines.len());
     for (_idx, name, rhs_expr, pos) in simple_defines.iter() {
         evaluator.set_position(pos.clone());
-        let value = evaluator.eval(rhs_expr.clone(), env.clone())
-            .map_err(|e| anyhow::anyhow!("Evaluation error: {}", e))?;
-        env.define(name, value);
+
+        // Try to evaluate the RHS - if it fails, leave as unspecified
+        if let Ok(value) = evaluator.eval(rhs_expr.clone(), env.clone()) {
+            env.define(name, value);
+        }
+        // Errors are silently ignored - variable stays as #<unspecified>
+        // This matches OpenJade behavior for forward references
     }
 
-    // Pass 5: Evaluate non-define expressions (function defines, other top-level forms)
+    // Pass 4: Evaluate non-define expressions (other top-level forms)
     for (expr, pos) in non_define_exprs {
         evaluator.set_position(pos);
         let _result = evaluator
             .eval(expr, env.clone())
             .map_err(|e| anyhow::anyhow!("Evaluation error: {}", e))?;
-    }
-
-    // Helper to compare values for equality
-    fn values_equal(a: &Value, b: &Value) -> bool {
-        a.equal(b)
     }
 
     Ok(())
@@ -742,6 +694,39 @@ fn strip_sgml_conditionals(content: &str) -> String {
     result
 }
 
+/// Extract filename from an entity declaration (SYSTEM or PUBLIC)
+///
+/// Handles both formats:
+/// - `<!ENTITY name SYSTEM "file.scm">`
+/// - `<!ENTITY name PUBLIC "ID" "file.scm" CDATA DSSSL>`
+fn extract_entity_filename(entity_decl: &str) -> Option<String> {
+    // For SYSTEM entities, the filename is in the first quoted string after SYSTEM
+    // For PUBLIC entities, the filename is in the second quoted string
+    if entity_decl.contains("PUBLIC") {
+        // PUBLIC format: <!ENTITY name PUBLIC "public-id" "filename" ...>
+        // Find the second quoted string
+        if let Some(first_quote) = entity_decl.find('"') {
+            if let Some(first_close) = entity_decl[first_quote + 1..].find('"') {
+                let after_first = first_quote + 1 + first_close + 1;
+                if let Some(second_quote) = entity_decl[after_first..].find('"') {
+                    if let Some(second_close) = entity_decl[after_first + second_quote + 1..].find('"') {
+                        return Some(entity_decl[after_first + second_quote + 1..after_first + second_quote + 1 + second_close].to_string());
+                    }
+                }
+            }
+        }
+    } else if entity_decl.contains("SYSTEM") {
+        // SYSTEM format: <!ENTITY name SYSTEM "filename">
+        // Find the first quoted string after SYSTEM
+        if let Some(start) = entity_decl.find('"') {
+            if let Some(end) = entity_decl[start + 1..].find('"') {
+                return Some(entity_decl[start + 1..start + 1 + end].to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Resolve XML template wrapper (.dsl format) to plain Scheme code
 ///
 /// Parses entity declarations from DOCTYPE and resolves entity references
@@ -756,24 +741,128 @@ fn resolve_xml_template(
     use std::collections::HashMap;
 
     // Extract entity declarations from DOCTYPE
-    // Format: <!ENTITY name SYSTEM "file.scm">
+    // Format: <!ENTITY name SYSTEM "file.scm"> or <!ENTITY % name SYSTEM "file.scm">
     let mut entities = HashMap::new();
+    let mut parameter_entities = HashMap::new();
 
+    // First pass: collect all entity declarations in the DOCTYPE
     for line in xml_content.lines() {
         let line = line.trim();
         if line.starts_with("<!ENTITY") && line.contains("SYSTEM") {
             // Parse: <!ENTITY syntax SYSTEM "syntax.scm">
+            // Or:    <!ENTITY % syntax SYSTEM "syntax.scm"> (parameter entity)
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() >= 4 {
-                let entity_name = parts[1];
+                // Check if this is a parameter entity (has % after ENTITY)
+                let (entity_name, is_parameter) = if parts[1] == "%" {
+                    // Parameter entity: <!ENTITY % name SYSTEM "file">
+                    (parts[2], true)
+                } else {
+                    // Regular entity: <!ENTITY name SYSTEM "file">
+                    (parts[1], false)
+                };
+
                 // Extract filename from quotes
                 if let Some(start) = line.find('"') {
                     if let Some(end) = line[start + 1..].find('"') {
                         let filename = &line[start + 1..start + 1 + end];
-                        entities.insert(entity_name.to_string(), filename.to_string());
-                        debug!("Found entity: {} -> {}", entity_name, filename);
+                        if is_parameter {
+                            parameter_entities.insert(entity_name.to_string(), filename.to_string());
+                            eprintln!("Found parameter entity: {} -> {}", entity_name, filename);
+                        } else {
+                            entities.insert(entity_name.to_string(), filename.to_string());
+                            eprintln!("Found regular entity: {} -> {}", entity_name, filename);
+                        }
+                    } else {
+                        eprintln!("WARNING: Could not find closing quote for entity: {}", entity_name);
+                    }
+                } else {
+                    eprintln!("WARNING: Could not find opening quote for entity on line: {}", line);
+                }
+            }
+        }
+    }
+
+    // Second pass: load parameter entity files and parse them for more entity declarations
+    // Parameter entities (like dbl10n.ent) contain more <!ENTITY> declarations
+    let template_dir = template_path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("Template path has no parent directory"))?;
+
+    for (param_name, param_file) in &parameter_entities {
+        let param_path = template_dir.join(param_file);
+        eprintln!("Loading parameter entity file: {}", param_path.display());
+
+        match fs::read_to_string(&param_path) {
+            Ok(param_content) => {
+                // Strip SGML conditional sections (e.g., <![%l10n-en[ ... ]]>)
+                // We treat all conditionals as INCLUDE
+                let stripped_content = strip_sgml_conditionals(&param_content);
+
+                // Parse entity declarations from the parameter entity file
+                // Handle multi-line entity declarations by accumulating lines
+                let mut current_entity = String::new();
+                let mut entity_name = String::new();
+                let mut in_entity_decl = false;
+
+                for line in stripped_content.lines() {
+                    let line = line.trim();
+                    // Skip empty lines
+                    if line.is_empty() {
+                        continue;
+                    }
+
+                    if line.starts_with("<!ENTITY") && !line.contains('%') {
+                        // Start of a new entity declaration
+                        in_entity_decl = true;
+                        current_entity = line.to_string();
+
+                        // Extract entity name from first line
+                        let parts: Vec<&str> = line.split_whitespace().collect();
+                        if parts.len() >= 2 {
+                            entity_name = parts[1].to_string();
+                        }
+
+                        // Check if it's a single-line declaration
+                        if line.contains('>') {
+                            in_entity_decl = false;
+                            // Process this entity - but don't overwrite existing declarations
+                            // (first declaration wins, so conditional sections take precedence)
+                            if let Some(filename) = extract_entity_filename(&current_entity) {
+                                if !entities.contains_key(&entity_name) {
+                                    entities.insert(entity_name.clone(), filename.clone());
+                                    eprintln!("  Found entity in {}: {} -> {}", param_name, entity_name, filename);
+                                } else {
+                                    eprintln!("  Skipping duplicate entity in {}: {} (already defined)", param_name, entity_name);
+                                }
+                            }
+                            current_entity.clear();
+                        }
+                    } else if in_entity_decl {
+                        // Continue accumulating multi-line entity declaration
+                        current_entity.push(' ');
+                        current_entity.push_str(line);
+
+                        // Check if this line ends the declaration
+                        if line.contains('>') {
+                            in_entity_decl = false;
+                            // Process this entity - but don't overwrite existing declarations
+                            // (first declaration wins, so conditional sections take precedence)
+                            if let Some(filename) = extract_entity_filename(&current_entity) {
+                                if !entities.contains_key(&entity_name) {
+                                    entities.insert(entity_name.clone(), filename.clone());
+                                    eprintln!("  Found entity in {}: {} -> {}", param_name, entity_name, filename);
+                                } else {
+                                    eprintln!("  Skipping duplicate entity in {}: {} (already defined)", param_name, entity_name);
+                                }
+                            }
+                            current_entity.clear();
+                        }
                     }
                 }
+            }
+            Err(e) => {
+                eprintln!("WARNING: Could not load parameter entity file {}: {}", param_path.display(), e);
             }
         }
     }
@@ -798,11 +887,6 @@ fn resolve_xml_template(
             }
         }
     }
-
-    // Find the template's directory for resolving relative paths
-    let template_dir = template_path
-        .parent()
-        .unwrap_or_else(|| std::path::Path::new("."));
 
     // Extract use= attribute from <style-specification> to load external specs
     // The tag may span multiple lines, so accumulate lines until we find the closing >
@@ -846,31 +930,43 @@ fn resolve_xml_template(
 
     // Load external specifications referenced in use= attribute
     for spec_id in use_specs.iter() {
-        // Find the document file for this spec ID
-        if let Some((_id, spec_file)) = external_specs.iter().find(|(id, _)| id == spec_id) {
-            // Try multiple paths to find the spec file:
-            // 1. Relative to template dir
-            // 2. Relative to stylesheet root (../lib/ for DocBook)
-            // 3. In search paths
-            let mut spec_path = template_dir.join(spec_file);
-            if !spec_path.exists() {
-                // Try ../lib/ for DocBook-style layout
-                spec_path = template_dir.join("../lib").join(spec_file);
-            }
-            if !spec_path.exists() {
-                // Try search paths
-                for search_dir in _search_dirs {
-                    let try_path = search_dir.join(spec_file);
-                    if try_path.exists() {
-                        spec_path = try_path;
-                        break;
-                    }
+        // Try to find the spec file:
+        // 1. Check if there's an entity named dbl1{spec_id} (for DocBook localization)
+        // 2. Check if there's an <external-specification> declaration
+        // 3. Try search paths
+        let spec_file = if let Some(entity_file) = entities.get(&format!("dbl1{}", spec_id)) {
+            entity_file.clone()
+        } else if let Some((_id, spec_file)) = external_specs.iter().find(|(id, _)| id == spec_id) {
+            spec_file.clone()
+        } else {
+            // No entity or external-specification found - skip
+            eprintln!("DEBUG: No entity or external-specification found for spec ID: {}", spec_id);
+            continue;
+        };
+
+        // Try multiple paths to find the spec file:
+        // 1. Relative to template dir
+        // 2. Relative to stylesheet root (../lib/ for DocBook)
+        // 3. In search paths
+        let mut spec_path = template_dir.join(&spec_file);
+        if !spec_path.exists() {
+            // Try ../lib/ for DocBook-style layout
+            spec_path = template_dir.join("../lib").join(&spec_file);
+        }
+        if !spec_path.exists() {
+            // Try search paths
+            for search_dir in _search_dirs {
+                let try_path = search_dir.join(&spec_file);
+                if try_path.exists() {
+                    spec_path = try_path;
+                    break;
                 }
             }
+        }
 
-            eprintln!("DEBUG: Loading external spec {} from {}", spec_id, spec_path.display());
+        eprintln!("DEBUG: Loading external spec {} from {}", spec_id, spec_path.display());
 
-            if let Ok(spec_bytes) = fs::read(&spec_path) {
+        if let Ok(spec_bytes) = fs::read(&spec_path) {
                 eprintln!("DEBUG: Successfully read {} bytes from {}", spec_bytes.len(), spec_path.display());
                 // Try UTF-8 first, then Latin-1
                 let mut spec_content = if let Ok(utf8_str) = String::from_utf8(spec_bytes.clone()) {
@@ -942,7 +1038,6 @@ fn resolve_xml_template(
             } else {
                 eprintln!("DEBUG: Failed to read spec file {}", spec_path.display());
             }
-        }
     }
 
     for line in xml_content.lines() {
@@ -959,7 +1054,11 @@ fn resolve_xml_template(
         // Note: Don't include '>' in the opening tag check because tags may have attributes
         if trimmed.starts_with("<style-specification-body") || trimmed.starts_with("<style-specification ") || trimmed == "<style-specification>" {
             inside_body = true;
-            inside_xml_tag = true;  // Start of opening tag
+            // Only set inside_xml_tag if the line doesn't end with '>' (multi-line tag)
+            // This prevents skipping entity references after single-line tags like <style-specification-body>
+            if !trimmed.ends_with('>') {
+                inside_xml_tag = true;
+            }
             continue;
         }
         if trimmed.starts_with("</style-specification-body>") || trimmed.starts_with("</style-specification>") {
@@ -1017,7 +1116,7 @@ fn resolve_xml_template(
 
                 match content_result {
                     Ok(mut content) => {
-                        debug!("Resolved entity &{};  from {}", entity_name, entity_path.display());
+                        eprintln!("Loading entity &{};  from {}", entity_name, entity_path.display());
 
                         // Strip CDATA wrappers if present
                         // Some .scm files are wrapped in <![CDATA[...]]> for XML embedding
