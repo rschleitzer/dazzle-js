@@ -675,6 +675,38 @@ fn resolve_xml_template(
         .parent()
         .unwrap_or_else(|| std::path::Path::new("."));
 
+    // Extract use= attribute from <style-specification> to load external specs
+    // The tag may span multiple lines, so accumulate lines until we find the closing >
+    let mut use_specs = Vec::new();
+    let mut inside_style_spec_tag = false;
+    let mut accumulated_tag = String::new();
+
+    for line in xml_content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with("<style-specification ") {
+            inside_style_spec_tag = true;
+            accumulated_tag.push_str(trimmed);
+            accumulated_tag.push(' ');
+        } else if inside_style_spec_tag {
+            accumulated_tag.push_str(trimmed);
+            accumulated_tag.push(' ');
+        }
+
+        if inside_style_spec_tag && accumulated_tag.contains('>') {
+            // Found the complete tag, now parse the use= attribute
+            if let Some(use_start) = accumulated_tag.find("use=\"") {
+                if let Some(use_end) = accumulated_tag[use_start + 5..].find('"') {
+                    let use_value = &accumulated_tag[use_start + 5..use_start + 5 + use_end];
+                    // Split by whitespace to get individual spec IDs
+                    use_specs = use_value.split_whitespace().map(|s| s.to_string()).collect();
+                    eprintln!("DEBUG: Found use= attribute with specs: {:?}", use_specs);
+                }
+            }
+            break;
+        }
+    }
+
     // Build result by resolving entity references
     let mut result = String::new();
     let mut line_mappings = Vec::new();
@@ -682,6 +714,72 @@ fn resolve_xml_template(
     let mut inside_body = false;
     let mut past_doctype = false;
     let mut inside_xml_tag = false;  // Track multi-line XML tags
+
+    // Load external specifications referenced in use= attribute
+    for spec_id in use_specs.iter() {
+        // Find the document file for this spec ID
+        if let Some((_id, spec_file)) = external_specs.iter().find(|(id, _)| id == spec_id) {
+            // Try multiple paths to find the spec file:
+            // 1. Relative to template dir
+            // 2. Relative to stylesheet root (../lib/ for DocBook)
+            // 3. In search paths
+            let mut spec_path = template_dir.join(spec_file);
+            if !spec_path.exists() {
+                // Try ../lib/ for DocBook-style layout
+                spec_path = template_dir.join("../lib").join(spec_file);
+            }
+            if !spec_path.exists() {
+                // Try search paths
+                for search_dir in _search_dirs {
+                    let try_path = search_dir.join(spec_file);
+                    if try_path.exists() {
+                        spec_path = try_path;
+                        break;
+                    }
+                }
+            }
+
+            eprintln!("DEBUG: Loading external spec {} from {}", spec_id, spec_path.display());
+
+            if let Ok(spec_bytes) = fs::read(&spec_path) {
+                eprintln!("DEBUG: Successfully read {} bytes from {}", spec_bytes.len(), spec_path.display());
+                // Try UTF-8 first, then Latin-1
+                let spec_content = if let Ok(utf8_str) = String::from_utf8(spec_bytes.clone()) {
+                    utf8_str
+                } else {
+                    spec_bytes.iter().map(|&b| b as char).collect()
+                };
+
+                // Recursively resolve external spec if it's XML-wrapped
+                let (resolved_content, mut resolved_mappings, _) = if spec_content.contains("<style-sheet>") || spec_content.contains("<style-specification>") {
+                    // It's an XML-wrapped template, recursively resolve it
+                    resolve_xml_template(&spec_content, &spec_path, _search_dirs)?
+                } else {
+                    // Plain DSSSL code, use as-is
+                    let source_file = spec_path.to_string_lossy().to_string();
+                    let mut mappings = Vec::new();
+                    for (line_idx, _) in spec_content.lines().enumerate() {
+                        mappings.push(LineMapping {
+                            output_line: line_idx + 1,
+                            source_file: source_file.clone(),
+                            source_line: line_idx + 1,
+                        });
+                    }
+                    (spec_content, mappings, Vec::new())
+                };
+
+                // Adjust line mappings to account for lines already in result
+                for mapping in resolved_mappings.iter_mut() {
+                    mapping.output_line += current_output_line - 1;
+                }
+
+                current_output_line += resolved_content.lines().count();
+                line_mappings.extend(resolved_mappings);
+                result.push_str(&resolved_content);
+                result.push('\n'); // Add separator between specs
+            }
+        }
+    }
 
     for line in xml_content.lines() {
         let trimmed = line.trim();
