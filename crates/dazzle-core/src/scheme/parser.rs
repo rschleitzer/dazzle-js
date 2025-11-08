@@ -627,11 +627,18 @@ impl Tokenizer {
             self.next_char();
         }
 
+        // If name is empty, it means the next character is a delimiter
+        // In this case, treat the delimiter itself as a single-character literal
+        // This allows #\[ #\] #\( #\) etc.
         if name.is_empty() {
-            return Err(self.error(
-                "Empty character literal".to_string(),
-                start_pos,
-            ));
+            if let Some(ch) = self.next_char() {
+                return Ok(ch);
+            } else {
+                return Err(self.error(
+                    "Unexpected end of input in character literal".to_string(),
+                    start_pos,
+                ));
+            }
         }
 
         // Named characters
