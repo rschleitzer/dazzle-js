@@ -63,6 +63,90 @@ impl fmt::Display for SourceInfo {
     }
 }
 
+/// DSSSL Unit (length dimension)
+///
+/// Represents the unit of a quantity. All units can be converted
+/// to a canonical representation (inches) for arithmetic operations.
+///
+/// **DSSSL Spec §6.2**: Quantities are dimensional values
+///
+/// **Unit Conversions** (from DSSSL spec):
+/// - 1in = 72pt (points)
+/// - 1in = 6pi (picas)
+/// - 1in = 25.4mm (millimeters)
+/// - 1cm = 10mm
+/// - 1pc = 1pi (alternate name)
+/// - 1em = context-dependent (font size)
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Unit {
+    /// Point (1/72 inch)
+    Point,
+    /// Pica (1/6 inch = 12 points)
+    Pica,
+    /// Inch (base unit)
+    Inch,
+    /// Millimeter (1/25.4 inch)
+    Millimeter,
+    /// Centimeter (10mm = 10/25.4 inch)
+    Centimeter,
+    /// Em (relative to font size - context-dependent)
+    Em,
+}
+
+impl Unit {
+    /// Convert this unit to inches (canonical form)
+    ///
+    /// All quantities are normalized to inches for arithmetic operations.
+    /// Em units default to 12pt unless a font size context is available.
+    pub fn to_inches(&self, magnitude: f64) -> f64 {
+        match self {
+            Unit::Inch => magnitude,
+            Unit::Point => magnitude / 72.0,
+            Unit::Pica => magnitude / 6.0,
+            Unit::Millimeter => magnitude / 25.4,
+            Unit::Centimeter => magnitude / 2.54,
+            Unit::Em => magnitude * 12.0 / 72.0, // Default: 1em = 12pt
+        }
+    }
+
+    /// Convert from inches to this unit
+    pub fn from_inches(&self, inches: f64) -> f64 {
+        match self {
+            Unit::Inch => inches,
+            Unit::Point => inches * 72.0,
+            Unit::Pica => inches * 6.0,
+            Unit::Millimeter => inches * 25.4,
+            Unit::Centimeter => inches * 2.54,
+            Unit::Em => inches * 72.0 / 12.0, // Default: 1em = 12pt
+        }
+    }
+
+    /// Parse unit suffix string
+    pub fn from_suffix(suffix: &str) -> Option<Unit> {
+        match suffix {
+            "pt" => Some(Unit::Point),
+            "pi" | "pc" => Some(Unit::Pica),
+            "in" => Some(Unit::Inch),
+            "mm" => Some(Unit::Millimeter),
+            "cm" => Some(Unit::Centimeter),
+            "em" => Some(Unit::Em),
+            _ => None,
+        }
+    }
+
+    /// Get unit suffix string
+    pub fn suffix(&self) -> &'static str {
+        match self {
+            Unit::Point => "pt",
+            Unit::Pica => "pi",
+            Unit::Inch => "in",
+            Unit::Millimeter => "mm",
+            Unit::Centimeter => "cm",
+            Unit::Em => "em",
+        }
+    }
+}
+
 /// A Scheme value
 ///
 /// Corresponds to OpenJade's `ELObj` base class.
@@ -94,6 +178,14 @@ pub enum Value {
     ///
     /// OpenJade: `RealObj` (double n_)
     Real(f64),
+
+    /// DSSSL Quantity (dimensional value with unit)
+    ///
+    /// OpenJade: `LengthObj`
+    ///
+    /// Represents a dimensional quantity like `12pt`, `1.5in`, `210mm`.
+    /// Stores magnitude and unit, performs automatic unit conversion.
+    Quantity { magnitude: f64, unit: Unit },
 
     /// Unicode character
     ///
@@ -619,6 +711,7 @@ impl fmt::Debug for Value {
             Value::Bool(false) => write!(f, "#f"),
             Value::Integer(n) => write!(f, "{}", n),
             Value::Real(n) => write!(f, "{}", n),
+            Value::Quantity { magnitude, unit } => write!(f, "{}{}", magnitude, unit.suffix()),
             Value::Char(ch) => write!(f, "#\\{}", ch),
             Value::String(s) => write!(f, "{:?}", **s),
             Value::Symbol(s) => write!(f, "{}", s),
@@ -682,6 +775,7 @@ unsafe impl gc::Trace for Value {
             Value::Bool(_) => {}
             Value::Integer(_) => {}
             Value::Real(_) => {}
+            Value::Quantity { .. } => {}
             Value::Char(_) => {}
             Value::String(s) => s.trace(),
             Value::Symbol(s) => s.trace(),

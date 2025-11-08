@@ -22,7 +22,7 @@
 //! | Extensions        | ~20            | TODO          |
 //! | **Total**         | **~236**       |               |
 
-use crate::scheme::value::Value;
+use crate::scheme::value::{Value, Unit};
 use crate::grove::{EmptyNodeList, Node};
 
 /// Result type for primitive procedures
@@ -318,6 +318,9 @@ pub fn prim_add(args: &[Value]) -> PrimitiveResult {
     let mut int_sum = 0i64;
     let mut real_sum = 0.0f64;
     let mut has_real = false;
+    let mut has_quantity = false;
+    let mut quantity_sum_inches = 0.0f64;
+    let mut first_quantity_unit: Option<Unit> = None;
 
     for arg in args {
         match arg {
@@ -329,11 +332,24 @@ pub fn prim_add(args: &[Value]) -> PrimitiveResult {
                 has_real = true;
                 real_sum += r;
             }
+            Value::Quantity { magnitude, unit } => {
+                if !has_quantity {
+                    has_quantity = true;
+                    first_quantity_unit = Some(*unit);
+                }
+                // Convert to inches (canonical unit) and add
+                quantity_sum_inches += unit.to_inches(*magnitude);
+            }
             _ => return Err(format!("+: not a number: {:?}", arg)),
         }
     }
 
-    if has_real {
+    if has_quantity {
+        // Convert back to the first quantity's unit
+        let unit = first_quantity_unit.unwrap();
+        let magnitude = unit.from_inches(quantity_sum_inches);
+        Ok(Value::Quantity { magnitude, unit })
+    } else if has_real {
         Ok(Value::real(real_sum))
     } else {
         Ok(Value::integer(int_sum))
@@ -356,13 +372,18 @@ pub fn prim_subtract(args: &[Value]) -> PrimitiveResult {
         match args[0] {
             Value::Integer(n) => Ok(Value::integer(-n)),
             Value::Real(r) => Ok(Value::real(-r)),
-            _ => Err(format!("-: not a number: {:?}", args[0])),
+            Value::Quantity { magnitude, unit } => Ok(Value::Quantity { magnitude: -magnitude, unit }),
+            _ => Err(format!("-: not a number: {:?}", args[0]))
         }
     } else {
         // Subtraction
-        let mut result_int: i64;
-        let mut result_real: f64;
+
+        let mut result_int: i64 = 0; // Initialize to 0 (may be dummy if quantity)
+        let mut result_real: f64 = 0.0; // Initialize to 0.0 (may be dummy if quantity)
         let mut has_real = false;
+        let mut has_quantity = false;
+        let mut quantity_result_inches = 0.0f64;
+        let mut first_quantity_unit: Option<Unit> = None;
 
         // First argument
         match args[0] {
@@ -372,10 +393,14 @@ pub fn prim_subtract(args: &[Value]) -> PrimitiveResult {
             }
             Value::Real(r) => {
                 has_real = true;
-                result_int = 0; // dummy value
                 result_real = r;
             }
-            _ => return Err(format!("-: not a number: {:?}", args[0])),
+            Value::Quantity { magnitude, unit } => {
+                has_quantity = true;
+                first_quantity_unit = Some(unit);
+                quantity_result_inches = unit.to_inches(magnitude);
+            }
+            _ => return Err(format!("-: not a number: {:?}", args[0]))
         }
 
         // Subtract remaining arguments
@@ -389,11 +414,23 @@ pub fn prim_subtract(args: &[Value]) -> PrimitiveResult {
                     has_real = true;
                     result_real -= r;
                 }
+                Value::Quantity { magnitude, unit } => {
+                    if !has_quantity {
+                        return Err("-: cannot subtract quantity from non-quantity".to_string());
+                    }
+                    // Convert to inches and subtract
+                    quantity_result_inches -= unit.to_inches(*magnitude);
+                }
                 _ => return Err(format!("-: not a number: {:?}", arg)),
             }
         }
 
-        if has_real {
+        if has_quantity {
+            // Convert back to the first quantity's unit
+            let unit = first_quantity_unit.unwrap();
+            let magnitude = unit.from_inches(quantity_result_inches);
+            Ok(Value::Quantity { magnitude, unit })
+        } else if has_real {
             Ok(Value::real(result_real))
         } else {
             Ok(Value::integer(result_int))
@@ -410,22 +447,39 @@ pub fn prim_multiply(args: &[Value]) -> PrimitiveResult {
     let mut int_product = 1i64;
     let mut real_product = 1.0f64;
     let mut has_real = false;
+    let mut quantity: Option<(f64, Unit)> = None;
 
     for arg in args {
         match arg {
             Value::Integer(n) => {
                 int_product *= n;
                 real_product *= *n as f64;
+                if let Some((magnitude, unit)) = quantity {
+                    quantity = Some((magnitude * (*n as f64), unit));
+                }
             }
             Value::Real(r) => {
                 has_real = true;
                 real_product *= r;
+                if let Some((magnitude, unit)) = quantity {
+                    quantity = Some((magnitude * r, unit));
+                }
+            }
+            Value::Quantity { magnitude, unit } => {
+                if quantity.is_some() {
+                    return Err("*: cannot multiply two quantities".to_string());
+                }
+                // Multiply quantity by accumulated scalar
+                let scalar = if has_real { real_product } else { int_product as f64 };
+                quantity = Some((magnitude * scalar, *unit));
             }
             _ => return Err(format!("*: not a number: {:?}", arg)),
         }
     }
 
-    if has_real {
+    if let Some((magnitude, unit)) = quantity {
+        Ok(Value::Quantity { magnitude, unit })
+    } else if has_real {
         Ok(Value::real(real_product))
     } else {
         Ok(Value::integer(int_product))
@@ -458,16 +512,32 @@ pub fn prim_divide(args: &[Value]) -> PrimitiveResult {
                 }
                 Ok(Value::real(1.0 / r))
             }
+            Value::Quantity { magnitude, unit: _ } => {
+                if magnitude == 0.0 {
+                    return Err("/: division by zero".to_string());
+                }
+                // Reciprocal of quantity: 1 / 12pt = 0.0833... / pt (nonsensical, so return error)
+                Err("/: cannot take reciprocal of a quantity".to_string())
+            }
             _ => Err(format!("/: not a number: {:?}", args[0])),
         }
     } else {
-        // Division - always returns real
-        let mut result = match args[0] {
-            Value::Integer(n) => n as f64,
-            Value::Real(r) => r,
-            _ => return Err(format!("/: not a number: {:?}", args[0])),
-        };
+        // Division
+        let mut result: f64;
+        let mut result_unit: Option<Unit> = None;
 
+        // First argument determines if result is quantity
+        match args[0] {
+            Value::Integer(n) => result = n as f64,
+            Value::Real(r) => result = r,
+            Value::Quantity { magnitude, unit } => {
+                result = magnitude;
+                result_unit = Some(unit);
+            }
+            _ => return Err(format!("/: not a number: {:?}", args[0])),
+        }
+
+        // Divide by remaining arguments
         for arg in &args[1..] {
             match arg {
                 Value::Integer(n) => {
@@ -482,11 +552,18 @@ pub fn prim_divide(args: &[Value]) -> PrimitiveResult {
                     }
                     result /= r;
                 }
+                Value::Quantity { .. } => {
+                    return Err("/: cannot divide by a quantity".to_string());
+                }
                 _ => return Err(format!("/: not a number: {:?}", arg)),
             }
         }
 
-        Ok(Value::real(result))
+        if let Some(unit) = result_unit {
+            Ok(Value::Quantity { magnitude: result, unit })
+        } else {
+            Ok(Value::real(result))
+        }
     }
 }
 
@@ -586,6 +663,7 @@ pub fn prim_num_eq(args: &[Value]) -> PrimitiveResult {
     let first_val = match args[0] {
         Value::Integer(n) => n as f64,
         Value::Real(r) => r,
+        Value::Quantity { magnitude, unit } => unit.to_inches(magnitude),
         _ => return Err(format!("=: not a number: {:?}", args[0])),
     };
 
@@ -593,6 +671,7 @@ pub fn prim_num_eq(args: &[Value]) -> PrimitiveResult {
         let val = match arg {
             Value::Integer(n) => *n as f64,
             Value::Real(r) => *r,
+            Value::Quantity { magnitude, unit } => unit.to_inches(*magnitude),
             _ => return Err(format!("=: not a number: {:?}", arg)),
         };
 
@@ -618,12 +697,14 @@ pub fn prim_num_lt(args: &[Value]) -> PrimitiveResult {
         let v1 = match args[i] {
             Value::Integer(n) => n as f64,
             Value::Real(r) => r,
+            Value::Quantity { magnitude, unit } => unit.to_inches(magnitude),
             _ => return Err(format!("<: not a number: {:?}", args[i])),
         };
 
         let v2 = match args[i + 1] {
             Value::Integer(n) => n as f64,
             Value::Real(r) => r,
+            Value::Quantity { magnitude, unit } => unit.to_inches(magnitude),
             _ => return Err(format!("<: not a number: {:?}", args[i + 1])),
         };
 
@@ -649,12 +730,14 @@ pub fn prim_num_gt(args: &[Value]) -> PrimitiveResult {
         let v1 = match args[i] {
             Value::Integer(n) => n as f64,
             Value::Real(r) => r,
+            Value::Quantity { magnitude, unit } => unit.to_inches(magnitude),
             _ => return Err(format!(">: not a number: {:?}", args[i])),
         };
 
         let v2 = match args[i + 1] {
             Value::Integer(n) => n as f64,
             Value::Real(r) => r,
+            Value::Quantity { magnitude, unit } => unit.to_inches(magnitude),
             _ => return Err(format!(">: not a number: {:?}", args[i + 1])),
         };
 
@@ -680,12 +763,14 @@ pub fn prim_num_le(args: &[Value]) -> PrimitiveResult {
         let v1 = match args[i] {
             Value::Integer(n) => n as f64,
             Value::Real(r) => r,
+            Value::Quantity { magnitude, unit } => unit.to_inches(magnitude),
             _ => return Err(format!("<=: not a number: {:?}", args[i])),
         };
 
         let v2 = match args[i + 1] {
             Value::Integer(n) => n as f64,
             Value::Real(r) => r,
+            Value::Quantity { magnitude, unit } => unit.to_inches(magnitude),
             _ => return Err(format!("<=: not a number: {:?}", args[i + 1])),
         };
 
@@ -711,12 +796,14 @@ pub fn prim_num_ge(args: &[Value]) -> PrimitiveResult {
         let v1 = match args[i] {
             Value::Integer(n) => n as f64,
             Value::Real(r) => r,
+            Value::Quantity { magnitude, unit } => unit.to_inches(magnitude),
             _ => return Err(format!(">=: not a number: {:?}", args[i])),
         };
 
         let v2 = match args[i + 1] {
             Value::Integer(n) => n as f64,
             Value::Real(r) => r,
+            Value::Quantity { magnitude, unit } => unit.to_inches(magnitude),
             _ => return Err(format!(">=: not a number: {:?}", args[i + 1])),
         };
 
@@ -738,7 +825,7 @@ pub fn prim_number_p(args: &[Value]) -> PrimitiveResult {
         return Err("number?: requires exactly 1 argument".to_string());
     }
 
-    Ok(Value::bool(matches!(args[0], Value::Integer(_) | Value::Real(_))))
+    Ok(Value::bool(matches!(args[0], Value::Integer(_) | Value::Real(_) | Value::Quantity { .. })))
 }
 
 /// (integer? obj) → boolean
