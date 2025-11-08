@@ -646,6 +646,7 @@ impl Evaluator {
             Value::Bool(_) => Ok(expr),
             Value::Integer(_) => Ok(expr),
             Value::Real(_) => Ok(expr),
+            Value::Quantity { .. } => Ok(expr),
             Value::Char(_) => Ok(expr),
             Value::String(_) => Ok(expr),
             Value::Procedure(_) => Ok(expr),
@@ -1947,11 +1948,6 @@ impl Evaluator {
     /// The key expression is evaluated and compared with each datum using eqv?.
     /// The datums are NOT evaluated (they are literal constants).
     fn eval_case(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
-        // Save position at the start of eval_case for accurate error reporting
-        // (the case expression's position, not sub-expressions)
-        let case_position = self.current_position.clone();
-        let case_file = self.current_source_file.clone();
-
         let args_vec = self.list_to_vec(args)?;
         if args_vec.is_empty() {
             return Err(EvalError::new("case requires at least 1 argument".to_string()));

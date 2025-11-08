@@ -36,7 +36,7 @@
 //! - Descriptive messages
 //! - Context (what was expected)
 
-use crate::scheme::value::Value;
+use crate::scheme::value::{Value, Unit};
 use std::fmt;
 
 // =============================================================================
@@ -49,6 +49,7 @@ pub enum Token {
     // Literals
     Integer(i64),
     Real(f64),
+    Quantity(f64, String), // DSSSL quantity: magnitude + unit suffix (pt, pi, in, mm, cm, em)
     String(String),
     Char(char),
     Symbol(String),
@@ -80,6 +81,7 @@ impl fmt::Display for Token {
         match self {
             Token::Integer(n) => write!(f, "{}", n),
             Token::Real(n) => write!(f, "{}", n),
+            Token::Quantity(magnitude, unit) => write!(f, "{}{}", magnitude, unit),
             Token::String(s) => write!(f, "\"{}\"", s),
             Token::Char(ch) => write!(f, "#\\{}", ch),
             Token::Symbol(s) => write!(f, "{}", s),
@@ -395,19 +397,23 @@ impl Tokenizer {
                 // These are not delimiters but indicate a quantity literal
                 let suffix_len = self.peek_quantity_suffix();
                 if suffix_len > 0 {
-                    // Consume the suffix
+                    // Capture the suffix string before consuming
+                    let mut suffix = String::new();
                     for _ in 0..suffix_len {
+                        if let Some(ch) = self.peek_char() {
+                            suffix.push(ch);
+                        }
                         self.next_char();
                     }
-                    // Parse as quantity (for now, just convert to Real and ignore unit)
+                    // Parse as quantity with unit
                     // DSSSL quantities: 12pt, 0.5in, 210mm, 1pi, 1em, etc.
                     if let Ok(n) = num_str.parse::<f64>() {
-                        return Ok(Token::Real(n));
+                        return Ok(Token::Quantity(n, suffix));
                     } else if let Ok(n) = num_str.parse::<i64>() {
-                        return Ok(Token::Real(n as f64));
+                        return Ok(Token::Quantity(n as f64, suffix));
                     }
                     return Err(self.error(
-                        format!("Invalid quantity: {}", num_str),
+                        format!("Invalid quantity: {}{}", num_str, suffix),
                         start_pos,
                     ));
                 }
@@ -423,18 +429,22 @@ impl Tokenizer {
         // After loop: check for quantity suffix (handles em, pt, mm, etc.)
         let suffix_len = self.peek_quantity_suffix();
         if suffix_len > 0 {
-            // Consume the suffix
+            // Capture the suffix string before consuming
+            let mut suffix = String::new();
             for _ in 0..suffix_len {
+                if let Some(ch) = self.peek_char() {
+                    suffix.push(ch);
+                }
                 self.next_char();
             }
-            // Parse as quantity
+            // Parse as quantity with unit
             if let Ok(n) = num_str.parse::<f64>() {
-                return Ok(Token::Real(n));
+                return Ok(Token::Quantity(n, suffix));
             } else if let Ok(n) = num_str.parse::<i64>() {
-                return Ok(Token::Real(n as f64));
+                return Ok(Token::Quantity(n as f64, suffix));
             }
             return Err(self.error(
-                format!("Invalid quantity: {}", num_str),
+                format!("Invalid quantity: {}{}", num_str, suffix),
                 start_pos,
             ));
         }
@@ -977,6 +987,17 @@ impl Parser {
             // Literals
             Token::Integer(n) => Ok(Value::integer(n)),
             Token::Real(n) => Ok(Value::real(n)),
+            Token::Quantity(magnitude, suffix) => {
+                // Convert suffix string to Unit enum
+                if let Some(unit) = Unit::from_suffix(&suffix) {
+                    Ok(Value::Quantity { magnitude, unit })
+                } else {
+                    Err(self.error(
+                        format!("Invalid quantity unit: {}", suffix),
+                        start_pos,
+                    ))
+                }
+            }
             Token::String(s) => Ok(Value::string(s)),
             Token::Char(ch) => Ok(Value::char(ch)),
             Token::Bool(b) => Ok(Value::bool(b)),
