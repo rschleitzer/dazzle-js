@@ -443,6 +443,27 @@ fn evaluate_template(
         }
     }
 
+    // Pass 2.5: Evaluate function defines first (they don't have forward references)
+    for (expr, pos) in expressions.iter().zip(positions.iter()) {
+        if let Value::Pair(_) = expr {
+            if let Ok(list) = evaluator.list_to_vec(expr.clone()) {
+                if !list.is_empty() {
+                    if let Value::Symbol(ref sym) = list[0] {
+                        if sym.as_ref() == "define" && list.len() >= 2 {
+                            if let Value::Pair(_) = &list[1] {
+                                // Function define: (define (f x) body) - evaluate immediately
+                                evaluator.set_position(pos.clone());
+                                let _result = evaluator
+                                    .eval(expr.clone(), env.clone())
+                                    .map_err(|e| anyhow::anyhow!("Evaluation error: {}", e))?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Pass 3: Iteratively evaluate simple variable defines until fixed point
     // This handles forward references by re-evaluating until all resolve
     let mut simple_defines: Vec<(usize, String, Value, dazzle_core::scheme::parser::Position)> = Vec::new();
@@ -463,7 +484,8 @@ fn evaluate_template(
                                 }
                                 Value::Pair(_) => {
                                     // Function define: (define (f x) body)
-                                    // Fall through to normal evaluation
+                                    // Already evaluated in Pass 2.5, skip it
+                                    continue;
                                 }
                                 _ => {}
                             }
@@ -659,6 +681,7 @@ fn resolve_xml_template(
     let mut current_output_line = 1;
     let mut inside_body = false;
     let mut past_doctype = false;
+    let mut inside_xml_tag = false;  // Track multi-line XML tags
 
     for line in xml_content.lines() {
         let trimmed = line.trim();
@@ -669,13 +692,23 @@ fn resolve_xml_template(
             continue;
         }
 
-        // Track when we enter/exit <style-specification-body>
-        if trimmed.starts_with("<style-specification-body") || trimmed.starts_with("<style-specification>") {
+        // Track when we enter/exit <style-specification-body> or <style-specification>
+        // Note: Don't include '>' in the opening tag check because tags may have attributes
+        if trimmed.starts_with("<style-specification-body") || trimmed.starts_with("<style-specification ") || trimmed == "<style-specification>" {
             inside_body = true;
+            inside_xml_tag = true;  // Start of opening tag
             continue;
         }
         if trimmed.starts_with("</style-specification-body>") || trimmed.starts_with("</style-specification>") {
             inside_body = false;
+            continue;
+        }
+
+        // If we're inside a multi-line XML tag, skip until we see '>'
+        if inside_xml_tag {
+            if trimmed.contains('>') {
+                inside_xml_tag = false;
+            }
             continue;
         }
 
