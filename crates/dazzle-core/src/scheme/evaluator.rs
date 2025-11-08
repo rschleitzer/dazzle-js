@@ -724,9 +724,11 @@ impl Evaluator {
                 "load" => self.eval_load(args, env),
 
                 // DSSSL special forms
+                "define-unit" => self.eval_define_unit(args, env),
                 "define-language" => self.eval_define_language(args, env),
                 "declare-flow-object-class" => self.eval_declare_flow_object_class(args, env),
                 "declare-characteristic" => self.eval_declare_characteristic(args, env),
+                "declare-initial-value" => self.eval_declare_initial_value(args, env),
                 "mode" => self.eval_mode(args, env),
                 "with-mode" => self.eval_with_mode(args, env),
                 "element" => self.eval_element(args, env),
@@ -764,7 +766,7 @@ impl Evaluator {
     }
 
     /// Convert a list to a Vec of elements
-    fn list_to_vec(&self, list: Value) -> Result<Vec<Value>, EvalError> {
+    pub fn list_to_vec(&self, list: Value) -> Result<Vec<Value>, EvalError> {
         let mut result = Vec::new();
         let mut current = list;
 
@@ -905,6 +907,34 @@ impl Evaluator {
         }
     }
 
+    /// Evaluate (define-unit name value)
+    /// DSSSL unit definition - defines a unit (em, pi, pt, etc.) as a quantity value
+    /// Examples:
+    ///   (define-unit em %bf-size%)
+    ///   (define-unit pi (/ 1in 6))
+    fn eval_define_unit(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+
+        if args_vec.len() != 2 {
+            return Err(EvalError::new(
+                "define-unit requires exactly 2 arguments: name and value".to_string(),
+            ));
+        }
+
+        // First argument must be a symbol (unit name)
+        if let Value::Symbol(ref name) = args_vec[0] {
+            // Evaluate the value expression
+            let value = self.eval_inner(args_vec[1].clone(), env.clone())?;
+            // Define the unit name in the environment
+            env.define(name, value);
+            Ok(Value::Unspecified)
+        } else {
+            Err(EvalError::new(
+                "First argument to define-unit must be a symbol".to_string(),
+            ))
+        }
+    }
+
     /// Evaluate (define-language name props...)
     /// DSSSL language definition - defines the language name as a symbol
     fn eval_define_language(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
@@ -975,6 +1005,33 @@ impl Evaluator {
         } else {
             Err(EvalError::new(
                 "First argument to declare-characteristic must be a symbol".to_string(),
+            ))
+        }
+    }
+
+    /// Evaluate (declare-initial-value name value)
+    /// DSSSL initial value declaration - sets the initial value for a characteristic
+    /// Example: (declare-initial-value page-width 210mm)
+    fn eval_declare_initial_value(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        let args_vec = self.list_to_vec(args)?;
+
+        if args_vec.len() != 2 {
+            return Err(EvalError::new(
+                "declare-initial-value requires exactly 2 arguments (name and value)".to_string(),
+            ));
+        }
+
+        // First argument must be a symbol (characteristic name)
+        if let Value::Symbol(ref name) = args_vec[0] {
+            // Second argument is the value - evaluate it
+            let value = self.eval_inner(args_vec[1].clone(), env.clone())?;
+
+            // Define the characteristic name as a variable with its value
+            env.define(name, value);
+            Ok(Value::Unspecified)
+        } else {
+            Err(EvalError::new(
+                "First argument to declare-initial-value must be a symbol".to_string(),
             ))
         }
     }
@@ -1936,13 +1993,9 @@ impl Evaluator {
             }
         }
 
-        // No match found - restore the case expression's position for the error
-        self.current_position = case_position.clone();
-        self.current_source_file = case_file;
-        Err(self.error_with_stack(format!(
-            "no clause in case expression matched {:?}",
-            key
-        )))
+        // No match found - R4RS specifies that case without an else clause
+        // returns unspecified when no clause matches
+        Ok(Value::Unspecified)
     }
 
     /// (and expr...)
