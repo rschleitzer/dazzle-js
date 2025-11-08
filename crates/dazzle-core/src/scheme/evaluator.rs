@@ -737,6 +737,7 @@ impl Evaluator {
                 "process-children" => self.eval_process_children(env),
                 "process-node-list" => self.eval_process_node_list(args, env),
                 "make" => self.eval_make(args, env),
+                "style" => self.eval_style(args, env),
 
                 // Not a special form - evaluate as function call
                 _ => self.eval_application(operator, args, env),
@@ -1624,6 +1625,40 @@ impl Evaluator {
         }
 
         Ok(Value::Unspecified)
+    }
+
+    /// (style keyword: value ...)
+    ///
+    /// Stub for DSSSL style objects used in document formatting.
+    /// Dazzle focuses on code generation, so this returns a dummy value.
+    fn eval_style(&mut self, args: Value, env: Gc<Environment>) -> EvalResult {
+        // Parse keyword arguments (but ignore them)
+        let args_vec = self.list_to_vec(args)?;
+        let mut i = 0;
+
+        while i < args_vec.len() {
+            match &args_vec[i] {
+                Value::Keyword(_kw) => {
+                    // Skip keyword and its value
+                    if i + 1 >= args_vec.len() {
+                        return Err(EvalError::new(
+                            "style: keyword requires a value".to_string(),
+                        ));
+                    }
+                    // Evaluate the value (to check for errors) but don't use it
+                    let _value = self.eval(args_vec[i + 1].clone(), env.clone())?;
+                    i += 2;
+                }
+                _ => {
+                    return Err(EvalError::new(
+                        format!("style: unexpected argument {:?}", args_vec[i]),
+                    ));
+                }
+            }
+        }
+
+        // Return a dummy style object (we don't use it for code generation)
+        Ok(Value::Symbol(Rc::from("dummy-style")))
     }
 
     /// (set! name value)

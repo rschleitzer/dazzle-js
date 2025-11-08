@@ -5001,6 +5001,51 @@ pub fn prim_inherited_attribute_string(_args: &[Value]) -> PrimitiveResult {
     Ok(Value::bool(false)) // Stub
 }
 
+/// (inherited-font-family-name) → string
+pub fn prim_inherited_font_family_name(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::string("serif".to_string())) // Default font family
+}
+
+/// (inherited-font-weight) → symbol
+pub fn prim_inherited_font_weight(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::symbol("medium")) // Default font weight
+}
+
+/// (inherited-font-size) → quantity
+pub fn prim_inherited_font_size(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Quantity { magnitude: 10.0, unit: crate::scheme::value::Unit::Point })
+}
+
+/// (inherited-font-posture) → symbol
+pub fn prim_inherited_font_posture(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::symbol("upright")) // Default posture
+}
+
+/// (inherited-start-indent) → quantity
+pub fn prim_inherited_start_indent(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Quantity { magnitude: 0.0, unit: crate::scheme::value::Unit::Point })
+}
+
+/// (inherited-end-indent) → quantity
+pub fn prim_inherited_end_indent(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Quantity { magnitude: 0.0, unit: crate::scheme::value::Unit::Point })
+}
+
+/// (inherited-line-spacing) → quantity
+pub fn prim_inherited_line_spacing(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::Quantity { magnitude: 12.0, unit: crate::scheme::value::Unit::Point })
+}
+
+/// (inherited-pi-value name node) → string | #f
+pub fn prim_inherited_pi_value(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
+/// (inherited-dbhtml-value name node) → string | #f
+pub fn prim_inherited_dbhtml_value(_args: &[Value]) -> PrimitiveResult {
+    Ok(Value::bool(false)) // Stub
+}
+
 /// (absolute-first-sibling? node) → boolean
 pub fn prim_absolute_first_sibling_p(_args: &[Value]) -> PrimitiveResult {
     Ok(Value::bool(false)) // Stub
@@ -6136,6 +6181,15 @@ pub fn register_grove_primitives(env: &gc::Gc<crate::scheme::environment::Enviro
     env.define("child-number", Value::primitive("child-number", prim_child_number));
     env.define("element-number", Value::primitive("element-number", prim_element_number));
     env.define("inherited-attribute-string", Value::primitive("inherited-attribute-string", prim_inherited_attribute_string));
+    env.define("inherited-font-family-name", Value::primitive("inherited-font-family-name", prim_inherited_font_family_name));
+    env.define("inherited-font-weight", Value::primitive("inherited-font-weight", prim_inherited_font_weight));
+    env.define("inherited-font-size", Value::primitive("inherited-font-size", prim_inherited_font_size));
+    env.define("inherited-font-posture", Value::primitive("inherited-font-posture", prim_inherited_font_posture));
+    env.define("inherited-start-indent", Value::primitive("inherited-start-indent", prim_inherited_start_indent));
+    env.define("inherited-end-indent", Value::primitive("inherited-end-indent", prim_inherited_end_indent));
+    env.define("inherited-line-spacing", Value::primitive("inherited-line-spacing", prim_inherited_line_spacing));
+    env.define("inherited-pi-value", Value::primitive("inherited-pi-value", prim_inherited_pi_value));
+    env.define("inherited-dbhtml-value", Value::primitive("inherited-dbhtml-value", prim_inherited_dbhtml_value));
 
     // Entity and notation (stubs)
     env.define("entity-system-id", Value::primitive("entity-system-id", prim_entity_system_id));
