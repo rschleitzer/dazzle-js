@@ -1615,7 +1615,7 @@ impl Evaluator {
                         backend.borrow_mut().end_line_field()
                             .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
                     }
-                    "link" | "scroll" | "marginalia" | "leader" | "table" | "table-row" | "table-cell" | "table-column" | "table-part" | "paragraph" | "paragraph-break" | "sequence" => {
+                    "link" | "scroll" | "marginalia" | "leader" | "table" | "table-row" | "table-cell" | "table-column" | "table-part" | "paragraph-break" => {
                         // Flow objects that just process their children
                         // For SGML backend (code gen), we ignore these formatting constructs
                         for expr in body_exprs {
