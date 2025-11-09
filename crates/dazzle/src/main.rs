@@ -130,9 +130,6 @@ fn run_sgml_backend(args: Args, grove_rc: Rc<LibXml2Grove>, output_dir: PathBuf)
     if let Ok(debug_path) = std::env::var("DAZZLE_DEBUG_RESOLVED") {
         if let Err(e) = std::fs::write(&debug_path, &scheme_code) {
             eprintln!("WARNING: Failed to write debug file {}: {}", debug_path, e);
-        } else {
-            eprintln!("DEBUG: [main.rs] Wrote resolved content ({} bytes, {} lines) to {}",
-                     scheme_code.len(), scheme_code.lines().count(), debug_path);
         }
     }
 
@@ -265,9 +262,6 @@ fn run_rtf_backend(args: Args, grove_rc: Rc<LibXml2Grove>) -> Result<()> {
     if let Ok(debug_path) = std::env::var("DAZZLE_DEBUG_RESOLVED") {
         if let Err(e) = std::fs::write(&debug_path, &scheme_code) {
             eprintln!("WARNING: Failed to write debug file {}: {}", debug_path, e);
-        } else {
-            eprintln!("DEBUG: [main.rs] Wrote resolved content ({} bytes, {} lines) to {}",
-                     scheme_code.len(), scheme_code.lines().count(), debug_path);
         }
     }
 
@@ -375,7 +369,6 @@ fn evaluate_template(
 
     // TWO-PASS EVALUATION for R5RS top-level define semantics
     // Pass 1: Parse all expressions and collect defines
-    eprintln!("Pass 1: Parsing expressions...");
     let mut expressions = Vec::new();
     let mut positions = Vec::new();
 
@@ -465,7 +458,6 @@ fn evaluate_template(
     }
 
     // Pass 2.5: Evaluate function defines first (they don't have forward references)
-    eprintln!("Pass 2.5: Evaluating function definitions...");
     for (expr, pos) in expressions.iter().zip(positions.iter()) {
         if let Value::Pair(_) = expr {
             if let Ok(list) = evaluator.list_to_vec(expr.clone()) {
@@ -524,7 +516,6 @@ fn evaluate_template(
     // Pass 3: Evaluate simple variable defines once, in order
     // This matches OpenJade's behavior: evaluate sequentially, no iteration
     // Variables that can't be evaluated stay as #<unspecified>
-    eprintln!("Pass 3: Evaluating {} variable definitions...", simple_defines.len());
     for (_idx, name, rhs_expr, pos) in simple_defines.iter() {
         evaluator.set_position(pos.clone());
 
@@ -768,10 +759,8 @@ fn resolve_xml_template(
                         let filename = &line[start + 1..start + 1 + end];
                         if is_parameter {
                             parameter_entities.insert(entity_name.to_string(), filename.to_string());
-                            eprintln!("Found parameter entity: {} -> {}", entity_name, filename);
                         } else {
                             entities.insert(entity_name.to_string(), filename.to_string());
-                            eprintln!("Found regular entity: {} -> {}", entity_name, filename);
                         }
                     } else {
                         eprintln!("WARNING: Could not find closing quote for entity: {}", entity_name);
@@ -789,9 +778,8 @@ fn resolve_xml_template(
         .parent()
         .ok_or_else(|| anyhow::anyhow!("Template path has no parent directory"))?;
 
-    for (param_name, param_file) in &parameter_entities {
+    for (_param_name, param_file) in &parameter_entities {
         let param_path = template_dir.join(param_file);
-        eprintln!("Loading parameter entity file: {}", param_path.display());
 
         match fs::read_to_string(&param_path) {
             Ok(param_content) => {
@@ -831,9 +819,6 @@ fn resolve_xml_template(
                             if let Some(filename) = extract_entity_filename(&current_entity) {
                                 if !entities.contains_key(&entity_name) {
                                     entities.insert(entity_name.clone(), filename.clone());
-                                    eprintln!("  Found entity in {}: {} -> {}", param_name, entity_name, filename);
-                                } else {
-                                    eprintln!("  Skipping duplicate entity in {}: {} (already defined)", param_name, entity_name);
                                 }
                             }
                             current_entity.clear();
@@ -851,9 +836,6 @@ fn resolve_xml_template(
                             if let Some(filename) = extract_entity_filename(&current_entity) {
                                 if !entities.contains_key(&entity_name) {
                                     entities.insert(entity_name.clone(), filename.clone());
-                                    eprintln!("  Found entity in {}: {} -> {}", param_name, entity_name, filename);
-                                } else {
-                                    eprintln!("  Skipping duplicate entity in {}: {} (already defined)", param_name, entity_name);
                                 }
                             }
                             current_entity.clear();
@@ -1116,8 +1098,6 @@ fn resolve_xml_template(
 
                 match content_result {
                     Ok(mut content) => {
-                        eprintln!("Loading entity &{};  from {}", entity_name, entity_path.display());
-
                         // Strip CDATA wrappers if present
                         // Some .scm files are wrapped in <![CDATA[...]]> for XML embedding
                         // IMPORTANT: Don't use trim() - it changes line counts!
