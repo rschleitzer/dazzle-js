@@ -1291,9 +1291,15 @@ impl Evaluator {
         // Evaluate the argument to get the node-list
         let node_list_value = self.eval(args_vec[0].clone(), env.clone())?;
 
-        // Get the node-list
+        // Get the node-list (auto-convert single node to singleton node-list)
         let mut nodes = match node_list_value {
             Value::NodeList(ref nl) => nl.clone(),
+            Value::Node(ref n) => {
+                // Auto-convert single node to singleton node-list
+                // n is Rc<Box<dyn Node>>, we need Vec<Box<dyn Node>>
+                let node_box: Box<dyn crate::grove::Node> = (**n).clone_node();
+                Rc::new(Box::new(crate::grove::VecNodeList::new(vec![node_box])) as Box<dyn crate::grove::NodeList>)
+            }
             _ => {
                 return Err(EvalError::new(format!(
                     "process-node-list: not a node-list: {:?}",
@@ -1608,6 +1614,13 @@ impl Evaluator {
 
                         backend.borrow_mut().end_line_field()
                             .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+                    }
+                    "link" | "scroll" | "marginalia" | "leader" | "table" | "table-row" | "table-cell" | "table-column" | "table-part" | "paragraph" | "paragraph-break" | "sequence" => {
+                        // Flow objects that just process their children
+                        // For SGML backend (code gen), we ignore these formatting constructs
+                        for expr in body_exprs {
+                            self.eval(expr, env.clone())?;
+                        }
                     }
                     _ => {
                         // Unknown flow object type - error
