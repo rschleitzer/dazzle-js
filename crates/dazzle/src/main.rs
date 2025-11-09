@@ -895,7 +895,6 @@ fn resolve_xml_template(
                     let use_value = &accumulated_tag[use_start + 5..use_start + 5 + use_end];
                     // Split by whitespace to get individual spec IDs
                     use_specs = use_value.split_whitespace().map(|s| s.to_string()).collect();
-                    eprintln!("DEBUG: Found use= attribute with specs: {:?}", use_specs);
                 }
             }
             break;
@@ -922,7 +921,6 @@ fn resolve_xml_template(
             spec_file.clone()
         } else {
             // No entity or external-specification found - skip
-            eprintln!("DEBUG: No entity or external-specification found for spec ID: {}", spec_id);
             continue;
         };
 
@@ -946,10 +944,8 @@ fn resolve_xml_template(
             }
         }
 
-        eprintln!("DEBUG: Loading external spec {} from {}", spec_id, spec_path.display());
 
         if let Ok(spec_bytes) = fs::read(&spec_path) {
-                eprintln!("DEBUG: Successfully read {} bytes from {}", spec_bytes.len(), spec_path.display());
                 // Try UTF-8 first, then Latin-1
                 let mut spec_content = if let Ok(utf8_str) = String::from_utf8(spec_bytes.clone()) {
                     utf8_str
@@ -962,7 +958,6 @@ fn resolve_xml_template(
 
                 // DEBUG: Check if entity resolution worked
                 if spec_content.contains("&#") {
-                    eprintln!("DEBUG: Still contains SGML entities after resolution in {}", spec_path.display());
                     for (i, line) in spec_content.lines().enumerate() {
                         if line.contains("&#") {
                             eprintln!("  Line {}: {}", i+1, line);
@@ -993,32 +988,11 @@ fn resolve_xml_template(
                     mapping.output_line += current_output_line - 1;
                 }
 
-                eprintln!("DEBUG: Adding {} lines ({} bytes) from external spec {} to result",
-                         resolved_content.lines().count(), resolved_content.len(), spec_id);
-
-                // DEBUG: Search for the problem line with string-append
-                if spec_id == "dblib" {
-                    let lines: Vec<&str> = resolved_content.lines().collect();
-                    for (i, line) in lines.iter().enumerate() {
-                        if line.contains("string-append") && line.contains("literal") {
-                            eprintln!("  Found string-append line at {}: {}", i+1, &line[..line.len().min(100)]);
-                            // Show next 3 lines
-                            for j in 1..=3 {
-                                if i + j < lines.len() {
-                                    eprintln!("    +{}: {}", j, &lines[i + j][..lines[i + j].len().min(100)]);
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-
                 current_output_line += resolved_content.lines().count();
                 line_mappings.extend(resolved_mappings);
                 result.push_str(&resolved_content);
                 result.push('\n'); // Add separator between specs
             } else {
-                eprintln!("DEBUG: Failed to read spec file {}", spec_path.display());
             }
     }
 
