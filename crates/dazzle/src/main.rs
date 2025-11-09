@@ -211,12 +211,18 @@ fn run_sgml_backend(args: Args, grove_rc: Rc<LibXml2Grove>, output_dir: PathBuf)
 }
 
 fn run_rtf_backend(args: Args, grove_rc: Rc<LibXml2Grove>) -> Result<()> {
-    // Initialize RTF backend writing to stdout
+    // Derive output filename from input (e.g., dsssl.xml -> dsssl.rtf)
+    let output_path = args.input.with_extension("rtf");
+    let output_file = fs::File::create(&output_path)
+        .with_context(|| format!("Failed to create output file: {}", output_path.display()))?;
+    let output_writer = std::io::BufWriter::new(output_file);
+
+    // Initialize RTF backend writing to file
     let backend = std::rc::Rc::new(std::cell::RefCell::new(
-        RtfBackend::new(std::io::stdout())
+        RtfBackend::new(output_writer)
             .context("Failed to create RTF backend")?
     ));
-    debug!("RTF backend initialized");
+    debug!("RTF backend initialized, writing to: {}", output_path.display());
 
     // Create evaluator with grove
     let mut evaluator = Evaluator::with_grove(grove_rc.clone());
@@ -955,15 +961,6 @@ fn resolve_xml_template(
 
                 // Resolve SGML character entity references (&#RE, &#RS, etc.)
                 spec_content = resolve_sgml_entities(&spec_content);
-
-                // DEBUG: Check if entity resolution worked
-                if spec_content.contains("&#") {
-                    for (i, line) in spec_content.lines().enumerate() {
-                        if line.contains("&#") {
-                            eprintln!("  Line {}: {}", i+1, line);
-                        }
-                    }
-                }
 
                 // Recursively resolve external spec if it's XML-wrapped
                 let (resolved_content, mut resolved_mappings, _) = if spec_content.contains("<style-sheet>") || spec_content.contains("<style-specification>") {
