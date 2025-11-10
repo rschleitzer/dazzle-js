@@ -584,6 +584,11 @@ impl Value {
             // String content comparison
             (Value::String(s1), Value::String(s2)) => **s1 == **s2,
 
+            // Polymorphic string/symbol comparison (like OpenJade's stringData())
+            // This allows case statements to compare gi (symbol) with string literals
+            (Value::String(s), Value::Symbol(sym)) => s.as_ref() == sym.as_ref(),
+            (Value::Symbol(sym), Value::String(s)) => sym.as_ref() == s.as_ref(),
+
             // For all other types, equal? is the same as eqv?
             _ => self.eqv(other),
         }

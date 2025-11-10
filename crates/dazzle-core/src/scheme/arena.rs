@@ -70,6 +70,9 @@ pub struct Arena {
     marks: Vec<bool>,  // Separate mark bitmap
     free_list: Vec<u32>,
     next_id: u32,
+    // Grove runtime state
+    pub current_node: Option<Rc<Box<dyn grove::Node>>>,
+    pub grove: Option<Rc<dyn grove::Grove>>,
 }
 
 impl Arena {
@@ -79,6 +82,8 @@ impl Arena {
             marks: Vec::with_capacity(1024),
             free_list: Vec::new(),
             next_id: FIRST_USER_ID,
+            current_node: None,
+            grove: None,
         };
 
         // Pre-allocate constants
@@ -137,6 +142,11 @@ impl Arena {
     }
 
     #[inline]
+    pub fn real(&mut self, f: f64) -> ValueId {
+        self.alloc(ValueData::Real(f))
+    }
+
+    #[inline]
     pub fn string(&mut self, s: String) -> ValueId {
         self.alloc(ValueData::String(s))
     }
@@ -144,6 +154,16 @@ impl Arena {
     #[inline]
     pub fn symbol(&mut self, s: Rc<str>) -> ValueId {
         self.alloc(ValueData::Symbol(s))
+    }
+
+    #[inline]
+    pub fn char(&mut self, c: char) -> ValueId {
+        self.alloc(ValueData::Char(c))
+    }
+
+    #[inline]
+    pub fn keyword(&mut self, k: Rc<str>) -> ValueId {
+        self.alloc(ValueData::Keyword(k))
     }
 
     #[inline]
