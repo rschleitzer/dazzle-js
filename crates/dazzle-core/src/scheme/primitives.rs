@@ -5809,9 +5809,15 @@ pub fn prim_literal(args: &[Value]) -> PrimitiveResult {
 ///
 /// **DSSSL**: Processing primitive
 pub fn prim_sosofo_append(args: &[Value]) -> PrimitiveResult {
-    // Check all arguments are sosofos or unspecified (which we treat as empty sosofo)
+    // OpenJade: returns empty-sosofo when called with 0 arguments
+    if args.is_empty() {
+        return Ok(Value::Sosofo);
+    }
+
+    // Check all arguments are sosofos, unspecified, or empty lists (which we treat as empty sosofo)
+    // OpenJade is lenient here - it silently ignores non-sosofo values in some cases
     for arg in args {
-        if !matches!(arg, Value::Sosofo | Value::Unspecified) {
+        if !matches!(arg, Value::Sosofo | Value::Unspecified | Value::Nil) {
             return Err(format!("sosofo-append: not a sosofo: {:?}", arg));
         }
     }

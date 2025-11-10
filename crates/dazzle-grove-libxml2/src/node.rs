@@ -75,6 +75,12 @@ impl Node for LibXml2Node {
         Box::new(self.clone())
     }
 
+    fn node_ptr(&self) -> usize {
+        // Use the Rc pointer address as a unique identifier
+        // Two LibXml2Nodes wrapping the same Rc will have the same address
+        std::rc::Rc::as_ptr(&self.node) as usize
+    }
+
     fn gi(&self) -> Option<String> {
         // Only element nodes have a generic identifier
         if self.is_element() {

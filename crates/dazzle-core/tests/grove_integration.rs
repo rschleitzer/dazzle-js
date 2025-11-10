@@ -57,6 +57,11 @@ fn is_string(value: &Value, expected: &str) -> bool {
     matches!(value, Value::String(s) if s.as_str() == expected)
 }
 
+/// Helper to check if a value is a symbol with a specific value
+fn is_symbol(value: &Value, expected: &str) -> bool {
+    matches!(value, Value::Symbol(s) if s.as_ref() == expected)
+}
+
 #[test]
 fn test_current_node_and_gi() {
     let xml = r#"<?xml version="1.0"?><root><child>text</child></root>"#;
@@ -66,9 +71,9 @@ fn test_current_node_and_gi() {
     let result = eval_scheme(&mut evaluator, env.clone(), "(node? (current-node))");
     assert!(is_bool(&result, true));
 
-    // Test gi of current node
+    // Test gi of current node (returns symbol, not string)
     let result = eval_scheme(&mut evaluator, env.clone(), "(gi (current-node))");
-    assert!(is_string(&result, "root"));
+    assert!(is_symbol(&result, "root"));
 }
 
 #[test]
@@ -94,7 +99,7 @@ fn test_children_and_navigation() {
         env.clone(),
         "(gi (node-list-first (children (current-node))))",
     );
-    assert!(is_string(&result, "child1"));
+    assert!(is_symbol(&result, "child1"));
 }
 
 #[test]
@@ -152,7 +157,7 @@ fn test_parent() {
           (gi (parent child)))
     "#;
     let result = eval_scheme(&mut evaluator, env.clone(), code);
-    assert!(is_string(&result, "root"));
+    assert!(is_symbol(&result, "root"));
 
     // Root node should have no parent
     let result = eval_scheme(&mut evaluator, env.clone(), "(parent (current-node))");
@@ -196,7 +201,7 @@ fn test_complex_navigation() {
 
     // Test: Get root element name
     let result = eval_scheme(&mut evaluator, env.clone(), "(gi (current-node))");
-    assert!(is_string(&result, "book"));
+    assert!(is_symbol(&result, "book"));
 
     // Test: Count direct children of book (title + 2 chapters = 3)
     let result = eval_scheme(
@@ -263,15 +268,15 @@ fn test_node_list_operations() {
     // Test node-list-ref with different indices
     let code = r#"(gi (node-list-ref (children (current-node)) 0))"#;
     let result = eval_scheme(&mut evaluator, env.clone(), code);
-    assert!(is_string(&result, "a"));
+    assert!(is_symbol(&result, "a"));
 
     let code = r#"(gi (node-list-ref (children (current-node)) 2))"#;
     let result = eval_scheme(&mut evaluator, env.clone(), code);
-    assert!(is_string(&result, "c"));
+    assert!(is_symbol(&result, "c"));
 
     let code = r#"(gi (node-list-ref (children (current-node)) 4))"#;
     let result = eval_scheme(&mut evaluator, env.clone(), code);
-    assert!(is_string(&result, "e"));
+    assert!(is_symbol(&result, "e"));
 
     // Test out of bounds
     let code = r#"(node-list-ref (children (current-node)) 10)"#;

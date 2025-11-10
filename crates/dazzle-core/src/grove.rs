@@ -50,6 +50,15 @@ pub trait Node: Debug + Any {
     /// Each Node implementation must provide its own cloning logic.
     fn clone_node(&self) -> Box<dyn Node>;
 
+    /// Get a unique node identifier for identity comparison
+    ///
+    /// Returns a value that uniquely identifies this node instance. Two nodes are
+    /// considered identical (not just equal) if they have the same node_ptr value.
+    /// This corresponds to OpenJade's pointer comparison for node identity.
+    ///
+    /// For libxml2 nodes, this is the address of the underlying xmlNode pointer.
+    fn node_ptr(&self) -> usize;
+
     /// Get the generic identifier (element name)
     ///
     /// Returns `None` for non-element nodes.
