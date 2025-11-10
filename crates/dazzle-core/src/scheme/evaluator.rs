@@ -495,6 +495,77 @@ impl Evaluator {
         self.grove.as_ref()
     }
 
+    // =========================================================================
+    // Arena Conversion Layer (Phase 2 migration)
+    // =========================================================================
+    //
+    // These functions convert between old Value and new ValueId.
+    // During Phase 2, hot primitives use arena (ValueId), while the rest
+    // of the system still uses Value. These converters bridge the gap.
+
+    /// Convert Value to ValueId (for hot primitives)
+    fn value_to_arena(&mut self, value: &Value) -> ValueId {
+        use crate::scheme::arena::{NIL_ID, TRUE_ID, FALSE_ID};
+
+        match value {
+            Value::Nil => NIL_ID,
+            Value::Bool(true) => TRUE_ID,
+            Value::Bool(false) => FALSE_ID,
+            Value::Integer(n) => self.arena.int(*n),
+            Value::Pair(pair) => {
+                let p = pair.borrow();
+                let car = self.value_to_arena(&p.car);
+                let cdr = self.value_to_arena(&p.cdr);
+                if let Some(pos) = &p.pos {
+                    self.arena.cons_with_pos(car, cdr, pos.clone())
+                } else {
+                    self.arena.cons(car, cdr)
+                }
+            }
+            _ => {
+                // For now, unsupported types return NIL
+                // Phase 3 will handle all types
+                NIL_ID
+            }
+        }
+    }
+
+    /// Convert ValueId to Value (from hot primitives)
+    fn arena_to_value(&self, id: ValueId) -> Value {
+        use crate::scheme::arena::{NIL_ID, TRUE_ID, FALSE_ID};
+
+        // Fast path for constants
+        if id == NIL_ID {
+            return Value::Nil;
+        }
+        if id == TRUE_ID {
+            return Value::Bool(true);
+        }
+        if id == FALSE_ID {
+            return Value::Bool(false);
+        }
+
+        match self.arena.get(id) {
+            ValueData::Nil => Value::Nil,
+            ValueData::Bool(b) => Value::Bool(*b),
+            ValueData::Integer(n) => Value::Integer(*n),
+            ValueData::Pair { car, cdr, pos } => {
+                let car_val = self.arena_to_value(*car);
+                let cdr_val = self.arena_to_value(*cdr);
+                if let Some(p) = pos {
+                    Value::cons_with_pos(car_val, cdr_val, p.clone())
+                } else {
+                    Value::cons(car_val, cdr_val)
+                }
+            }
+            _ => {
+                // For now, unsupported types return NIL
+                // Phase 3 will handle all types
+                Value::Nil
+            }
+        }
+    }
+
     /// Set the current node
     pub fn set_current_node(&mut self, node: Box<dyn Node>) {
         self.current_node = Some(Rc::new(node));
