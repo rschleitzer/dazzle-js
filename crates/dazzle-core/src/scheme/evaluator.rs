@@ -29,6 +29,7 @@
 use crate::scheme::environment::Environment;
 use crate::scheme::parser::Position;
 use crate::scheme::value::{Procedure, Value};
+use crate::scheme::arena::{Arena, ValueId, ValueData};
 use crate::grove::{Grove, Node};
 use crate::fot::FotBuilder;
 use gc::Gc;
@@ -321,6 +322,13 @@ impl ModeManager {
 /// let result = evaluator.eval(expr, env)?;
 /// ```
 pub struct Evaluator {
+    /// Arena for arena-based values (Phase 2 migration)
+    ///
+    /// Used for hot primitives (car, cdr, cons, null?, equal?) to eliminate Gc overhead.
+    /// During Phase 2, this works in dual-mode: Values are converted to ValueIds for hot
+    /// primitives, then converted back.
+    arena: Arena,
+
     /// The document grove (for element-with-id, etc.)
     grove: Option<Rc<dyn Grove>>,
 
@@ -396,6 +404,7 @@ impl Evaluator {
     /// Create a new evaluator without a grove
     pub fn new() -> Self {
         Evaluator {
+            arena: Arena::new(),
             grove: None,
             current_node: None,
             mode_manager: ModeManager::new(),
@@ -412,6 +421,7 @@ impl Evaluator {
     /// Create a new evaluator with a grove
     pub fn with_grove(grove: Rc<dyn Grove>) -> Self {
         Evaluator {
+            arena: Arena::new(),
             grove: Some(grove),
             current_node: None,
             mode_manager: ModeManager::new(),
