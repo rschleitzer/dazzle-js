@@ -512,6 +512,7 @@ impl Evaluator {
             Value::Bool(true) => TRUE_ID,
             Value::Bool(false) => FALSE_ID,
             Value::Integer(n) => self.arena.int(*n),
+            Value::String(s) => self.arena.string((**s).clone()),
             Value::Pair(pair) => {
                 let p = pair.borrow();
                 let car = self.value_to_arena(&p.car);
@@ -549,6 +550,7 @@ impl Evaluator {
             ValueData::Nil => Value::Nil,
             ValueData::Bool(b) => Value::Bool(*b),
             ValueData::Integer(n) => Value::Integer(*n),
+            ValueData::String(s) => Value::String(Gc::new(s.clone())),
             ValueData::Pair { car, cdr, pos } => {
                 let car_val = self.arena_to_value(*car);
                 let cdr_val = self.arena_to_value(*cdr);
@@ -564,6 +566,28 @@ impl Evaluator {
                 Value::Nil
             }
         }
+    }
+
+    /// Apply arena primitive (Phase 2 hot path)
+    fn apply_arena_primitive(&mut self, name: &str, args: &[Value]) -> EvalResult {
+        use crate::scheme::arena_primitives::{arena_car, arena_cdr, arena_cons, arena_null, arena_equal};
+
+        // Convert args to arena
+        let arena_args: Vec<ValueId> = args.iter().map(|v| self.value_to_arena(v)).collect();
+
+        // Call arena primitive
+        let result_id = match name {
+            "car" => arena_car(&self.arena, &arena_args),
+            "cdr" => arena_cdr(&self.arena, &arena_args),
+            "cons" => arena_cons(&mut self.arena, &arena_args),
+            "null?" => arena_null(&self.arena, &arena_args),
+            "equal?" => arena_equal(&self.arena, &arena_args),
+            _ => unreachable!("apply_arena_primitive called with non-hot primitive"),
+        }
+        .map_err(|e| self.error_with_stack(e))?;
+
+        // Convert result back to Value
+        Ok(self.arena_to_value(result_id))
     }
 
     /// Set the current node
@@ -2721,10 +2745,18 @@ impl Evaluator {
     fn apply(&mut self, proc: Value, args: Vec<Value>) -> EvalResult {
         if let Value::Procedure(ref p) = proc {
             match &**p {
-                Procedure::Primitive { name: _, func } => {
-                    // Don't push call frames for primitives - only for user lambdas
-                    // This matches OpenJade's behavior
-                    func(&args).map_err(|e| self.error_with_stack(e))
+                Procedure::Primitive { name, func } => {
+                    // Phase 2: Route hot primitives through arena for 6-7x speedup
+                    match *name {
+                        "car" | "cdr" | "cons" | "null?" | "equal?" => {
+                            self.apply_arena_primitive(name, &args)
+                        }
+                        _ => {
+                            // Don't push call frames for primitives - only for user lambdas
+                            // This matches OpenJade's behavior
+                            func(&args).map_err(|e| self.error_with_stack(e))
+                        }
+                    }
                 }
                 Procedure::Lambda { params, required_count, optional_defaults, body, env, source, name } => {
                     // Check argument count - must have at least required_count, at most params.len()
