@@ -16,6 +16,7 @@
 10. [References](#references)
 11. [Quick Reference](#quick-reference)
 12. [Current Status](#current-status-october-20-2025)
+13. [Development Policies](#development-policies)
 
 ---
 
@@ -516,5 +517,29 @@ Implementing OpenJade-compatible RTF backend for document formatting:
 - Full DSSSL flow object support (vs SGML's entity+formatting-instruction only)
 - Document formatting primitives (quantities, colors, spacing)
 - First step toward full print/PDF output pipeline
+
+---
+---
+
+## Development Policies
+
+### Git Commit Messages
+
+**Policy**: Use simple one-line commit messages only.
+
+**Format**:
+```
+Add feature description
+Fix bug description
+Update component description
+```
+
+**Examples**:
+- ✅ Good: `Add arena-based value storage with generational indices`
+- ✅ Good: `Fix ancestor primitive argument handling`
+- ✅ Good: `Update RTF backend to write output files`
+- ❌ Bad: Multi-paragraph messages with detailed explanations
+
+**Rationale**: Keep git history clean and readable. Detailed context belongs in code comments, documentation, or issue trackers, not commit messages.
 
 ---
