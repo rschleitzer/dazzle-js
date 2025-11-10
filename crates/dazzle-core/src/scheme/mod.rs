@@ -24,6 +24,7 @@
 //!
 //! Total: ~12,200 lines C++ → estimated ~10,000 lines Rust
 
+pub mod arena;
 pub mod environment;
 pub mod evaluator;
 pub mod parser;
