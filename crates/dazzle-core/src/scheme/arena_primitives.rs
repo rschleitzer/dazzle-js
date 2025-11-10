@@ -6077,49 +6077,59 @@ pub fn arena_first_child_gi(arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
 
 /// tree-root - Return tree root
 pub fn arena_tree_root(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
-    // Get the node to start from
-    let start_node = if args.is_empty() {
-        // No argument: use current node
-        match &arena.current_node {
-            Some(n) => n.clone(),
-            None => return Ok(crate::scheme::arena::UNSPECIFIED_ID),
-        }
+    // Optimization: Use Grove's root() method directly instead of traversing parent chain
+    // This is much faster for large documents with deep nesting
+
+    if let Some(ref grove) = arena.grove {
+        // Fast path: Get root directly from Grove
+        let root = grove.root();
+        Ok(arena.alloc(ValueData::Node(Rc::new(root))))
     } else {
-        // With argument: optSingletonNodeList pattern
-        match arena.get(args[0]) {
-            ValueData::Node(n) => n.clone(),
-            ValueData::NodeList(nl) => {
-                if nl.is_empty() {
-                    return Ok(crate::scheme::arena::UNSPECIFIED_ID);
-                }
-                let first = nl.first();
-                let rest = nl.rest();
-                if rest.is_empty() {
-                    Rc::new(first.unwrap())
-                } else {
-                    return Err("tree-root: node-list must be a singleton".to_string());
-                }
+        // Fallback: Traverse parent chain if no Grove available
+        // Get the node to start from
+        let start_node = if args.is_empty() {
+            // No argument: use current node
+            match &arena.current_node {
+                Some(n) => n.clone(),
+                None => return Ok(crate::scheme::arena::UNSPECIFIED_ID),
             }
-            _ => return Ok(crate::scheme::arena::UNSPECIFIED_ID),
-        }
-    };
+        } else {
+            // With argument: optSingletonNodeList pattern
+            match arena.get(args[0]) {
+                ValueData::Node(n) => n.clone(),
+                ValueData::NodeList(nl) => {
+                    if nl.is_empty() {
+                        return Ok(crate::scheme::arena::UNSPECIFIED_ID);
+                    }
+                    let first = nl.first();
+                    let rest = nl.rest();
+                    if rest.is_empty() {
+                        Rc::new(first.unwrap())
+                    } else {
+                        return Err("tree-root: node-list must be a singleton".to_string());
+                    }
+                }
+                _ => return Ok(crate::scheme::arena::UNSPECIFIED_ID),
+            }
+        };
 
-    // Traverse up the tree to find the root element
-    let mut current = start_node;
-    loop {
-        match current.parent() {
-            Some(parent) => {
-                // Continue traversing up
-                current = Rc::new(parent);
-            }
-            None => {
-                // No parent - this is the root
-                break;
+        // Traverse up the tree to find the root element
+        let mut current = start_node;
+        loop {
+            match current.parent() {
+                Some(parent) => {
+                    // Continue traversing up
+                    current = Rc::new(parent);
+                }
+                None => {
+                    // No parent - this is the root
+                    break;
+                }
             }
         }
+
+        Ok(arena.alloc(ValueData::Node(current)))
     }
-
-    Ok(arena.alloc(ValueData::Node(current)))
 }
 
 /// declare-default-language - Declare default language (stub: return unspecified)
