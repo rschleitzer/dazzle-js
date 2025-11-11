@@ -6079,10 +6079,51 @@ pub fn arena_label_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     Ok(arena.int(0))
 }
 
-/// external-procedure - Call external procedure (stub: return unspecified)
-pub fn arena_external_procedure(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
-    // Stub: external procedures not implemented
-    Ok(crate::scheme::arena::UNSPECIFIED_ID)
+/// external-procedure - Look up external procedure by name and return it as a symbol
+/// The evaluator will recognize this symbol and dispatch to the correct primitive
+pub fn arena_external_procedure(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+    use crate::scheme::arena::ValueData;
+    use std::rc::Rc;
+
+    if args.len() != 1 {
+        return Err("external-procedure: requires 1 argument".to_string());
+    }
+
+    // Get the external procedure name string
+    let name_str = match arena.get(args[0]) {
+        ValueData::String(s) => s.clone(),
+        _ => return Err("external-procedure: argument must be a string".to_string()),
+    };
+
+    // Parse the external procedure name
+    // Format: "UNREGISTERED::James Clark//Procedure::procedure-name"
+    let proc_name = if let Some(pos) = name_str.rfind("::") {
+        &name_str[pos + 2..]
+    } else {
+        &name_str
+    };
+
+    // Validate that the procedure exists
+    let valid = matches!(proc_name,
+        // Flow object constructors
+        "if-first-page" | "if-front-page" | "empty-sosofo" | "literal" |
+        "sosofo-append" | "page-number-sosofo" | "current-node-page-number-sosofo" |
+        // Processing
+        "process-children" | "process-node-list" | "next-match" |
+        // Grove queries
+        "current-node" | "node-list-first" | "node-list-rest" | "node-list-length" |
+        "empty-node-list" | "children" | "parent" | "ancestor" | "descendants" |
+        "follow" | "preced" | "attributes" | "gi" | "id" | "data" |
+        "attribute-string" | "inherited-attribute-string"
+    );
+
+    if !valid {
+        return Err(format!("external-procedure: unknown procedure '{}'", proc_name));
+    }
+
+    // Return a symbol with the primitive name - the evaluator will handle dispatch
+    let symbol_data = ValueData::Symbol(Rc::from(proc_name));
+    Ok(arena.alloc(symbol_data))
 }
 
 // Phase 3 Batch 48: DTD/SGML stubs (6 primitives)
