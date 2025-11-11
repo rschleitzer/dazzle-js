@@ -976,6 +976,15 @@ fn resolve_xml_template(
                 // Resolve SGML character entity references (&#RE, &#RS, etc.)
                 spec_content = resolve_sgml_entities(&spec_content);
 
+                // Strip SGML conditional sections (e.g., <![%l10n-en[ ... ]]>)
+                // Pass the collected parameter entities from .ent files
+                if std::env::var("SGML_DEBUG").is_ok() && spec_content.contains("<![%") {
+                    eprintln!("[SGML_DEBUG] Processing external spec file: {}", spec_file);
+                    eprintln!("[SGML_DEBUG] Has {} marked sections before preprocessing", spec_content.matches("<![%").count());
+                    eprintln!("[SGML_DEBUG] Using {} parameter entities", sgml_parameter_entities.len());
+                }
+                spec_content = strip_sgml_conditionals(&spec_content, Some(&sgml_parameter_entities));
+
                 // Recursively resolve external spec if it's XML-wrapped
                 let (resolved_content, mut resolved_mappings, _) = if spec_content.contains("<style-sheet>") || spec_content.contains("<style-specification>") {
                     // It's an XML-wrapped template, recursively resolve it

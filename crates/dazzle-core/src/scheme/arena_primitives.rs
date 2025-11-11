@@ -2531,6 +2531,13 @@ pub fn arena_string_downcase(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
     }
 }
 
+/// (case-fold-down str) → string
+/// DSSSL alias for string-downcase - convert string to lowercase
+#[inline]
+pub fn arena_case_fold_down(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+    arena_string_downcase(arena, args)
+}
+
 /// (string->number str) → number or #f
 /// Parse a string as a number
 #[inline]
