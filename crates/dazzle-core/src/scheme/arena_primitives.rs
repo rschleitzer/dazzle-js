@@ -6373,13 +6373,13 @@ pub fn arena_element_number_list(arena: &Arena, args: &[ValueId]) -> ArenaResult
 
 // Phase 3 Batch 53: Inherited property stubs - Part 1 (5 primitives)
 
-/// inherited-attribute-string - Get inherited attribute value (stub: return empty string)
-pub fn arena_inherited_attribute_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+/// inherited-attribute-string - Get inherited attribute value (stub: return #f)
+pub fn arena_inherited_attribute_string(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("inherited-attribute-string: expected 1 argument, got {}", args.len()));
     }
-    // Stub: inherited attribute lookup not implemented, return empty string
-    Ok(arena.string(String::new()))
+    // Stub: inherited attribute lookup not implemented, return #f
+    Ok(crate::scheme::arena::FALSE_ID)
 }
 
 /// inherited-element-attribute-string - Get inherited element attribute (stub: return empty string)
