@@ -4111,11 +4111,15 @@ pub fn arena_gi(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
             None => return Err("gi: no current node".to_string()),
         }
     } else if args.len() == 1 {
-        // OpenJade: optSingletonNodeList pattern - accept node, singleton node-list, or #f
+        // OpenJade: optSingletonNodeList pattern - accept node, singleton node-list, #f, or symbol
         match arena.get(args[0]) {
             ValueData::Bool(false) => {
                 // #f means no node - return #f
                 return Ok(crate::scheme::arena::FALSE_ID);
+            }
+            ValueData::Symbol(s) => {
+                // Symbol passed directly - return it unchanged (OpenJade compatibility)
+                return Ok(args[0]);
             }
             ValueData::Node(n) => n.clone(),
             ValueData::NodeList(nl) => {
@@ -4133,7 +4137,25 @@ pub fn arena_gi(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
                     return Err("gi: node-list must be a singleton".to_string());
                 }
             }
-            _ => return Err("gi: argument must be a node, node-list, or #f".to_string()),
+            other => {
+                let type_name = match other {
+                    ValueData::Nil => "nil",
+                    ValueData::Bool(_) => "boolean",
+                    ValueData::Integer(_) => "integer",
+                    ValueData::Real(_) => "real",
+                    ValueData::Quantity { .. } => "quantity",
+                    ValueData::Char(_) => "char",
+                    ValueData::String(_) => "string",
+                    ValueData::Keyword(_) => "keyword",
+                    ValueData::Pair { .. } => "pair",
+                    ValueData::Vector(_) => "vector",
+                    ValueData::Procedure(_) => "procedure",
+                    ValueData::Sosofo => "sosofo",
+                    ValueData::Unspecified => "unspecified",
+                    _ => "unknown",
+                };
+                return Err(format!("gi: argument must be a node, node-list, #f, or symbol (got {})", type_name));
+            }
         }
     } else {
         return Err("gi: expected 0 or 1 arguments".to_string());
@@ -6443,8 +6465,8 @@ pub fn arena_element_number_list(arena: &Arena, args: &[ValueId]) -> ArenaResult
 
 /// inherited-attribute-string - Get inherited attribute value (stub: return #f)
 pub fn arena_inherited_attribute_string(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
-    if args.len() != 1 {
-        return Err(format!("inherited-attribute-string: expected 1 argument, got {}", args.len()));
+    if args.is_empty() || args.len() > 2 {
+        return Err(format!("inherited-attribute-string: expected 1-2 arguments, got {}", args.len()));
     }
     // Stub: inherited attribute lookup not implemented, return #f
     Ok(crate::scheme::arena::FALSE_ID)
@@ -6569,8 +6591,12 @@ pub fn arena_node_list_eq_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
         return Ok(TRUE_ID);
     }
 
-    // Get both arguments - they can be nodes or node-lists
+    // Get both arguments - they can be nodes, node-lists, or #f
     let nl1 = match arena.get(args[0]) {
+        ValueData::Bool(false) => {
+            // #f -> treat as empty node-list
+            vec![]
+        }
         ValueData::Node(n) => {
             // Single node -> treat as singleton node-list
             vec![n.clone()]
@@ -6585,10 +6611,14 @@ pub fn arena_node_list_eq_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
             }
             nodes
         }
-        _ => return Err("node-list=?: first argument must be a node or node-list".to_string()),
+        _ => return Err("node-list=?: first argument must be a node, node-list, or #f".to_string()),
     };
 
     let nl2 = match arena.get(args[1]) {
+        ValueData::Bool(false) => {
+            // #f -> treat as empty node-list
+            vec![]
+        }
         ValueData::Node(n) => {
             // Single node -> treat as singleton node-list
             vec![n.clone()]
@@ -6603,7 +6633,27 @@ pub fn arena_node_list_eq_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
             }
             nodes
         }
-        _ => return Err("node-list=?: second argument must be a node or node-list".to_string()),
+        v => {
+            let type_name = match v {
+                ValueData::Nil => "empty list",
+                ValueData::Bool(_) => "boolean",
+                ValueData::Integer(_) => "integer",
+                ValueData::Real(_) => "real",
+                ValueData::Char(_) => "char",
+                ValueData::String(_) => "string",
+                ValueData::Symbol(_) => "symbol",
+                ValueData::Keyword(_) => "keyword",
+                ValueData::Pair { .. } => "pair",
+                ValueData::Vector(_) => "vector",
+                ValueData::Procedure(_) => "procedure",
+                ValueData::Quantity { .. } => "quantity",
+                ValueData::Sosofo => "sosofo",
+                ValueData::Unspecified => "unspecified",
+                ValueData::Error => "error",
+                _ => "unknown",
+            };
+            return Err(format!("node-list=?: second argument must be a node, node-list, or #f (got {})", type_name));
+        }
     };
 
     // Compare lengths first
