@@ -13,6 +13,7 @@ use dazzle_core::scheme::environment::Environment;
 use dazzle_core::scheme::evaluator::{Evaluator, LineMapping};
 use dazzle_core::scheme::parser::Parser as SchemeParser;
 use dazzle_core::scheme::primitives;
+use dazzle_core::sgml_preprocess;
 use dazzle_grove_libxml2::LibXml2Grove;
 use std::fs;
 use std::path::PathBuf;
@@ -390,6 +391,16 @@ fn evaluate_template(
                         positions.push(pos);
                     }
                     Err(e) => {
+                        // Debug: Write preprocessed content to file if SGML_DEBUG is set
+                        if std::env::var("SGML_DEBUG").is_ok() {
+                            eprintln!("[SGML_DEBUG] Parse error at line {}: {}", e.position.line, e.message);
+                            if let Err(write_err) = std::fs::write("/tmp/dazzle_preprocessed_template.scm", template) {
+                                eprintln!("[SGML_DEBUG] Failed to write debug file: {}", write_err);
+                            } else {
+                                eprintln!("[SGML_DEBUG] Preprocessed template written to /tmp/dazzle_preprocessed_template.scm");
+                            }
+                        }
+
                         if !line_mappings.is_empty() {
                             if let Some(mapping) = line_mappings.iter().find(|m| m.output_line == e.position.line) {
                                 return Err(anyhow::anyhow!(
@@ -639,52 +650,35 @@ fn resolve_sgml_entities(content: &str) -> String {
     final_result
 }
 
-/// Strip SGML conditional section markers
+/// Expand SGML conditional section markers
 ///
 /// SGML conditional sections like `<![%entity[ content ]]>` are used in DocBook stylesheets
-/// for localization. We treat all as INCLUDE (strip markers, keep content).
+/// for localization. This properly expands them based on entity declarations:
+/// - <!ENTITY % l10n-en "INCLUDE"> → keeps content
+/// - <!ENTITY % l10n-de "IGNORE"> → removes content
 ///
-/// Example: `<![%l10n-en[ (define x 1) ]]>` → `(define x 1) `
-fn strip_sgml_conditionals(content: &str) -> String {
-    let mut result = String::with_capacity(content.len());
-    let mut chars = content.char_indices().peekable();
+/// Example: With `<!ENTITY % l10n-en "INCLUDE">`:
+/// `<![%l10n-en[ (define x 1) ]]>` → `(define x 1)`
+///
+/// If external_entities is provided, those parameter entity definitions are used
+/// in addition to any found within the content itself.
+fn strip_sgml_conditionals(content: &str, external_entities: Option<&std::collections::HashMap<String, String>>) -> String {
+    // Use our proper SGML preprocessing that respects INCLUDE/IGNORE
+    let result = if let Some(entities) = external_entities {
+        sgml_preprocess::expand_marked_sections_with_entities(content, entities)
+    } else {
+        sgml_preprocess::expand_marked_sections(content)
+    }.unwrap_or_else(|_| content.to_string());
 
-    while let Some((i, ch)) = chars.next() {
-        if ch == '<' && content[i..].starts_with("<![%") {
-            // Found conditional section opening marker: <![%entity-name[
-            // We need to skip everything until the SECOND '[' (after entity name)
-            // Pattern: <![%entity-name[
-            //          ^   ^          ^
-            //          |   |          +-- This is the '[' we want to find
-            //          |   +-- First '[' (part of <![)
-            //          +-- Already consumed by outer loop
-
-            let mut bracket_count = 0;
-            let mut found_end = false;
-            while let Some((_, ch)) = chars.next() {
-                if ch == '[' {
-                    bracket_count += 1;
-                    if bracket_count == 2 {
-                        // Found the second '[' - end of marker
-                        found_end = true;
-                        break;
-                    }
-                }
+    // Debug: Check if SGML_DEBUG env var is set
+    if std::env::var("SGML_DEBUG").is_ok() {
+        let before_count = content.matches("<![%").count();
+        let after_count = result.matches("<![%").count();
+        if before_count > 0 {
+            eprintln!("[SGML_DEBUG] Preprocessing: {} -> {} marked sections", before_count, after_count);
+            if after_count == before_count {
+                eprintln!("[SGML_DEBUG] WARNING: No marked sections were expanded!");
             }
-
-            if !found_end {
-                // Malformed marker, just add the '<' and continue
-                result.push('<');
-            }
-            // Skip the marker entirely (don't add anything to result)
-        } else if ch == ']' && content[i..].starts_with("]]>") {
-            // Found conditional section closing marker: ]]>
-            // Skip all three characters
-            chars.next(); // Skip second ']'
-            chars.next(); // Skip '>'
-            // Don't add anything to result
-        } else {
-            result.push(ch);
         }
     }
 
@@ -784,14 +778,34 @@ fn resolve_xml_template(
         .parent()
         .ok_or_else(|| anyhow::anyhow!("Template path has no parent directory"))?;
 
+    // Global map of SGML parameter entity declarations (<!ENTITY % name "INCLUDE/IGNORE">)
+    // These are collected from all parameter entity files and shared across all template files
+    let mut sgml_parameter_entities = HashMap::new();
+
     for (_param_name, param_file) in &parameter_entities {
         let param_path = template_dir.join(param_file);
 
         match fs::read_to_string(&param_path) {
             Ok(param_content) => {
+                // Extract SGML parameter entity declarations from this file
+                // (e.g., <!ENTITY % l10n-en "INCLUDE">)
+                // These will be available when preprocessing other files
+                let local_params = sgml_preprocess::extract_parameter_entities(&param_content);
+
+                // Debug output
+                if std::env::var("SGML_DEBUG").is_ok() {
+                    eprintln!("[SGML_DEBUG] Parameter entity file: {}", param_file);
+                    eprintln!("[SGML_DEBUG] Found {} parameter entities:", local_params.len());
+                    for (name, value) in &local_params {
+                        eprintln!("[SGML_DEBUG]   {} = {}", name, value);
+                    }
+                }
+
+                sgml_parameter_entities.extend(local_params);
+
                 // Strip SGML conditional sections (e.g., <![%l10n-en[ ... ]]>)
-                // We treat all conditionals as INCLUDE
-                let stripped_content = strip_sgml_conditionals(&param_content);
+                // Pass None here since we just extracted the parameter entities above
+                let stripped_content = strip_sgml_conditionals(&param_content, None);
 
                 // Parse entity declarations from the parameter entity file
                 // Handle multi-line entity declarations by accumulating lines
@@ -1090,18 +1104,26 @@ fn resolve_xml_template(
                         // - Line 1 of stripped content = Line 1 of original file (content after <![CDATA[)
                         // - The ]]> line is removed, keeping line numbers aligned with the original file
 
-                        // Also strip inline CDATA markers (common in .scm files that embed XML content)
+                        // IMPORTANT: Strip SGML conditional section markers BEFORE stripping CDATA markers!
+                        // SGML marked sections like <![%l10n-en[ ... ]]> also use ]]> as closing delimiter,
+                        // so if we strip ]]> first, we'll break the marked sections.
+                        //
+                        // DocBook stylesheets use these for localization: <![%l10n-en[ ... ]]>
+                        // Pass the collected parameter entities from .ent files so marked sections
+                        // in .dsl files can be expanded correctly
+                        // Pattern: <![%entity-name[  ->  empty string (if INCLUDE) or removed (if IGNORE)
+                        if std::env::var("SGML_DEBUG").is_ok() && content.contains("<![%") {
+                            eprintln!("[SGML_DEBUG] Processing entity file: {}", filename);
+                            eprintln!("[SGML_DEBUG] Has {} marked sections before preprocessing", content.matches("<![%").count());
+                            eprintln!("[SGML_DEBUG] Using {} parameter entities", sgml_parameter_entities.len());
+                        }
+                        content = strip_sgml_conditionals(&content, Some(&sgml_parameter_entities));
+
+                        // Now strip inline CDATA markers (common in .scm files that embed XML content)
                         // These appear as: ($<![CDATA[ ... ]]>)
                         // We replace them with empty strings to preserve line numbers
                         content = content.replace("<![CDATA[", "");
                         content = content.replace("]]>", "");
-
-                        // Strip SGML conditional section markers
-                        // DocBook stylesheets use these for localization: <![%l10n-en[ ... ]]>
-                        // We treat all conditionals as INCLUDE (strip the markers but keep the content)
-                        // Pattern: <![%entity-name[  ->  empty string
-                        // Pattern: ]]>               ->  already handled above
-                        content = strip_sgml_conditionals(&content);
 
                         // Resolve SGML character entity references (&#RE, &#RS, etc.)
                         content = resolve_sgml_entities(&content);

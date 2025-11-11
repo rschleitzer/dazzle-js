@@ -30,6 +30,7 @@
 pub mod fot;
 pub mod grove;
 pub mod scheme;
+pub mod sgml_preprocess;
 
 // Re-export key types for convenience
 pub use fot::FotBuilder;
