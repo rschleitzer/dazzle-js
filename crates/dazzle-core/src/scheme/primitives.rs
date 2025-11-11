@@ -1319,6 +1319,68 @@ pub fn prim_substring(args: &[Value]) -> PrimitiveResult {
     Ok(Value::string(substring))
 }
 
+/// (string-index string char) → integer | #f
+///
+/// Returns the index of the first occurrence of char in string, or #f if not found.
+/// This is an OpenJade extension used in DocBook stylesheets.
+///
+/// **OpenJade Extension**
+pub fn prim_string_index(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 2 {
+        return Err("string-index requires exactly 2 arguments".to_string());
+    }
+
+    let s = match &args[0] {
+        Value::String(s) => s,
+        _ => return Err(format!("string-index: first argument must be a string, got {:?}", args[0])),
+    };
+
+    let ch = match &args[1] {
+        Value::Char(c) => *c,
+        Value::String(s) if s.len() == 1 => s.chars().next().unwrap(),
+        _ => return Err(format!("string-index: second argument must be a character, got {:?}", args[1])),
+    };
+
+    // Find the index of the character
+    match s.find(ch) {
+        Some(byte_idx) => {
+            // Convert byte index to character index
+            let char_idx = s[..byte_idx].chars().count();
+            Ok(Value::integer(char_idx as i64))
+        }
+        None => Ok(Value::bool(false)),
+    }
+}
+
+/// (case-fold-down string) → string
+///
+/// Converts a string to lowercase. This is an OpenJade extension
+/// used in DocBook stylesheets for language normalization.
+///
+/// **OpenJade Extension**
+pub fn prim_case_fold_down(args: &[Value]) -> PrimitiveResult {
+    if args.len() != 1 {
+        return Err("case-fold-down requires exactly 1 argument".to_string());
+    }
+
+    match &args[0] {
+        Value::String(s) => Ok(Value::string(s.to_lowercase())),
+        _ => Err(format!("case-fold-down: argument must be a string, got {:?}", args[0])),
+    }
+}
+
+/// (normalize string) → string
+///
+/// Normalizes a string (typically element/attribute names).
+/// In XML mode, this is just an alias to general-name-normalize.
+/// For SGML, it would normalize case-folding, but we're XML-only.
+///
+/// **DSSSL/OpenJade Extension**
+pub fn prim_normalize(args: &[Value]) -> PrimitiveResult {
+    // Just delegate to general-name-normalize
+    prim_general_name_normalize(args)
+}
+
 /// (string=? string1 string2) → boolean
 ///
 /// Returns #t if the two strings are equal, otherwise #f.
@@ -6154,6 +6216,9 @@ pub fn register_string_primitives(env: &gc::Gc<crate::scheme::environment::Envir
     env.define("substring", Value::primitive("substring", prim_substring));
     env.define("make-string", Value::primitive("make-string", prim_make_string));
     env.define("string", Value::primitive("string", prim_string));
+    env.define("string-index", Value::primitive("string-index", prim_string_index));
+    env.define("case-fold-down", Value::primitive("case-fold-down", prim_case_fold_down));
+    env.define("normalize", Value::primitive("normalize", prim_normalize));
 
     // String comparison
     env.define("string=?", Value::primitive("string=?", prim_string_eq));

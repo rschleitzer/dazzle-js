@@ -157,6 +157,12 @@ fn expand_conditional_sections(
                     Some("INCLUDE") => {
                         // Include the content
                         result.push_str(&section_content);
+
+                        // Debug: show English INCLUDE expansions
+                        if entity_name == "l10n-en" {
+                            eprintln!("[SGML_DEBUG] INCLUDE entity=l10n-en, content_preview={:?}",
+                                &section_content[..std::cmp::min(80, section_content.len())]);
+                        }
                     }
                     Some("IGNORE") | None => {
                         // Skip the content (don't add anything)
@@ -198,7 +204,9 @@ fn parse_marked_section(text: &str) -> Option<(String, String, usize)> {
     // Find the entity name (between % and [)
     let after_percent = &text[4..]; // Skip "<![%"
     let bracket_pos = after_percent.find('[')?;
-    let entity_name = after_percent[..bracket_pos].trim().to_string();
+    let entity_name_raw = &after_percent[..bracket_pos];
+    // Strip trailing semicolon if present (SGML standard: <![%name;[ vs custom: <![%name[)
+    let entity_name = entity_name_raw.trim().trim_end_matches(';').to_string();
 
     // Find the closing ]]>
     let content_start = 4 + bracket_pos + 1;
@@ -235,7 +243,18 @@ mod tests {
         let result = parse_marked_section(text);
         assert_eq!(
             result,
-            Some(("l10n-en".to_string(), " (\"en\") foo) ".to_string(), 29))
+            Some(("l10n-en".to_string(), " ((\"en\") foo) ".to_string(), 29))
+        );
+    }
+
+    #[test]
+    fn test_parse_marked_section_with_semicolon() {
+        // SGML standard syntax includes semicolon before opening bracket
+        let text = r#"<![%l10n-af;[<!ENTITY dbl1af "foo">]]>"#;
+        let result = parse_marked_section(text);
+        assert_eq!(
+            result,
+            Some(("l10n-af".to_string(), "<!ENTITY dbl1af \"foo\">".to_string(), 38))
         );
     }
 

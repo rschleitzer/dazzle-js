@@ -1308,13 +1308,9 @@ impl Evaluator {
                     if let Some(text) = node.data() {
                         // Skip if text is only whitespace
                         if !text.trim().is_empty() {
-                            // Output text to backend with HTML escaping
+                            // Output text to backend using literal() (each backend handles its own escaping)
                             if let Some(ref backend) = self.backend {
-                                let escaped_text = text
-                                    .replace('&', "&amp;")
-                                    .replace('<', "&lt;")
-                                    .replace('>', "&gt;");
-                                backend.borrow_mut().formatting_instruction(&escaped_text)
+                                backend.borrow_mut().literal(&text)
                                     .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
                             }
                         }
@@ -1496,6 +1492,7 @@ impl Evaluator {
                 "element" => self.eval_element(args, env),
                 "default" => self.eval_default(args, env),
                 "process-children" => self.eval_process_children(env),
+                "process-children-trim" => self.eval_process_children_trim(env),
                 "process-node-list" => self.eval_process_node_list(args, env),
                 "make" => self.eval_make(args, env),
                 "style" => self.eval_style(args, env),
@@ -2030,6 +2027,85 @@ impl Evaluator {
         }
 
         Ok(result)
+    }
+
+    /// DSSSL (process-children-trim)
+    ///
+    /// OpenJade semantics: Process children with whitespace trimming
+    /// - Text nodes are output directly to backend (not through rules)
+    /// - Leading whitespace is trimmed from first text node
+    /// - Trailing whitespace is trimmed from last text node
+    /// - Element nodes are processed through rules normally
+    fn eval_process_children_trim(&mut self, env: Gc<Environment>) -> EvalResult {
+        // Get current node
+        let current_node = match self.current_node() {
+            Some(node) => node.clone(),
+            None => return Err(EvalError::new("No current node".to_string())),
+        };
+
+        // Get ALL children (including text nodes)
+        let mut children = current_node.all_children();
+
+        // Collect all children into a vector to support trimming
+        let mut child_nodes = Vec::new();
+        while !children.is_empty() {
+            if let Some(child) = children.first() {
+                child_nodes.push(child);
+            }
+            children = children.rest();
+        }
+
+        if child_nodes.is_empty() {
+            return Ok(Value::Unspecified);
+        }
+
+        // Track position for trimming
+        let mut at_start = true;
+
+        // Process each child
+        for (index, child_node) in child_nodes.iter().enumerate() {
+            let is_last = index == child_nodes.len() - 1;
+
+            if child_node.is_text() {
+                // Text node: output directly with trimming
+                if let Some(mut text) = child_node.data() {
+                    // Trim leading whitespace from first text node
+                    if at_start {
+                        let trimmed = text.trim_start();
+                        if trimmed.is_empty() {
+                            // Skip whitespace-only nodes at start
+                            continue;
+                        }
+                        text = trimmed.to_string();
+                        at_start = false;
+                    }
+
+                    // Trim trailing whitespace from last text node
+                    if is_last {
+                        text = text.trim_end().to_string();
+                    }
+
+                    if !text.is_empty() {
+                        // Output text directly to backend
+                        if let Some(ref backend) = self.backend {
+                            backend.borrow_mut().literal(&text)
+                                .map_err(|e| EvalError::new(format!("Backend error: {}", e)))?;
+                        }
+                    }
+                }
+            } else if child_node.is_element() {
+                // Element node: mark that we're no longer at start
+                at_start = false;
+
+                // Process through rules
+                let saved_node = self.current_node();
+                self.set_current_node(child_node.clone_node());
+                let _result = self.process_node(env.clone())?;
+                self.restore_current_node(saved_node);
+            }
+        }
+
+        Ok(Value::Unspecified)
     }
 
     /// DSSSL (process-node-list node-list)
