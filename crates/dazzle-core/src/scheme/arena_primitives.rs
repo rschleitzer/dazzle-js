@@ -560,6 +560,10 @@ fn to_number(arena: &Arena, id: ValueId) -> Result<f64, String> {
     match arena.get(id) {
         ValueData::Integer(n) => Ok(*n as f64),
         ValueData::Real(f) => Ok(*f),
+        ValueData::Quantity { magnitude, unit } => {
+            // Convert quantity to inches (canonical unit)
+            Ok(unit.to_inches(*magnitude))
+        }
         _ => Err("not a number".to_string()),
     }
 }
@@ -5937,10 +5941,13 @@ pub fn arena_language_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     Ok(crate::scheme::arena::FALSE_ID)
 }
 
-/// language - Return language (stub: return unspecified)
-pub fn arena_language(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
-    // Stub: return unspecified
-    Ok(crate::scheme::arena::UNSPECIFIED_ID)
+/// language - Return language (stub: return "en" for English)
+/// In DSSSL, this returns the language of a node or the current language.
+/// For now, we return "en" (English) as a reasonable default.
+pub fn arena_language(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
+    // Return "en" (English) as default language
+    // DocBook stylesheets expect language codes like "en", "de", "fr", etc.
+    Ok(arena.symbol("en".into()))
 }
 
 /// style? - Check if value is a style (stub: always false)
@@ -6056,11 +6063,13 @@ pub fn arena_entity_name_normalize(_arena: &mut Arena, args: &[ValueId]) -> Aren
 }
 
 /// general-name-normalize - Normalize general name (stub: return same string)
+/// (general-name-normalize name [node]) → string
+/// The second argument (node) is optional and ignored in XML processing
 pub fn arena_general_name_normalize(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
-    if args.len() != 1 {
-        return Err(format!("general-name-normalize: expected 1 argument, got {}", args.len()));
+    if args.is_empty() || args.len() > 2 {
+        return Err(format!("general-name-normalize: expected 1 or 2 arguments, got {}", args.len()));
     }
-    // Stub: just return the input string
+    // Stub: just return the input string (ignore optional node argument)
     Ok(args[0])
 }
 
@@ -6287,10 +6296,36 @@ pub fn arena_inherited_pi_value(arena: &mut Arena, args: &[ValueId]) -> ArenaRes
 
 // Phase 3 Batch 55: Node-list operation stubs - Part 1 (5 primitives)
 
-/// node-list - Create node list from nodes (stub: return empty node list)
-pub fn arena_node_list(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
-    // Stub: node list construction not implemented, return empty node list
-    Ok(crate::scheme::arena::NIL_ID)
+/// node-list - Create node list from nodes and node-lists
+/// (node-list node-or-list ...) → node-list
+/// Concatenates all arguments (nodes and node-lists) into a single node-list
+pub fn arena_node_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+    use crate::grove::VecNodeList;
+
+    let mut result_nodes = Vec::new();
+
+    for arg in args {
+        match arena.get(*arg) {
+            ValueData::Node(node) => {
+                // Single node: add it to the result
+                result_nodes.push(node.as_ref().clone_node());
+            }
+            ValueData::NodeList(nl) => {
+                // Node-list: add all its nodes to the result
+                let len = nl.length();
+                for i in 0..len {
+                    if let Some(node) = nl.get(i) {
+                        result_nodes.push(node);
+                    }
+                }
+            }
+            _ => {
+                return Err("node-list: arguments must be nodes or node-lists".to_string());
+            }
+        }
+    }
+
+    Ok(arena.alloc(ValueData::NodeList(Rc::new(Box::new(VecNodeList::new(result_nodes))))))
 }
 
 /// node-list=? - Compare node lists for equality
