@@ -3675,6 +3675,13 @@ impl Evaluator {
                     result
                 }
             }
+        } else if let Value::Symbol(sym) = &proc {
+            // Special handling for symbols returned by external-procedure
+            // These are primitive names that need to be dispatched to arena primitives
+            let sym_str = sym.as_ref();
+
+            // Dispatch directly to the arena primitive by name
+            self.apply_arena_primitive(sym_str, &args)
         } else {
             Err(self.error_with_stack(format!(
                 "Not a procedure: {:?}",
