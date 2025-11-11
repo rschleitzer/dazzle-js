@@ -4111,8 +4111,12 @@ pub fn arena_gi(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
             None => return Err("gi: no current node".to_string()),
         }
     } else if args.len() == 1 {
-        // OpenJade: optSingletonNodeList pattern - accept node or singleton node-list
+        // OpenJade: optSingletonNodeList pattern - accept node, singleton node-list, or #f
         match arena.get(args[0]) {
+            ValueData::Bool(false) => {
+                // #f means no node - return #f
+                return Ok(crate::scheme::arena::FALSE_ID);
+            }
             ValueData::Node(n) => n.clone(),
             ValueData::NodeList(nl) => {
                 if nl.is_empty() {
@@ -4129,7 +4133,7 @@ pub fn arena_gi(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
                     return Err("gi: node-list must be a singleton".to_string());
                 }
             }
-            _ => return Err("gi: argument must be a node or node-list".to_string()),
+            _ => return Err("gi: argument must be a node, node-list, or #f".to_string()),
         }
     } else {
         return Err("gi: expected 0 or 1 arguments".to_string());
@@ -5558,6 +5562,10 @@ pub fn arena_node_property(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
     let _node = if args.len() == 2 {
         match arena.get(args[1]) {
+            ValueData::Bool(false) => {
+                // #f means no node - return #f
+                return Ok(crate::scheme::arena::FALSE_ID);
+            }
             ValueData::Node(n) => n.clone(),
             ValueData::NodeList(nl) => {
                 // Accept singleton node-lists (DSSSL pattern: current-node returns singleton)
@@ -5575,7 +5583,7 @@ pub fn arena_node_property(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
                 }
             }
             _ => {
-                return Err("node-property: second argument must be a node or singleton node-list".to_string());
+                return Err("node-property: second argument must be a node, singleton node-list, or #f".to_string());
             }
         }
     } else {
