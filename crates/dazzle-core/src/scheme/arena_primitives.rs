@@ -4749,10 +4749,26 @@ pub fn arena_ancestor(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     };
 
     // Get the starting node (second arg or current node)
+    // OpenJade: optSingletonNodeList pattern - accept node or singleton node-list
     let node = if args.len() == 2 {
         match arena.get(args[1]) {
             ValueData::Node(n) => n.clone(),
-            _ => return Err("ancestor: second argument must be a node".to_string()),
+            ValueData::NodeList(nl) => {
+                if nl.is_empty() {
+                    // Empty node-list -> return empty node-list
+                    return Ok(arena.alloc(ValueData::NodeList(Rc::new(Box::new(crate::grove::EmptyNodeList)))));
+                }
+                let first = nl.first();
+                let rest = nl.rest();
+                if rest.is_empty() {
+                    // Singleton node-list -> extract the node
+                    Rc::new(first.unwrap())
+                } else {
+                    // Multi-element node-list -> error
+                    return Err("ancestor: node-list must be a singleton".to_string());
+                }
+            }
+            _ => return Err("ancestor: second argument must be a node or singleton node-list".to_string()),
         }
     } else {
         match &arena.current_node {
