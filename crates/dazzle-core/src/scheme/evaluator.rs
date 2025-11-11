@@ -501,6 +501,9 @@ impl Evaluator {
             Value::Bool(false) => FALSE_ID,
             Value::Integer(n) => self.arena.int(*n),
             Value::Real(f) => self.arena.real(*f),
+            Value::Quantity { magnitude, unit } => {
+                self.arena.alloc(ValueData::Quantity { magnitude: *magnitude, unit: *unit })
+            }
             Value::String(s) => self.arena.string((**s).clone()),
             Value::Symbol(s) => self.arena.symbol(s.clone()),
             Value::Keyword(k) => self.arena.keyword(k.clone()),
@@ -557,6 +560,9 @@ impl Evaluator {
             ValueData::Bool(b) => Value::Bool(*b),
             ValueData::Integer(n) => Value::Integer(*n),
             ValueData::Real(f) => Value::Real(*f),
+            ValueData::Quantity { magnitude, unit } => {
+                Value::Quantity { magnitude: *magnitude, unit: *unit }
+            }
             ValueData::String(s) => Value::String(Gc::new(s.clone())),
             ValueData::Symbol(s) => Value::Symbol(s.clone()),
             ValueData::Keyword(k) => Value::Keyword(k.clone()),
@@ -1147,7 +1153,7 @@ impl Evaluator {
             "time>?" => arena_time_gt(&self.arena, &arena_args),
             // Phase 3 Batch 46: Language and style type stubs (3)
             "language?" => arena_language_p(&self.arena, &arena_args),
-            "language" => arena_language(&self.arena, &arena_args),
+            "language" => arena_language(&mut self.arena, &arena_args),
             "style?" => arena_style_p(&self.arena, &arena_args),
             // Phase 3 Batch 47: String comparison and simple stubs (3)
             "string-equiv?" => arena_string_equiv_p(&self.arena, &arena_args),
@@ -1194,7 +1200,7 @@ impl Evaluator {
             "inherited-dbhtml-value" => arena_inherited_dbhtml_value(&mut self.arena, &arena_args),
             "inherited-pi-value" => arena_inherited_pi_value(&mut self.arena, &arena_args),
             // Phase 3 Batch 55: Node-list operation stubs - Part 1 (5)
-            "node-list" => arena_node_list(&self.arena, &arena_args),
+            "node-list" => arena_node_list(&mut self.arena, &arena_args),
             "node-list=?" => arena_node_list_eq_p(&self.arena, &arena_args),
             // node-list-count is user-defined (delegates to node-list-length + node-list-remove-duplicates)
             "node-list-union-map" => arena_node_list_union_map(&self.arena, &arena_args),
