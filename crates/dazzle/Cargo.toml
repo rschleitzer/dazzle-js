@@ -33,6 +33,9 @@ tracing-subscriber = { workspace = true }
 # Garbage collection
 gc = { workspace = true }
 
+# Regex for CDATA stripping
+regex = "1"
+
 [dev-dependencies]
 # Testing utilities
 tempfile = "3.8"
