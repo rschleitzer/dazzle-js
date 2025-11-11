@@ -6401,6 +6401,8 @@ pub fn register_sosofo_primitives(env: &gc::Gc<crate::scheme::environment::Envir
     env.define("style?", Value::primitive("style?", prim_style_p));
     env.define("next-match", Value::primitive("next-match", prim_next_match));
     env.define("empty-sosofo", Value::primitive("empty-sosofo", prim_empty_sosofo));
+    env.define("if-first-page", Value::primitive("if-first-page", prim_if_first_page));
+    env.define("if-front-page", Value::primitive("if-front-page", prim_if_front_page));
     env.define("literal", Value::primitive("literal", prim_literal));
     env.define("sosofo-append", Value::primitive("sosofo-append", prim_sosofo_append));
 

@@ -158,12 +158,13 @@ fn expand_conditional_sections(
                         // Include the content
                         result.push_str(&section_content);
                     }
-                    Some("IGNORE") => {
+                    Some("IGNORE") | None => {
                         // Skip the content (don't add anything)
+                        // Per SGML/DSSSL semantics: undefined entities default to IGNORE
                     }
                     _ => {
-                        // Unknown entity: keep original (conservative)
-                        result.push_str(&content[start..end]);
+                        // Other entity value (shouldn't happen): skip content
+                        // Only INCLUDE and IGNORE are valid per SGML spec
                     }
                 }
 
