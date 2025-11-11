@@ -5769,7 +5769,7 @@ pub fn arena_current_node_address(_arena: &Arena, args: &[ValueId]) -> ArenaResu
 }
 
 /// current-node-page-number-sosofo - get page number sosofo for current node
-pub fn arena_current_node_page_number_sosofo(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn arena_current_node_page_number_sosofo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if !args.is_empty() {
         return Err("current-node-page-number-sosofo: requires 0 arguments".to_string());
     }
@@ -5777,7 +5777,7 @@ pub fn arena_current_node_page_number_sosofo(_arena: &Arena, args: &[ValueId]) -
     // Stub: In a full implementation, this would return a sosofo that expands
     // to the page number where the current node appears.
     // For now, return an empty sosofo.
-    Ok(crate::scheme::arena::FALSE_ID)
+    Ok(arena.alloc(ValueData::Sosofo))
 }
 
 /// debug - print debug information (output to stderr)
@@ -6259,10 +6259,11 @@ pub fn arena_sosofo_contains_node_p(_arena: &Arena, args: &[ValueId]) -> ArenaRe
     Ok(crate::scheme::arena::FALSE_ID)
 }
 
-/// page-number-sosofo - Return page number sosofo (stub: return unspecified)
-pub fn arena_page_number_sosofo(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
-    // Stub: page numbering not implemented
-    Ok(crate::scheme::arena::UNSPECIFIED_ID)
+/// page-number-sosofo - Return page number sosofo (stub: return empty sosofo)
+pub fn arena_page_number_sosofo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+    // Stub: page numbering not fully implemented, return empty sosofo
+    // TODO: Implement actual page numbering
+    Ok(arena.alloc(ValueData::Sosofo))
 }
 
 /// ifollow - Inverse follow navigation (stub: return empty node-list)
