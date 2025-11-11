@@ -258,12 +258,10 @@ impl<W: Write + std::fmt::Debug> FotBuilder for RtfBackend<W> {
     }
 
     fn literal(&mut self, text: &str) -> Result<()> {
-        // Ensure we're in a paragraph
+        // Auto-start paragraph if needed
+        // DSSSL templates often use (literal "text") standalone without explicit paragraph flow objects
         if !self.in_paragraph {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "literal text outside of paragraph",
-            ));
+            self.start_paragraph()?;
         }
 
         // Write text, escaping RTF special characters

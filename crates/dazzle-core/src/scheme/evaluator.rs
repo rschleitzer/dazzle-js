@@ -529,6 +529,9 @@ impl Evaluator {
             Value::NodeList(node_list) => {
                 self.arena.alloc(ValueData::NodeList(node_list.clone()))
             }
+            Value::Sosofo => {
+                self.arena.alloc(ValueData::Sosofo)
+            }
             Value::Unspecified => {
                 crate::scheme::arena::UNSPECIFIED_ID
             }
@@ -586,10 +589,13 @@ impl Evaluator {
             ValueData::NodeList(node_list) => {
                 Value::NodeList(node_list.clone())
             }
-            _ => {
-                // For now, unsupported types return NIL
-                // Phase 3 will handle more types
-                Value::Nil
+            ValueData::Sosofo => Value::Sosofo,
+            ValueData::Unspecified => Value::Unspecified,
+            ValueData::Error => Value::Error,
+            ValueData::Procedure(_) => {
+                // Procedures cannot be converted back to old-style values
+                // This shouldn't happen in normal operation
+                Value::Unspecified
             }
         }
     }
@@ -2388,7 +2394,8 @@ impl Evaluator {
             }
         }
 
-        Ok(Value::Unspecified)
+        // Flow objects (make forms) always return a Sosofo
+        Ok(Value::Sosofo)
     }
 
     /// (style keyword: value ...)
@@ -3471,8 +3478,8 @@ impl Evaluator {
                         "bitwise-bit-set?" | "bitwise-bit-count" |
                         // Phase 3 Batch 21: Number formatting (2)
                         "format-number" | "format-number-list" |
-                        // Phase 3 Batch 22: Simple constants (1)
-                        "empty-sosofo" |
+                        // Phase 3 Batch 22: Simple constants (3)
+                        "empty-sosofo" | "if-first-page" | "if-front-page" |
                         // Phase 3 Batch 23: Grove operations (1)
                         "current-node" |
                         // Phase 3 Batch 24: Grove node properties (3)
