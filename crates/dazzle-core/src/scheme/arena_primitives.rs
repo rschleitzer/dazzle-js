@@ -4209,8 +4209,8 @@ pub fn arena_parent(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
             ValueData::Node(n) => n.clone(),
             ValueData::NodeList(nl) => {
                 if nl.is_empty() {
-                    // Empty node-list -> return #f (no parent of nothing)
-                    return Ok(crate::scheme::arena::FALSE_ID);
+                    // Empty node-list -> return empty node-list (not FALSE!)
+                    return Ok(arena.alloc(ValueData::NodeList(Rc::new(Box::new(crate::grove::EmptyNodeList)))));
                 }
                 let first = nl.first();
                 let rest = nl.rest();
@@ -4228,10 +4228,14 @@ pub fn arena_parent(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
         return Err("parent: expected 0 or 1 arguments".to_string());
     };
 
-    // Get parent
+    // Get parent - OpenJade returns singleton node-list or empty node-list
     match node.parent() {
-        Some(parent) => Ok(arena.alloc(ValueData::Node(Rc::new(parent)))),
-        None => Ok(crate::scheme::arena::FALSE_ID),
+        Some(parent) => {
+            use crate::grove::VecNodeList;
+            let nodes = vec![parent.clone_node()];
+            Ok(arena.alloc(ValueData::NodeList(Rc::new(Box::new(VecNodeList::new(nodes))))))
+        }
+        None => Ok(arena.alloc(ValueData::NodeList(Rc::new(Box::new(crate::grove::EmptyNodeList))))),
     }
 }
 
@@ -4289,6 +4293,7 @@ pub fn arena_node_list_empty_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
         return Err("node-list-empty?: expected 1 argument".to_string());
     }
 
+    // OpenJade: optSingletonNodeList pattern - accept node or node-list
     match arena.get(args[0]) {
         ValueData::NodeList(nl) => {
             if nl.is_empty() {
@@ -4297,7 +4302,11 @@ pub fn arena_node_list_empty_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
                 Ok(crate::scheme::arena::FALSE_ID)
             }
         }
-        _ => Err("node-list-empty?: argument must be a node-list".to_string()),
+        ValueData::Node(_) => {
+            // Single node -> non-empty node-list
+            Ok(crate::scheme::arena::FALSE_ID)
+        }
+        _ => Err("node-list-empty?: argument must be a node or node-list".to_string()),
     }
 }
 
@@ -4646,35 +4655,26 @@ pub fn arena_ancestor(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     while let Some(parent_node) = current {
         if let Some(gi) = parent_node.gi() {
             if gi == ancestor_name {
-                return Ok(arena.alloc(ValueData::Node(Rc::new(parent_node))));
+                // Found - return singleton node-list (OpenJade semantics)
+                use crate::grove::VecNodeList;
+                let nodes = vec![parent_node.clone_node()];
+                return Ok(arena.alloc(ValueData::NodeList(Rc::new(Box::new(VecNodeList::new(nodes))))));
             }
         }
         current = parent_node.parent();
     }
 
-    // Not found - return empty node list
+    // Not found - return empty node-list (OpenJade semantics)
     Ok(arena.alloc(ValueData::NodeList(Rc::new(Box::new(crate::grove::EmptyNodeList)))))
 }
 
-/// descendants - get all descendants of a node
+/// descendants - get all descendants of a node or node-list
 pub fn arena_descendants(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() > 1 {
         return Err("descendants: expected 0 or 1 arguments".to_string());
     }
 
-    let node = if args.is_empty() {
-        match &arena.current_node {
-            Some(n) => n.clone(),
-            None => return Err("descendants: no current node".to_string()),
-        }
-    } else {
-        match arena.get(args[0]) {
-            ValueData::Node(n) => n.clone(),
-            _ => return Err("descendants: argument must be a node".to_string()),
-        }
-    };
-
-    // Collect all descendants recursively
+    // Helper: Collect all descendants recursively
     fn collect_descendants(node: &dyn crate::grove::Node, result: &mut Vec<Box<dyn crate::grove::Node>>) {
         let children = node.children();
         let mut current = children.as_ref();
@@ -4687,10 +4687,43 @@ pub fn arena_descendants(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
         }
     }
 
-    let mut descendants = Vec::new();
-    collect_descendants(node.as_ref().as_ref(), &mut descendants);
-    let node_list = crate::grove::VecNodeList::new(descendants);
-    Ok(arena.alloc(ValueData::NodeList(Rc::new(Box::new(node_list)))))
+    // Get input node or node-list
+    if args.is_empty() {
+        // No argument: use current node
+        let node = match &arena.current_node {
+            Some(n) => n.clone(),
+            None => return Err("descendants: no current node".to_string()),
+        };
+        let mut descendants = Vec::new();
+        collect_descendants(node.as_ref().as_ref(), &mut descendants);
+        let node_list = crate::grove::VecNodeList::new(descendants);
+        return Ok(arena.alloc(ValueData::NodeList(Rc::new(Box::new(node_list)))));
+    }
+
+    // One argument: can be node-list or node
+    match arena.get(args[0]) {
+        ValueData::NodeList(nl) => {
+            // Node-list input: collect descendants of all nodes
+            let mut all_descendants = Vec::new();
+            let mut current = nl.as_ref().as_ref();
+            while !current.is_empty() {
+                if let Some(node) = current.first() {
+                    collect_descendants(node.as_ref(), &mut all_descendants);
+                }
+                current = Box::leak(current.rest());
+            }
+            let result = crate::grove::VecNodeList::new(all_descendants);
+            Ok(arena.alloc(ValueData::NodeList(Rc::new(Box::new(result)))))
+        }
+        ValueData::Node(n) => {
+            // Single node input
+            let mut descendants = Vec::new();
+            collect_descendants(n.as_ref().as_ref(), &mut descendants);
+            let node_list = crate::grove::VecNodeList::new(descendants);
+            Ok(arena.alloc(ValueData::NodeList(Rc::new(Box::new(node_list)))))
+        }
+        _ => Err("descendants: argument must be a node or node-list".to_string()),
+    }
 }
 
 /// follow - get all nodes following this node in document order
