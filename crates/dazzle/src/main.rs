@@ -944,8 +944,14 @@ fn resolve_xml_template(
         // 3. Try search paths
         let spec_file = if let Some(entity_file) = entities.get(&format!("dbl1{}", spec_id)) {
             entity_file.clone()
-        } else if let Some((_id, spec_file)) = external_specs.iter().find(|(id, _)| id == spec_id) {
-            spec_file.clone()
+        } else if let Some((_id, spec_doc)) = external_specs.iter().find(|(id, _)| id == spec_id) {
+            // The document= attribute may reference an entity name, resolve it first
+            if let Some(entity_file) = entities.get(spec_doc.as_str()) {
+                entity_file.clone()
+            } else {
+                // Not an entity, use as filename directly
+                spec_doc.clone()
+            }
         } else {
             // No entity or external-specification found - skip
             continue;
