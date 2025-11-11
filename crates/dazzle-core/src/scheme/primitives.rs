@@ -1348,7 +1348,7 @@ pub fn prim_string_index(args: &[Value]) -> PrimitiveResult {
             let char_idx = s[..byte_idx].chars().count();
             Ok(Value::integer(char_idx as i64))
         }
-        None => Ok(Value::bool(false)),
+        None => Ok(Value::integer(-1)),  // Return -1 when not found (DocBook convention)
     }
 }
 
