@@ -2547,15 +2547,26 @@ pub fn arena_string_index(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
         return Err("string-index requires exactly 2 arguments".to_string());
     }
 
-    match (arena.get(args[0]), arena.get(args[1])) {
-        (ValueData::String(s), ValueData::String(search)) => {
-            // Search for the substring/character
-            match s.find(search.as_str()) {
-                Some(idx) => Ok(arena.int(idx as i64)),
-                None => Ok(arena.int(-1)),
-            }
+    let s = match arena.get(args[0]) {
+        ValueData::String(s) => s.clone(),
+        _ => return Err("string-index: first argument must be a string".to_string()),
+    };
+
+    // Second argument can be either a character or a string
+    let search_str = match arena.get(args[1]) {
+        ValueData::Char(c) => c.to_string(),
+        ValueData::String(search) => search.clone(),
+        _ => return Err("string-index: second argument must be a character or string".to_string()),
+    };
+
+    // Search for the substring/character
+    match s.find(search_str.as_str()) {
+        Some(idx) => {
+            // Convert byte index to character index
+            let char_idx = s[..idx].chars().count();
+            Ok(arena.int(char_idx as i64))
         }
-        _ => Err("string-index: both arguments must be strings".to_string()),
+        None => Ok(arena.int(-1)),  // Return -1 when not found (DocBook convention)
     }
 }
 
