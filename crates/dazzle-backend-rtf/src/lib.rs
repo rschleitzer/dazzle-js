@@ -235,7 +235,13 @@ impl<W: Write + std::fmt::Debug> FotBuilder for RtfBackend<W> {
         // Ensure header is written
         self.write_header()?;
 
-        // Start a paragraph
+        // If already in a paragraph, close it first (OpenJade compatibility)
+        // DSSSL can nest paragraphs, but RTF requires closing the previous one
+        if self.in_paragraph {
+            writeln!(self.output, "\\par")?;
+        }
+
+        // Start a new paragraph
         write!(self.output, "\\pard")?;
         self.in_paragraph = true;
 
@@ -243,11 +249,10 @@ impl<W: Write + std::fmt::Debug> FotBuilder for RtfBackend<W> {
     }
 
     fn end_paragraph(&mut self) -> Result<()> {
+        // If not in a paragraph, just ignore (OpenJade compatibility)
+        // This can happen with nested paragraph flow objects
         if !self.in_paragraph {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "end_paragraph called without matching start_paragraph",
-            ));
+            return Ok(());
         }
 
         // End the paragraph with \par
