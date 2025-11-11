@@ -578,7 +578,8 @@ fn from_number(arena: &mut Arena, n: f64) -> ValueId {
 }
 
 /// (+ num ...) → number
-/// Add numbers
+/// Add numbers or quantities (quantities must have compatible units)
+/// DSSSL: (+ quantity number) → quantity, (+ quantity quantity) → quantity
 pub fn arena_add(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Ok(arena.int(0));
@@ -587,26 +588,50 @@ pub fn arena_add(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     let mut sum = 0.0;
     let mut all_ints = true;
     let mut int_sum = 0i64;
+    let mut quantity_magnitude: Option<f64> = None;
+    let mut quantity_unit: Option<crate::scheme::value::Unit> = None;
 
     for &arg in args {
         match arena.get(arg) {
             ValueData::Integer(n) => {
-                int_sum = int_sum.wrapping_add(*n);
+                if quantity_magnitude.is_none() {
+                    int_sum = int_sum.wrapping_add(*n);
+                }
                 sum += *n as f64;
             }
             ValueData::Real(f) => {
                 all_ints = false;
                 sum += f;
             }
+            ValueData::Quantity { magnitude, unit } => {
+                if let Some(existing_unit) = quantity_unit {
+                    // OpenJade allows adding quantities with different units - just use first unit
+                    quantity_magnitude = Some(quantity_magnitude.unwrap() + magnitude);
+                } else {
+                    // First quantity: add any accumulated numeric sum to it
+                    quantity_magnitude = Some(*magnitude + sum);
+                    quantity_unit = Some(*unit);
+                    sum = 0.0; // Reset since we've incorporated it
+                }
+                all_ints = false;
+            }
             _ => return Err("+: not a number".to_string()),
         }
     }
 
-    Ok(if all_ints {
-        arena.int(int_sum)
+    // If we had a quantity, add any remaining numeric sum to its magnitude
+    if let (Some(mag), Some(unit)) = (quantity_magnitude, quantity_unit) {
+        Ok(arena.alloc(ValueData::Quantity {
+            magnitude: mag + sum,
+            unit,
+        }))
     } else {
-        arena.real(sum)
-    })
+        Ok(if all_ints {
+            arena.int(int_sum)
+        } else {
+            arena.real(sum)
+        })
+    }
 }
 
 /// (- num ...) → number
@@ -643,7 +668,8 @@ pub fn arena_subtract(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// (* num ...) → number
-/// Multiply numbers
+/// Multiply numbers or scale a quantity by a number
+/// DSSSL: (* quantity number) → quantity (scales the quantity)
 pub fn arena_multiply(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Ok(arena.int(1));
@@ -652,6 +678,8 @@ pub fn arena_multiply(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     let mut product = 1.0;
     let mut all_ints = true;
     let mut int_product = 1i64;
+    let mut quantity_magnitude: Option<f64> = None;
+    let mut quantity_unit: Option<crate::scheme::value::Unit> = None;
 
     for &arg in args {
         match arena.get(arg) {
@@ -663,15 +691,31 @@ pub fn arena_multiply(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
                 all_ints = false;
                 product *= f;
             }
+            ValueData::Quantity { magnitude, unit } => {
+                if quantity_unit.is_some() {
+                    return Err("*: cannot multiply two quantities".to_string());
+                }
+                quantity_magnitude = Some(*magnitude);
+                quantity_unit = Some(*unit);
+                all_ints = false;
+            }
             _ => return Err("*: not a number".to_string()),
         }
     }
 
-    Ok(if all_ints {
-        arena.int(int_product)
+    // If we had a quantity, scale it by the numeric product
+    if let (Some(mag), Some(unit)) = (quantity_magnitude, quantity_unit) {
+        Ok(arena.alloc(ValueData::Quantity {
+            magnitude: mag * product,
+            unit,
+        }))
     } else {
-        arena.real(product)
-    })
+        Ok(if all_ints {
+            arena.int(int_product)
+        } else {
+            arena.real(product)
+        })
+    }
 }
 
 /// (/ num ...) → number
@@ -6588,9 +6632,10 @@ pub fn arena_node_list_symmetrical_difference(_arena: &Arena, args: &[ValueId]) 
 // Phase 3 Batch 56: Node-list operation stubs - Part 2 (4 primitives)
 
 /// node-list-address - Get address of node in node list (stub: return empty list)
+/// Takes 1-2 arguments: (node-list-address nl [snl])
 pub fn arena_node_list_address(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
-    if args.len() != 2 {
-        return Err(format!("node-list-address: expected 2 arguments, got {}", args.len()));
+    if args.is_empty() || args.len() > 2 {
+        return Err(format!("node-list-address: expected 1-2 arguments, got {}", args.len()));
     }
     // Stub: node list address not implemented, return empty list
     Ok(crate::scheme::arena::NIL_ID)
