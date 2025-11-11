@@ -647,6 +647,7 @@ impl Evaluator {
             arena_set_car, arena_set_cdr, arena_list_tail,
             // Phase 3 Batch 12: String utilities
             arena_string_upcase, arena_string_downcase, arena_case_fold_down,
+            arena_string_index,
             arena_string_to_list, arena_list_to_string,
             // Phase 3 Batch 13: Miscellaneous utilities
             arena_gcd, arena_lcm,
@@ -677,7 +678,7 @@ impl Evaluator {
             // Phase 3 Batch 21: Number formatting
             arena_format_number, arena_format_number_list,
             // Phase 3 Batch 22: Simple constants
-            arena_empty_sosofo,
+            arena_empty_sosofo, arena_if_first_page, arena_if_front_page,
             // Phase 3 Batch 23: Grove operations
             arena_current_node,
             // Phase 3 Batch 24: Grove node properties
@@ -944,10 +945,11 @@ impl Evaluator {
             "set-cdr!" => arena_set_cdr(&mut self.arena, &arena_args),
             "list-tail" => arena_list_tail(&self.arena, &arena_args),
 
-            // Phase 3 Batch 12: String utilities (6)
+            // Phase 3 Batch 12: String utilities (7)
             "string-upcase" => arena_string_upcase(&mut self.arena, &arena_args),
             "string-downcase" => arena_string_downcase(&mut self.arena, &arena_args),
             "case-fold-down" => arena_case_fold_down(&mut self.arena, &arena_args), // DSSSL alias for string-downcase
+            "string-index" => arena_string_index(&mut self.arena, &arena_args),
             "string->number" => arena_string_to_number_radix(&mut self.arena, &arena_args), // Updated to support radix
             "number->string" => arena_number_to_string_radix(&mut self.arena, &arena_args), // Updated to support radix
             "string->list" => arena_string_to_list(&mut self.arena, &arena_args),
@@ -1019,6 +1021,8 @@ impl Evaluator {
 
             // Phase 3 Batch 22: Simple constants (1)
             "empty-sosofo" => arena_empty_sosofo(&mut self.arena, &arena_args),
+            "if-first-page" => arena_if_first_page(&mut self.arena, &arena_args),
+            "if-front-page" => arena_if_front_page(&mut self.arena, &arena_args),
 
             // Phase 3 Batch 23: Grove operations (1)
             "current-node" => arena_current_node(&mut self.arena, &arena_args),
@@ -2557,6 +2561,9 @@ impl Evaluator {
                         if let Value::Symbol(ref name) = opt_list[0] {
                             param_names.push(name.to_string());
                             // Store the unevaluated default expression
+                            if std::env::var("DEBUG_OPTIONAL").is_ok() {
+                                eprintln!("[DEBUG_OPTIONAL] Storing default for param '{}': {:?}", name, opt_list[1]);
+                            }
                             optional_defaults.push(opt_list[1].clone());
                         } else {
                             return Err(EvalError::new(format!(
@@ -3435,8 +3442,9 @@ impl Evaluator {
                         // Phase 3 Batch 11: Additional type predicates & utilities (5)
                         "vector?" | "procedure?" |
                         "set-car!" | "set-cdr!" | "list-tail" |
-                        // Phase 3 Batch 12: String utilities (7)
+                        // Phase 3 Batch 12: String utilities (8)
                         "string-upcase" | "string-downcase" | "case-fold-down" |
+                        "string-index" |
                         "string->number" | "number->string" |
                         "string->list" | "list->string" |
                         // Phase 3 Batch 13: Miscellaneous utilities (7)
@@ -3624,8 +3632,23 @@ impl Evaluator {
                             let param_name = &params[param_idx];
                             let default_expr = &optional_defaults[num_optional_provided + i];
 
+                            if std::env::var("DEBUG_OPTIONAL").is_ok() {
+                                eprintln!("[DEBUG_OPTIONAL] Evaluating default for param '{}': {:?}", param_name, default_expr);
+                                // Try to look up the parameter name in the environment
+                                if let Some(val) = env.lookup(param_name) {
+                                    eprintln!("[DEBUG_OPTIONAL] Found '{}' in closure env: {:?}", param_name, val);
+                                } else {
+                                    eprintln!("[DEBUG_OPTIONAL] '{}' not found in closure env (expected)", param_name);
+                                }
+                            }
+
                             // Evaluate default expression in the closure environment
                             let default_value = self.eval_inner(default_expr.clone(), env.clone())?;
+
+                            if std::env::var("DEBUG_OPTIONAL").is_ok() {
+                                eprintln!("[DEBUG_OPTIONAL] Evaluated to: {:?}", default_value);
+                            }
+
                             lambda_env.define(param_name, default_value);
                         }
                     }

@@ -1191,5 +1191,17 @@ fn resolve_xml_template(
         anyhow::bail!("No Scheme code extracted from XML template");
     }
 
+    // Apply SGML preprocessing to the final assembled template
+    // This catches any SGML marked sections in inline code that weren't preprocessed during entity loading
+    if std::env::var("SGML_DEBUG").is_ok() && result.contains("<![%") {
+        eprintln!("[SGML_DEBUG] Preprocessing final assembled template");
+        eprintln!("[SGML_DEBUG] Has {} marked sections before preprocessing", result.matches("<![%").count());
+        eprintln!("[SGML_DEBUG] Using {} parameter entities", sgml_parameter_entities.len());
+    }
+    let result = strip_sgml_conditionals(&result, Some(&sgml_parameter_entities));
+    if std::env::var("SGML_DEBUG").is_ok() {
+        eprintln!("[SGML_DEBUG] Has {} marked sections after preprocessing", result.matches("<![%").count());
+    }
+
     Ok((result, line_mappings, external_specs))
 }

@@ -2538,6 +2538,27 @@ pub fn arena_case_fold_down(arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
     arena_string_downcase(arena, args)
 }
 
+/// (string-index str char-or-string) → integer
+/// Find the index of the first occurrence of a character/substring in a string
+/// Returns the 0-based index, or -1 if not found
+#[inline]
+pub fn arena_string_index(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+    if args.len() != 2 {
+        return Err("string-index requires exactly 2 arguments".to_string());
+    }
+
+    match (arena.get(args[0]), arena.get(args[1])) {
+        (ValueData::String(s), ValueData::String(search)) => {
+            // Search for the substring/character
+            match s.find(search.as_str()) {
+                Some(idx) => Ok(arena.int(idx as i64)),
+                None => Ok(arena.int(-1)),
+            }
+        }
+        _ => Err("string-index: both arguments must be strings".to_string()),
+    }
+}
+
 /// (string->number str) → number or #f
 /// Parse a string as a number
 #[inline]
@@ -3975,6 +3996,34 @@ pub fn arena_empty_sosofo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     }
 
     Ok(arena.alloc(ValueData::Sosofo))
+}
+
+/// (if-first-page then-sosofo else-sosofo) → sosofo
+/// Returns then-sosofo if on the first page, else-sosofo otherwise.
+/// This is a stub implementation for RTF backend - always returns else-sosofo (not first page).
+#[inline]
+pub fn arena_if_first_page(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+    if args.len() != 2 {
+        return Err("if-first-page: expected 2 arguments (then-sosofo else-sosofo)".to_string());
+    }
+
+    // Stub: always return else-sosofo (second argument)
+    // In a full RTF implementation, this would check page state
+    Ok(args[1])
+}
+
+/// (if-front-page then-sosofo else-sosofo) → sosofo
+/// Returns then-sosofo if in front matter, else-sosofo otherwise.
+/// This is a stub implementation for RTF backend - always returns else-sosofo (not in front matter).
+#[inline]
+pub fn arena_if_front_page(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+    if args.len() != 2 {
+        return Err("if-front-page: expected 2 arguments (then-sosofo else-sosofo)".to_string());
+    }
+
+    // Stub: always return else-sosofo (second argument)
+    // In a full RTF implementation, this would check if we're in front matter
+    Ok(args[1])
 }
 
 // =============================================================================
