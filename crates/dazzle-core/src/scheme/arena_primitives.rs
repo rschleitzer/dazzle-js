@@ -5488,7 +5488,24 @@ pub fn arena_node_property(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     let _node = if args.len() == 2 {
         match arena.get(args[1]) {
             ValueData::Node(n) => n.clone(),
-            _ => return Err("node-property: second argument must be a node".to_string()),
+            ValueData::NodeList(nl) => {
+                // Accept singleton node-lists (DSSSL pattern: current-node returns singleton)
+                if nl.is_empty() {
+                    return Ok(crate::scheme::arena::FALSE_ID);
+                }
+                let first = nl.first();
+                let rest = nl.rest();
+                if rest.is_empty() {
+                    // Singleton node-list -> extract the node
+                    Rc::new(first.unwrap())
+                } else {
+                    // Multi-element node-list -> error
+                    return Err("node-property: node-list must be a singleton".to_string());
+                }
+            }
+            _ => {
+                return Err("node-property: second argument must be a node or singleton node-list".to_string());
+            }
         }
     } else {
         match &arena.current_node {
