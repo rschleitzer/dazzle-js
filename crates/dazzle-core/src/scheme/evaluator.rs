@@ -646,7 +646,7 @@ impl Evaluator {
             arena_vector_p, arena_procedure_p,
             arena_set_car, arena_set_cdr, arena_list_tail,
             // Phase 3 Batch 12: String utilities
-            arena_string_upcase, arena_string_downcase,
+            arena_string_upcase, arena_string_downcase, arena_case_fold_down,
             arena_string_to_list, arena_list_to_string,
             // Phase 3 Batch 13: Miscellaneous utilities
             arena_gcd, arena_lcm,
@@ -947,6 +947,7 @@ impl Evaluator {
             // Phase 3 Batch 12: String utilities (6)
             "string-upcase" => arena_string_upcase(&mut self.arena, &arena_args),
             "string-downcase" => arena_string_downcase(&mut self.arena, &arena_args),
+            "case-fold-down" => arena_case_fold_down(&mut self.arena, &arena_args), // DSSSL alias for string-downcase
             "string->number" => arena_string_to_number_radix(&mut self.arena, &arena_args), // Updated to support radix
             "number->string" => arena_number_to_string_radix(&mut self.arena, &arena_args), // Updated to support radix
             "string->list" => arena_string_to_list(&mut self.arena, &arena_args),
@@ -3434,8 +3435,8 @@ impl Evaluator {
                         // Phase 3 Batch 11: Additional type predicates & utilities (5)
                         "vector?" | "procedure?" |
                         "set-car!" | "set-cdr!" | "list-tail" |
-                        // Phase 3 Batch 12: String utilities (6)
-                        "string-upcase" | "string-downcase" |
+                        // Phase 3 Batch 12: String utilities (7)
+                        "string-upcase" | "string-downcase" | "case-fold-down" |
                         "string->number" | "number->string" |
                         "string->list" | "list->string" |
                         // Phase 3 Batch 13: Miscellaneous utilities (7)
