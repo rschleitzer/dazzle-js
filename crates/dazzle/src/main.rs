@@ -15,6 +15,7 @@ use dazzle_core::scheme::parser::Parser as SchemeParser;
 use dazzle_core::scheme::primitives;
 use dazzle_core::sgml_preprocess;
 use dazzle_grove_libxml2::LibXml2Grove;
+use regex::Regex;
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -1130,9 +1131,10 @@ fn resolve_xml_template(
 
                         // Now strip inline CDATA markers (common in .scm files that embed XML content)
                         // These appear as: ($<![CDATA[ ... ]]>)
-                        // We replace them with empty strings to preserve line numbers
-                        content = content.replace("<![CDATA[", "");
-                        content = content.replace("]]>", "");
+                        // We replace COMPLETE CDATA sections, not just the markers independently
+                        // This prevents removing ]]> closings that belong to marked sections
+                        let cdata_re = Regex::new(r"<!\[CDATA\[(.*?)\]\]>").unwrap();
+                        content = cdata_re.replace_all(&content, "$1").to_string();
 
                         // Resolve SGML character entity references (&#RE, &#RS, etc.)
                         content = resolve_sgml_entities(&content);
@@ -1170,8 +1172,9 @@ fn resolve_xml_template(
             let mut processed_line = line.to_string();
 
             // Strip CDATA markers (may appear in inline code)
-            processed_line = processed_line.replace("<![CDATA[", "");
-            processed_line = processed_line.replace("]]>", "");
+            // Only strip complete CDATA sections, not individual ]]> which may belong to marked sections
+            let cdata_re = Regex::new(r"<!\[CDATA\[(.*?)\]\]>").unwrap();
+            processed_line = cdata_re.replace_all(&processed_line, "$1").to_string();
 
             // Add it to the result
             result.push_str(&processed_line);
