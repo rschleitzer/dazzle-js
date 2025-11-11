@@ -1127,7 +1127,7 @@ impl Evaluator {
             "current-language" => arena_current_language(&self.arena, &arena_args),
             "current-mode" => arena_current_mode(&self.arena, &arena_args),
             "current-node-address" => arena_current_node_address(&self.arena, &arena_args),
-            "current-node-page-number-sosofo" => arena_current_node_page_number_sosofo(&self.arena, &arena_args),
+            "current-node-page-number-sosofo" => arena_current_node_page_number_sosofo(&mut self.arena, &arena_args),
             "debug" => arena_debug(&self.arena, &arena_args),
 
             // Phase 3 Batch 40: Unwired existing primitives (5)
@@ -1190,7 +1190,7 @@ impl Evaluator {
             "set-visited!" => arena_set_visited(&self.arena, &arena_args),
             // Phase 3 Batch 51: Sosofo and navigation stubs (4)
             "sosofo-contains-node?" => arena_sosofo_contains_node_p(&self.arena, &arena_args),
-            "page-number-sosofo" => arena_page_number_sosofo(&self.arena, &arena_args),
+            "page-number-sosofo" => arena_page_number_sosofo(&mut self.arena, &arena_args),
             "ifollow" => arena_ifollow(&self.arena, &arena_args),
             "with-language" => arena_with_language(&self.arena, &arena_args),
             // Phase 3 Batch 52: Element numbering stubs (3)
