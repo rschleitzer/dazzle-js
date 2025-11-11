@@ -1169,7 +1169,7 @@ impl Evaluator {
             // Phase 3 Batch 47: String comparison and simple stubs (3)
             "string-equiv?" => arena_string_equiv_p(&self.arena, &arena_args),
             "label-length" => arena_label_length(&mut self.arena, &arena_args),
-            "external-procedure" => arena_external_procedure(&self.arena, &arena_args),
+            "external-procedure" => arena_external_procedure(&mut self.arena, &arena_args),
             // Phase 3 Batch 48: DTD/SGML stubs (6)
             "declaration" => arena_declaration(&self.arena, &arena_args),
             "dtd" => arena_dtd(&self.arena, &arena_args),
