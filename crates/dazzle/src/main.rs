@@ -801,11 +801,11 @@ fn resolve_xml_template(
                     }
                 }
 
-                sgml_parameter_entities.extend(local_params);
+                sgml_parameter_entities.extend(local_params.clone());
 
                 // Strip SGML conditional sections (e.g., <![%l10n-en[ ... ]]>)
-                // Pass None here since we just extracted the parameter entities above
-                let stripped_content = strip_sgml_conditionals(&param_content, None);
+                // Pass the extracted parameter entities so marked sections can be expanded
+                let stripped_content = strip_sgml_conditionals(&param_content, Some(&local_params));
 
                 // Parse entity declarations from the parameter entity file
                 // Handle multi-line entity declarations by accumulating lines
