@@ -157,12 +157,6 @@ fn expand_conditional_sections(
                     Some("INCLUDE") => {
                         // Include the content
                         result.push_str(&section_content);
-
-                        // Debug: show English INCLUDE expansions
-                        if entity_name == "l10n-en" {
-                            eprintln!("[SGML_DEBUG] INCLUDE entity=l10n-en, content_preview={:?}",
-                                &section_content[..std::cmp::min(80, section_content.len())]);
-                        }
                     }
                     Some("IGNORE") | None => {
                         // Skip the content (don't add anything)
