@@ -786,27 +786,12 @@ fn resolve_xml_template(
     for (_param_name, param_file) in &parameter_entities {
         let param_path = template_dir.join(param_file);
 
-        // Always show which parameter entity files are being processed
-        eprintln!("[DAZZLE] Loading parameter entity file: {}", param_file);
-        eprintln!("[DAZZLE] Path: {}", param_path.display());
-
         match fs::read_to_string(&param_path) {
             Ok(param_content) => {
                 // Extract SGML parameter entity declarations from this file
                 // (e.g., <!ENTITY % l10n-en "INCLUDE">)
                 // These will be available when preprocessing other files
                 let local_params = sgml_preprocess::extract_parameter_entities(&param_content);
-
-                eprintln!("[DAZZLE] Found {} parameter entities in {}", local_params.len(), param_file);
-
-                // Debug output
-                if std::env::var("SGML_DEBUG").is_ok() {
-                    eprintln!("[SGML_DEBUG] Parameter entity file: {}", param_file);
-                    eprintln!("[SGML_DEBUG] Found {} parameter entities:", local_params.len());
-                    for (name, value) in &local_params {
-                        eprintln!("[SGML_DEBUG]   {} = {}", name, value);
-                    }
-                }
 
                 sgml_parameter_entities.extend(local_params.clone());
 
@@ -991,11 +976,6 @@ fn resolve_xml_template(
 
                 // Strip SGML conditional sections (e.g., <![%l10n-en[ ... ]]>)
                 // Pass the collected parameter entities from .ent files
-                if std::env::var("SGML_DEBUG").is_ok() && spec_content.contains("<![%") {
-                    eprintln!("[SGML_DEBUG] Processing external spec file: {}", spec_file);
-                    eprintln!("[SGML_DEBUG] Has {} marked sections before preprocessing", spec_content.matches("<![%").count());
-                    eprintln!("[SGML_DEBUG] Using {} parameter entities", sgml_parameter_entities.len());
-                }
                 spec_content = strip_sgml_conditionals(&spec_content, Some(&sgml_parameter_entities));
 
                 // Recursively resolve external spec if it's XML-wrapped
@@ -1113,27 +1093,6 @@ fn resolve_xml_template(
                         // Pass the collected parameter entities from .ent files so marked sections
                         // in .dsl files can be expanded correctly
                         // Pattern: <![%entity-name[  ->  empty string (if INCLUDE) or removed (if IGNORE)
-                        if content.contains("<![%") {
-                            eprintln!("[DAZZLE] Entity file {} has {} marked sections", filename, content.matches("<![%").count());
-                            eprintln!("[DAZZLE] Available parameter entities: {}", sgml_parameter_entities.len());
-                            // Show first few marked sections and check if entities exist
-                            for section in content.match_indices("<![%").take(3) {
-                                let start = section.0;
-                                let preview = &content[start..std::cmp::min(start + 60, content.len())];
-                                eprintln!("[DAZZLE]   Sample: {}", preview);
-                            }
-                            // Check if l10n-en entity exists
-                            if let Some(value) = sgml_parameter_entities.get("l10n-en") {
-                                eprintln!("[DAZZLE] l10n-en entity = {}", value);
-                            } else {
-                                eprintln!("[DAZZLE] WARNING: l10n-en entity NOT FOUND!");
-                            }
-                        }
-                        if std::env::var("SGML_DEBUG").is_ok() && content.contains("<![%") {
-                            eprintln!("[SGML_DEBUG] Processing entity file: {}", filename);
-                            eprintln!("[SGML_DEBUG] Has {} marked sections before preprocessing", content.matches("<![%").count());
-                            eprintln!("[SGML_DEBUG] Using {} parameter entities", sgml_parameter_entities.len());
-                        }
                         content = strip_sgml_conditionals(&content, Some(&sgml_parameter_entities));
 
                         // Strip CDATA wrappers if present
@@ -1224,15 +1183,7 @@ fn resolve_xml_template(
 
     // Apply SGML preprocessing to the final assembled template
     // This catches any SGML marked sections in inline code that weren't preprocessed during entity loading
-    if std::env::var("SGML_DEBUG").is_ok() && result.contains("<![%") {
-        eprintln!("[SGML_DEBUG] Preprocessing final assembled template");
-        eprintln!("[SGML_DEBUG] Has {} marked sections before preprocessing", result.matches("<![%").count());
-        eprintln!("[SGML_DEBUG] Using {} parameter entities", sgml_parameter_entities.len());
-    }
     let result = strip_sgml_conditionals(&result, Some(&sgml_parameter_entities));
-    if std::env::var("SGML_DEBUG").is_ok() {
-        eprintln!("[SGML_DEBUG] Has {} marked sections after preprocessing", result.matches("<![%").count());
-    }
 
     Ok((result, line_mappings, external_specs))
 }
