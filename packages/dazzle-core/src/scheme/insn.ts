@@ -115,11 +115,13 @@ export class AndInsn extends Insn {
 /**
  * Case instruction - Pattern matching
  * Port from: Insn.h CaseInsn
+ *
+ * TODO: Full implementation pending
  */
 export class CaseInsn extends Insn {
   constructor(
-    private _key: ELObj,
-    private match: Insn | null,
+    private _key: ELObj,      // Will be used for equality check
+    private _match: Insn | null,  // Will be used when key matches
     private fail: Insn | null
   ) {
     super();
