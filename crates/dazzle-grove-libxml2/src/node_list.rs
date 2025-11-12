@@ -7,10 +7,14 @@
 //! OpenJade uses lazy evaluation for node lists - they don't materialize
 //! all nodes immediately. Instead, they act like iterators/generators.
 //!
-//! For Phase 3, we use an eager approach (Vec-based) for simplicity:
-//! - Easier to implement and debug
-//! - Adequate performance for code generation workloads
-//! - Can optimize later if profiling shows it matters
+//! ## Optimization Strategy
+//!
+//! Originally used Vec-based approach with `to_vec()` in `rest()`, causing O(N²)
+//! iteration complexity. Now uses Rc<[LibXml2Node]> + offset for O(1) rest():
+//! - Shared ownership via Rc (cheap clones)
+//! - Slice offset for efficient sub-lists
+//! - O(1) first() and rest() operations
+//! - Maintains functional/persistent semantics
 //!
 //! ## DSSSL Semantics
 //!
@@ -20,79 +24,112 @@
 //! - Lists are persistent (no mutation)
 
 use dazzle_core::grove::{Node, NodeList};
+use std::rc::Rc;
 
 use crate::node::LibXml2Node;
 
 /// A list of nodes
 ///
-/// Implemented as Vec for simplicity. Can be optimized later if needed.
+/// Implemented with Rc<[LibXml2Node]> + offset for efficient sublisting.
+///
+/// ## Performance
+///
+/// - first(): O(1)
+/// - rest(): O(1) (just increments offset, shares underlying slice)
+/// - length(): O(1)
+/// - get(): O(1)
+/// - Iteration over N elements: O(N) total (not O(N²)!)
 ///
 /// ## Memory Management
 ///
-/// Nodes are cloned (Rc-based, so cheap) when creating sublists.
-/// This maintains functional semantics without excessive copying.
+/// Multiple node-lists can share the same underlying Rc<[LibXml2Node]> with
+/// different offsets. The slice is only freed when all node-lists are dropped.
 pub struct LibXml2NodeList {
-    /// The nodes in this list
+    /// The nodes in this list (shared via Rc)
     ///
-    /// Using Vec for eager evaluation. Alternative approaches:
-    /// - Iterator-based (lazy, like OpenJade)
-    /// - Arc<[LibXml2Node]> (cheaper cloning)
-    /// - Rc slice (functional persistent data structure)
-    nodes: Vec<LibXml2Node>,
+    /// Using Rc<[LibXml2Node]> for efficient sharing without copying.
+    /// This is immutable after creation, so no RefCell needed.
+    nodes: Rc<[LibXml2Node]>,
+
+    /// Offset into the nodes slice
+    ///
+    /// Allows `rest()` to create a sub-list in O(1) time by just
+    /// incrementing the offset instead of copying the Vec.
+    offset: usize,
 }
 
 impl LibXml2NodeList {
     /// Create an empty node list
     pub fn empty() -> Self {
-        LibXml2NodeList { nodes: Vec::new() }
+        LibXml2NodeList {
+            nodes: Rc::from(Vec::new()),
+            offset: 0,
+        }
     }
 
     /// Create a node list from a Vec of nodes
     pub(crate) fn from_vec(nodes: Vec<LibXml2Node>) -> Self {
-        LibXml2NodeList { nodes }
+        LibXml2NodeList {
+            nodes: Rc::from(nodes),
+            offset: 0,
+        }
     }
 
-    /// Get the underlying Vec (for internal use)
+    /// Get the underlying slice (for internal use)
     #[allow(dead_code)]
     pub(crate) fn nodes(&self) -> &[LibXml2Node] {
-        &self.nodes
+        &self.nodes[self.offset..]
     }
 }
 
 impl NodeList for LibXml2NodeList {
     fn is_empty(&self) -> bool {
-        self.nodes.is_empty()
+        self.offset >= self.nodes.len()
     }
 
     fn first(&self) -> Option<Box<dyn Node>> {
-        self.nodes
-            .first()
-            .map(|node| Box::new(node.clone()) as Box<dyn Node>)
+        if self.offset < self.nodes.len() {
+            Some(Box::new(self.nodes[self.offset].clone()) as Box<dyn Node>)
+        } else {
+            None
+        }
     }
 
     fn rest(&self) -> Box<dyn NodeList> {
-        if self.nodes.len() <= 1 {
+        if self.offset + 1 >= self.nodes.len() {
             Box::new(LibXml2NodeList::empty())
         } else {
-            Box::new(LibXml2NodeList::from_vec(self.nodes[1..].to_vec()))
+            // Share the same Rc, just increment offset - O(1) operation!
+            Box::new(LibXml2NodeList {
+                nodes: Rc::clone(&self.nodes),
+                offset: self.offset + 1,
+            })
         }
     }
 
     fn length(&self) -> usize {
-        self.nodes.len()
+        if self.offset < self.nodes.len() {
+            self.nodes.len() - self.offset
+        } else {
+            0
+        }
     }
 
     fn get(&self, index: usize) -> Option<Box<dyn Node>> {
-        self.nodes
-            .get(index)
-            .map(|node| Box::new(node.clone()) as Box<dyn Node>)
+        let actual_index = self.offset + index;
+        if actual_index < self.nodes.len() {
+            Some(Box::new(self.nodes[actual_index].clone()) as Box<dyn Node>)
+        } else {
+            None
+        }
     }
 }
 
 impl std::fmt::Debug for LibXml2NodeList {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LibXml2NodeList")
-            .field("length", &self.nodes.len())
+            .field("length", &self.length())
+            .field("offset", &self.offset)
             .finish()
     }
 }
@@ -101,7 +138,8 @@ impl std::fmt::Debug for LibXml2NodeList {
 impl Clone for LibXml2NodeList {
     fn clone(&self) -> Self {
         LibXml2NodeList {
-            nodes: self.nodes.clone(),
+            nodes: Rc::clone(&self.nodes),
+            offset: self.offset,
         }
     }
 }
