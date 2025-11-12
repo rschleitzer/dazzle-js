@@ -112,10 +112,187 @@ export class AndInsn extends Insn {
   }
 }
 
-// More instruction types will be added as we implement the compiler:
-// - CaseInsn (pattern matching)
+/**
+ * Pop instruction - Pop top value from stack
+ * Port from: Insn.h PopInsn
+ */
+export class PopInsn extends Insn {
+  constructor(private next: Insn | null) {
+    super();
+  }
 
-// - CallInsn (function calls)
+  execute(vm: VM): Insn | null {
+    vm.pop();
+    return this.next;
+  }
+}
+
+/**
+ * Cons instruction - Create a pair from top two stack values
+ * Port from: Insn.h ConsInsn
+ */
+export class ConsInsn extends Insn {
+  constructor(private next: Insn | null) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    const cdr = vm.pop();
+    const car = vm.pop();
+    const pair = vm.makePair(car, cdr);
+    vm.push(pair);
+    return this.next;
+  }
+}
+
+/**
+ * Case instruction - Pattern matching for case expression
+ * Port from: Insn.h CaseInsn
+ */
+export class CaseInsn extends Insn {
+  constructor(
+    private obj: ELObj,
+    private match: Insn | null,
+    private fail: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    const value = vm.peek();
+    if (this.eqv(value, this.obj)) {
+      vm.pop(); // Pop the matched value
+      return this.match;
+    }
+    return this.fail;
+  }
+
+  /**
+   * R4RS eqv? predicate
+   * Port from: ELObj.h ELObj::eqv()
+   */
+  private eqv(obj1: ELObj, obj2: ELObj): boolean {
+    // Identity check
+    if (obj1 === obj2) return true;
+
+    // Type-specific equivalence
+    const num1 = obj1.asNumber();
+    const num2 = obj2.asNumber();
+    if (num1 && num2) {
+      return num1.exact === num2.exact && num1.value === num2.value;
+    }
+
+    const bool1 = obj1.asBoolean();
+    const bool2 = obj2.asBoolean();
+    if (bool1 && bool2) {
+      return bool1.value === bool2.value;
+    }
+
+    const sym1 = obj1.asSymbol();
+    const sym2 = obj2.asSymbol();
+    if (sym1 && sym2) {
+      return sym1.name === sym2.name;
+    }
+
+    // Characters would go here when implemented
+
+    return false;
+  }
+}
+
+/**
+ * FrameRef instruction - Access variable from current stack frame
+ * Port from: Insn.h FrameRefInsn
+ *
+ * Accesses function arguments: frame[index]
+ */
+export class FrameRefInsn extends Insn {
+  constructor(
+    private index: number,
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    const value = vm.getFrame(this.index);
+    vm.push(value);
+    return this.next;
+  }
+}
+
+/**
+ * StackRef instruction - Access variable relative to stack pointer
+ * Port from: Insn.h StackRefInsn
+ *
+ * Accesses stack at: sp[index] where index is negative
+ */
+export class StackRefInsn extends Insn {
+  constructor(
+    private index: number,        // negative offset from sp
+    private frameIndex: number,   // for debugging/validation
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    const value = vm.getStackRelative(this.index);
+    vm.push(value);
+    return this.next;
+  }
+}
+
+/**
+ * ClosureRef instruction - Access captured variable from closure
+ * Port from: Insn.h ClosureRefInsn
+ *
+ * Accesses closure[index]
+ */
+export class ClosureRefInsn extends Insn {
+  constructor(
+    private index: number,
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    const value = vm.getClosure(this.index);
+    vm.push(value);
+    return this.next;
+  }
+}
+
+/**
+ * TestNull instruction - Branch based on whether value is null/undefined
+ * Port from: Insn.h TestNullInsn
+ *
+ * Tests stack[offset] for null
+ */
+export class TestNullInsn extends Insn {
+  constructor(
+    private offset: number,
+    private ifNull: Insn | null,
+    private ifNotNull: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    const value = vm.getStackValue(this.offset);
+    // In Scheme/DSSSL, we test for nil (empty list) not JavaScript null
+    if (value.asNil()) {
+      return this.ifNull;
+    }
+    return this.ifNotNull;
+  }
+}
+
+// More instruction types will be added as we implement the compiler:
+// - ReturnInsn (needs control stack implementation)
+// - AppendInsn (list append - more complex, will add when needed)
+// - CallInsn (function calls - needs control stack)
 // - LetInsn (let bindings)
 // - DefineInsn (define)
 // - LambdaInsn (lambda)

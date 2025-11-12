@@ -9,6 +9,7 @@
 
 import type { ELObj } from './elobj';
 import type { Insn } from './insn';
+import { makePair as makeELObjPair } from './elobj';
 
 /**
  * VM class - Virtual machine for executing bytecode
@@ -24,13 +25,22 @@ export class VM {
   /** Stack limit */
   private stackLimit: number = 10000;
 
-  /** Closure - for accessing lexical variables */
+  /**
+   * Closure - for accessing lexical variables (captured from outer scope)
+   * Port from: VM.h ELObj **closure
+   */
   public closure: ELObj[] | null = null;
 
-  /** Frame pointer - for function arguments */
-  public frame: number = 0;
+  /**
+   * Frame pointer - points to current function's arguments on the stack
+   * Port from: VM.h ELObj **frame
+   */
+  public frameIndex: number = 0;
 
-  /** Number of actual arguments in current call */
+  /**
+   * Number of actual arguments in current call
+   * Port from: VM.h int nActualArgs
+   */
   public nActualArgs: number = 0;
 
   constructor() {
@@ -105,6 +115,66 @@ export class VM {
    */
   stackSize(): number {
     return this.sp;
+  }
+
+  /**
+   * Create a pair (cons cell)
+   * Port from: Interpreter.cxx Interpreter::makePair()
+   */
+  makePair(car: ELObj, cdr: ELObj): ELObj {
+    return makeELObjPair(car, cdr);
+  }
+
+  /**
+   * Access frame variable by index
+   * Port from: VM.h vm.frame[index]
+   */
+  getFrame(index: number): ELObj {
+    if (index < 0 || this.frameIndex + index >= this.sp) {
+      throw new Error(`Frame index ${index} out of bounds`);
+    }
+    return this.stack[this.frameIndex + index];
+  }
+
+  /**
+   * Access stack variable relative to sp (index is negative)
+   * Port from: VM.h vm.sp[index]
+   */
+  getStackRelative(index: number): ELObj {
+    if (index >= 0) {
+      throw new Error(`Stack relative index must be negative, got ${index}`);
+    }
+    const absoluteIndex = this.sp + index;
+    if (absoluteIndex < 0) {
+      throw new Error(`Stack relative index ${index} out of bounds (stack size: ${this.sp})`);
+    }
+    return this.stack[absoluteIndex];
+  }
+
+  /**
+   * Access closure variable by index
+   * Port from: VM.h vm.closure[index]
+   */
+  getClosure(index: number): ELObj {
+    if (!this.closure) {
+      throw new Error('No closure available');
+    }
+    if (index < 0 || index >= this.closure.length) {
+      throw new Error(`Closure index ${index} out of bounds`);
+    }
+    return this.closure[index];
+  }
+
+  /**
+   * Access stack value by absolute index
+   * Port from: VM.h vm.sp[offset] (where offset can be positive or negative)
+   */
+  getStackValue(offset: number): ELObj {
+    const index = offset >= 0 ? offset : this.sp + offset;
+    if (index < 0 || index >= this.sp) {
+      throw new Error(`Stack index ${offset} out of bounds`);
+    }
+    return this.stack[index];
   }
 
   /**
