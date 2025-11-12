@@ -196,10 +196,10 @@ pub struct ConstructionRule {
 /// Corresponds to OpenJade's `ProcessingMode` class.
 /// Stores all element construction rules defined in the template.
 pub struct ProcessingMode {
-    /// Construction rules indexed by element name
-    /// In OpenJade, rules are stored in intrusive linked lists and indexed lazily.
-    /// We use a simple Vec for now - can optimize later with HashMap if needed.
-    pub rules: Vec<ConstructionRule>,
+    /// Construction rules indexed by element name for O(1) lookup
+    /// HashMap<element_name, Vec<rules_for_that_element>>
+    /// This avoids linear search through all rules for every element.
+    pub rules: std::collections::HashMap<String, Vec<ConstructionRule>>,
 
     /// Default construction rule (fallback when no specific rule matches)
     pub default_rule: Option<Value>,
@@ -209,20 +209,24 @@ impl ProcessingMode {
     /// Create a new empty processing mode
     pub fn new() -> Self {
         ProcessingMode {
-            rules: Vec::new(),
+            rules: std::collections::HashMap::new(),
             default_rule: None,
         }
     }
 
     /// Add a construction rule
     pub fn add_rule(&mut self, element_name: String, context: Vec<String>, expr: Value, source_file: Option<String>, source_pos: Option<Position>) {
-        self.rules.push(ConstructionRule {
-            element_name,
-            context,
-            expr,
-            source_file,
-            source_pos
-        });
+        // Insert rule into HashMap, grouped by element name
+        self.rules
+            .entry(element_name.clone())
+            .or_insert_with(Vec::new)
+            .push(ConstructionRule {
+                element_name,
+                context,
+                expr,
+                source_file,
+                source_pos
+            });
     }
 
     /// Add a default construction rule
@@ -234,12 +238,16 @@ impl ProcessingMode {
     ///
     /// Corresponds to OpenJade's `ProcessingMode::findMatch()`.
     /// Returns the first rule matching the given element name and context.
+    ///
+    /// OPTIMIZATION: Uses HashMap lookup by element name (O(1)) instead of
+    /// linear search through all rules (O(N)). Critical for large documents!
     pub fn find_match(&self, gi: &str, node: &dyn crate::grove::Node) -> Option<&ConstructionRule> {
-        self.rules.iter().find(|rule| {
-            // Element name must match
-            if rule.element_name != gi {
-                return false;
-            }
+        // Fast path: lookup rules for this specific element name
+        let rules_for_element = self.rules.get(gi)?;
+
+        // Now search only among rules for this element (typically 1-5 rules)
+        rules_for_element.iter().find(|rule| {
+            // Element name already matches (we looked it up by GI)
 
             // If rule has no context, it matches any parent
             if rule.context.is_empty() {
