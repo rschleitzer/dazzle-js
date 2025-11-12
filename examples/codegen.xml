@@ -1,9 +1,0 @@
-<?xml version="1.0"?>
-<class name="Person" package="com.example">
-  <field name="firstName" type="String"/>
-  <field name="lastName" type="String"/>
-  <field name="age" type="int"/>
-  <method name="getFullName" returnType="String">
-    <body>return firstName + " " + lastName;</body>
-  </method>
-</class>

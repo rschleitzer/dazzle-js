@@ -1,7 +1,0 @@
-<?xml version="1.0"?>
-<!DOCTYPE class SYSTEM "class.dtd">
-<class name="BadClass">
-  <!-- Missing required 'package' attribute -->
-  <field name="foo" type="String"/>
-  <invalid-element>This element is not in the DTD</invalid-element>
-</class>
