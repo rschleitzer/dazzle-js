@@ -15,8 +15,9 @@ import {
   StackRefInsn,
   ClosureRefInsn,
   ReturnInsn,
+  PrimitiveCallInsn,
 } from './insn';
-import { makeNumber, makeBoolean, makeSymbol, theTrueObj, theFalseObj, theNilObj } from './elobj';
+import { makeNumber, makeBoolean, makeSymbol, theTrueObj, theFalseObj, theNilObj, FunctionObj } from './elobj';
 
 describe('VM', () => {
   it('should execute a constant instruction', () => {
@@ -307,5 +308,80 @@ describe('VM', () => {
     // Stack should have just [200] (outer removed its 2 args: 1, 2)
     expect(vm.stackSize()).toBe(1);
     expect(vm.pop().asNumber()?.value).toBe(200);
+  });
+
+  it('should call primitive functions with PrimitiveCallInsn', () => {
+    const vm = new VM();
+
+    // Create a simple addition primitive: (+ a b)
+    const addPrimitive = new FunctionObj('+', (args) => {
+      if (args.length !== 2) {
+        throw new Error('+ requires 2 arguments');
+      }
+      const a = args[0].asNumber();
+      const b = args[1].asNumber();
+      if (!a || !b) {
+        throw new Error('+ requires numeric arguments');
+      }
+      return makeNumber(a.value + b.value);
+    });
+
+    // Build instruction sequence: push 10, push 20, call +
+    const call = new PrimitiveCallInsn(2, addPrimitive, null);
+    const push20 = new ConstantInsn(makeNumber(20), call);
+    const push10 = new ConstantInsn(makeNumber(10), push20);
+
+    const result = vm.eval(push10);
+
+    expect(result.asNumber()?.value).toBe(30);
+  });
+
+  it('should call primitive with multiple operations', () => {
+    const vm = new VM();
+
+    // Create primitives
+    const add = new FunctionObj('+', (args) => {
+      const a = args[0].asNumber()!;
+      const b = args[1].asNumber()!;
+      return makeNumber(a.value + b.value);
+    });
+
+    const mul = new FunctionObj('*', (args) => {
+      const a = args[0].asNumber()!;
+      const b = args[1].asNumber()!;
+      return makeNumber(a.value * b.value);
+    });
+
+    // Compute: (+ (* 3 4) 5) = (+ 12 5) = 17
+    // Stack operations:
+    // push 3, push 4, call *, push 5, call +
+    const callAdd = new PrimitiveCallInsn(2, add, null);
+    const push5 = new ConstantInsn(makeNumber(5), callAdd);
+    const callMul = new PrimitiveCallInsn(2, mul, push5);
+    const push4 = new ConstantInsn(makeNumber(4), callMul);
+    const push3 = new ConstantInsn(makeNumber(3), push4);
+
+    const result = vm.eval(push3);
+
+    expect(result.asNumber()?.value).toBe(17);
+  });
+
+  it('should handle primitives with zero arguments', () => {
+    const vm = new VM();
+
+    // Create a primitive that returns a constant
+    const getPi = new FunctionObj('pi', (args) => {
+      if (args.length !== 0) {
+        throw new Error('pi takes no arguments');
+      }
+      return makeNumber(3.14159);
+    });
+
+    // Call pi
+    const call = new PrimitiveCallInsn(0, getPi, null);
+
+    const result = vm.eval(call);
+
+    expect(result.asNumber()?.value).toBeCloseTo(3.14159);
   });
 });

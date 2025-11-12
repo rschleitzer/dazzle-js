@@ -159,18 +159,43 @@ export class VectorObj extends ELObj {
 }
 
 /**
+ * Primitive function callback type
+ * Port from: ELObj.h PrimitiveObj::primitiveCall()
+ */
+export type PrimitiveFunction = (args: ELObj[]) => ELObj;
+
+/**
  * Function (primitive or lambda)
- * Port from: ELObj.h FunctionObj
+ * Port from: ELObj.h FunctionObj, PrimitiveObj
  */
 export class FunctionObj extends ELObj {
   constructor(
     public name: string | null,
-    public primitive?: (...args: ELObj[]) => ELObj
+    public primitive?: PrimitiveFunction,
+    public code?: any // For closures/lambdas - will be Insn later
   ) {
     super();
   }
 
   asFunction(): FunctionObj { return this; }
+
+  /**
+   * Check if this is a primitive function
+   */
+  isPrimitive(): boolean {
+    return this.primitive !== undefined;
+  }
+
+  /**
+   * Call the primitive function
+   * Port from: ELObj.h PrimitiveObj::primitiveCall()
+   */
+  callPrimitive(args: ELObj[]): ELObj {
+    if (!this.primitive) {
+      throw new Error('Not a primitive function');
+    }
+    return this.primitive(args);
+  }
 }
 
 /**

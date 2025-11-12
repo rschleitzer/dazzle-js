@@ -324,9 +324,54 @@ export class ReturnInsn extends Insn {
   }
 }
 
+/**
+ * PrimitiveCall instruction - Call a primitive function
+ * Port from: Insn.h PrimitiveCallInsn
+ *
+ * Calls a primitive with nArgs arguments from the stack.
+ * Arguments are replaced with the result.
+ */
+export class PrimitiveCallInsn extends Insn {
+  constructor(
+    private nArgs: number,
+    private primitive: ELObj, // Must be FunctionObj with primitive
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Get the function object
+    const func = this.primitive.asFunction();
+    if (!func || !func.isPrimitive()) {
+      throw new Error('PrimitiveCallInsn requires a primitive function');
+    }
+
+    // Gather arguments from stack (they're at sp - nArgs .. sp - 1)
+    const args: ELObj[] = [];
+    for (let i = this.nArgs - 1; i >= 0; i--) {
+      args.unshift(vm.getStackValue(vm.stackSize() - this.nArgs + i));
+    }
+
+    // Call the primitive
+    const result = func.callPrimitive(args);
+
+    // Pop all arguments
+    for (let i = 0; i < this.nArgs; i++) {
+      vm.pop();
+    }
+
+    // Push result
+    vm.push(result);
+
+    return this.next;
+  }
+}
+
 // More instruction types will be added as we implement the compiler:
 // - AppendInsn (list append - more complex, will add when needed)
-// - CallInsn (function calls - needs primitive infrastructure)
+// - FunctionCallInsn (user-defined function calls)
+// - ApplyInsn (generic apply)
 // - LetInsn (let bindings)
 // - DefineInsn (define)
 // - LambdaInsn (lambda)
