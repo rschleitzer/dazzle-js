@@ -39,7 +39,7 @@ import { standardPrimitives } from './primitives';
 interface Binding {
   name: string;
   kind: 'frame' | 'stack' | 'closure';  // location kind
-  index: number;     // index (positive for frame, negative for stack, positive for closure)
+  index: number;     // index (positive for frame, ABSOLUTE for stack, positive for closure)
 }
 
 /**
@@ -67,27 +67,21 @@ export class Environment {
    * Extend environment with new stack variables (for let)
    */
   extendStack(vars: string[]): Environment {
-    const newEnv = new Environment(this.stackDepth + vars.length);
+    const baseStackPos = this.stackDepth;
+    const newEnv = new Environment(baseStackPos + vars.length);
 
-    // Copy existing bindings, adjusting stack indices
+    // Copy existing bindings unchanged (stack indices are absolute positions)
     this.bindings.forEach((binding, name) => {
-      if (binding.kind === 'stack') {
-        // Adjust stack indices - existing variables are now deeper
-        newEnv.bindings.set(name, {
-          ...binding,
-          index: binding.index - vars.length,
-        });
-      } else {
-        newEnv.bindings.set(name, binding);
-      }
+      newEnv.bindings.set(name, binding);
     });
 
-    // Add new stack variables
+    // Add new stack variables at absolute positions
+    // We push inits right-to-left, so vars[n-1] is at baseStackPos+0, vars[0] is at baseStackPos+n-1
     for (let i = 0; i < vars.length; i++) {
       newEnv.bindings.set(vars[i], {
         name: vars[i],
         kind: 'stack',
-        index: -(vars.length - i),  // Negative offset from sp
+        index: baseStackPos + (vars.length - 1 - i),  // Absolute stack position
       });
     }
 
@@ -155,10 +149,11 @@ export class Compiler {
    *
    * @param expr - S-expression to compile
    * @param env - Compilation environment
+   * @param stackPos - Current stack position (depth)
    * @param next - Next instruction to execute
    * @returns Head of instruction chain
    */
-  compile(expr: ELObj, env: Environment, next: Insn | null = null): Insn {
+  compile(expr: ELObj, env: Environment, stackPos: number = 0, next: Insn | null = null): Insn {
     // Self-evaluating constants
     if (expr.asNumber() || expr.asString() || expr.asBoolean() || expr.asChar()) {
       return new ConstantInsn(expr, next);
@@ -172,7 +167,7 @@ export class Compiler {
     // Symbols are variable references
     const sym = expr.asSymbol();
     if (sym) {
-      return this.compileVariable(sym.name, env, next);
+      return this.compileVariable(sym.name, env, stackPos, next);
     }
 
     // Lists are either special forms or function calls
@@ -185,28 +180,28 @@ export class Compiler {
         // Check for special forms
         switch (carSym.name) {
           case 'quote':
-            return this.compileQuote(pair.cdr, env, next);
+            return this.compileQuote(pair.cdr, env, stackPos, next);
           case 'if':
-            return this.compileIf(pair.cdr, env, next);
+            return this.compileIf(pair.cdr, env, stackPos, next);
           case 'lambda':
-            return this.compileLambda(pair.cdr, env, next);
+            return this.compileLambda(pair.cdr, env, stackPos, next);
           case 'define':
-            return this.compileDefine(pair.cdr, env, next);
+            return this.compileDefine(pair.cdr, env, stackPos, next);
           case 'set!':
-            return this.compileSet(pair.cdr, env, next);
+            return this.compileSet(pair.cdr, env, stackPos, next);
           case 'let':
-            return this.compileLet(pair.cdr, env, next);
+            return this.compileLet(pair.cdr, env, stackPos, next);
           case 'begin':
-            return this.compileBegin(pair.cdr, env, next);
+            return this.compileBegin(pair.cdr, env, stackPos, next);
           case 'and':
-            return this.compileAnd(pair.cdr, env, next);
+            return this.compileAnd(pair.cdr, env, stackPos, next);
           case 'or':
-            return this.compileOr(pair.cdr, env, next);
+            return this.compileOr(pair.cdr, env, stackPos, next);
         }
       }
 
       // Function call
-      return this.compileCall(car, this.listToArray(pair.cdr), env, next);
+      return this.compileCall(car, this.listToArray(pair.cdr), env, stackPos, next);
     }
 
     throw new Error(`Cannot compile expression: ${expr}`);
@@ -215,7 +210,7 @@ export class Compiler {
   /**
    * Compile variable reference
    */
-  private compileVariable(name: string, env: Environment, next: Insn | null): Insn {
+  private compileVariable(name: string, env: Environment, stackPos: number, next: Insn | null): Insn {
     const binding = env.lookup(name);
 
     if (binding) {
@@ -224,7 +219,9 @@ export class Compiler {
         case 'frame':
           return new FrameRefInsn(binding.index, next);
         case 'stack':
-          return new StackRefInsn(binding.index, binding.index, next);
+          // Convert absolute position to relative offset from current stackPos
+          const offset = binding.index - stackPos;
+          return new StackRefInsn(offset, binding.index, next);
         case 'closure':
           return new ClosureRefInsn(binding.index, next);
       }
@@ -242,7 +239,7 @@ export class Compiler {
   /**
    * Compile quote special form
    */
-  private compileQuote(args: ELObj, env: Environment, next: Insn | null): Insn {
+  private compileQuote(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
     const argsArray = this.listToArray(args);
     if (argsArray.length !== 1) {
       throw new Error('quote requires exactly 1 argument');
@@ -253,7 +250,7 @@ export class Compiler {
   /**
    * Compile if special form
    */
-  private compileIf(args: ELObj, env: Environment, next: Insn | null): Insn {
+  private compileIf(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
     const argsArray = this.listToArray(args);
     if (argsArray.length < 2 || argsArray.length > 3) {
       throw new Error('if requires 2 or 3 arguments');
@@ -263,15 +260,15 @@ export class Compiler {
     const consequent = argsArray[1];
     const alternative = argsArray[2] || theNilObj; // Unspecified if missing
 
-    const conseqInsn = this.compile(consequent, env, next);
-    const altInsn = this.compile(alternative, env, next);
-    return this.compile(test, env, new TestInsn(conseqInsn, altInsn));
+    const conseqInsn = this.compile(consequent, env, stackPos, next);
+    const altInsn = this.compile(alternative, env, stackPos, next);
+    return this.compile(test, env, stackPos, new TestInsn(conseqInsn, altInsn));
   }
 
   /**
    * Compile lambda special form
    */
-  private compileLambda(args: ELObj, env: Environment, next: Insn | null): Insn {
+  private compileLambda(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
     const argsArray = this.listToArray(args);
     if (argsArray.length < 2) {
       throw new Error('lambda requires at least 2 arguments');
@@ -311,7 +308,7 @@ export class Compiler {
   /**
    * Compile define special form (top-level only for now)
    */
-  private compileDefine(args: ELObj, env: Environment, next: Insn | null): Insn {
+  private compileDefine(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
     const argsArray = this.listToArray(args);
     if (argsArray.length !== 2) {
       throw new Error('define requires exactly 2 arguments');
@@ -330,14 +327,14 @@ export class Compiler {
   /**
    * Compile set! special form
    */
-  private compileSet(args: ELObj, env: Environment, next: Insn | null): Insn {
+  private compileSet(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
     throw new Error('set! not yet implemented');
   }
 
   /**
    * Compile let special form
    */
-  private compileLet(args: ELObj, env: Environment, next: Insn | null): Insn {
+  private compileLet(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
     const argsArray = this.listToArray(args);
     if (argsArray.length < 2) {
       throw new Error('let requires at least 2 arguments');
@@ -374,11 +371,16 @@ export class Compiler {
 
     // Compile body with extended environment
     const bodyEnv = env.extendStack(vars);
-    let result = this.compile(body, bodyEnv, new PopBindingsInsn(vars.length, next));
+    const bodyStackPos = stackPos + vars.length;
+    let result = this.compile(body, bodyEnv, bodyStackPos, new PopBindingsInsn(vars.length, next));
 
-    // Compile initializers from right to left (push order)
-    for (let i = inits.length - 1; i >= 0; i--) {
-      result = this.compile(inits[i], env, result);
+    // Compile initializers - last init compiled executes first
+    // We want to push right-to-left: inits[n-1], ..., inits[0]
+    // So compile them left-to-right: inits[0], ..., inits[n-1]
+    for (let i = 0; i < inits.length; i++) {
+      // Init i will execute with (inits.length - 1 - i) values already on stack
+      const numPushed = inits.length - 1 - i;
+      result = this.compile(inits[i], env, stackPos + numPushed, result);
     }
 
     return result;
@@ -387,17 +389,17 @@ export class Compiler {
   /**
    * Compile begin special form
    */
-  private compileBegin(args: ELObj, env: Environment, next: Insn | null): Insn {
+  private compileBegin(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
     const exprs = this.listToArray(args);
     if (exprs.length === 0) {
       return new ConstantInsn(theNilObj, next);
     }
 
     // Compile expressions from right to left
-    let result = this.compile(exprs[exprs.length - 1], env, next);
+    let result = this.compile(exprs[exprs.length - 1], env, stackPos, next);
 
     for (let i = exprs.length - 2; i >= 0; i--) {
-      result = this.compile(exprs[i], env, new PopInsn(result));
+      result = this.compile(exprs[i], env, stackPos, new PopInsn(result));
     }
 
     return result;
@@ -406,7 +408,7 @@ export class Compiler {
   /**
    * Compile and special form
    */
-  private compileAnd(args: ELObj, env: Environment, next: Insn | null): Insn {
+  private compileAnd(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
     const exprs = this.listToArray(args);
 
     if (exprs.length === 0) {
@@ -414,14 +416,14 @@ export class Compiler {
     }
 
     if (exprs.length === 1) {
-      return this.compile(exprs[0], env, next);
+      return this.compile(exprs[0], env, stackPos, next);
     }
 
     // Compile from right to left
-    let result = this.compile(exprs[exprs.length - 1], env, next);
+    let result = this.compile(exprs[exprs.length - 1], env, stackPos, next);
 
     for (let i = exprs.length - 2; i >= 0; i--) {
-      result = this.compile(exprs[i], env, new AndInsn(result, next));
+      result = this.compile(exprs[i], env, stackPos, new AndInsn(result, next));
     }
 
     return result;
@@ -430,7 +432,7 @@ export class Compiler {
   /**
    * Compile or special form
    */
-  private compileOr(args: ELObj, env: Environment, next: Insn | null): Insn {
+  private compileOr(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
     const exprs = this.listToArray(args);
 
     if (exprs.length === 0) {
@@ -438,14 +440,14 @@ export class Compiler {
     }
 
     if (exprs.length === 1) {
-      return this.compile(exprs[0], env, next);
+      return this.compile(exprs[0], env, stackPos, next);
     }
 
     // Compile from right to left
-    let result = this.compile(exprs[exprs.length - 1], env, next);
+    let result = this.compile(exprs[exprs.length - 1], env, stackPos, next);
 
     for (let i = exprs.length - 2; i >= 0; i--) {
-      result = this.compile(exprs[i], env, new OrInsn(result, next));
+      result = this.compile(exprs[i], env, stackPos, new OrInsn(result, next));
     }
 
     return result;
@@ -454,7 +456,7 @@ export class Compiler {
   /**
    * Compile function call
    */
-  private compileCall(fn: ELObj, args: ELObj[], env: Environment, next: Insn | null): Insn {
+  private compileCall(fn: ELObj, args: ELObj[], env: Environment, stackPos: number, next: Insn | null): Insn {
     // Check if fn is a known primitive at compile time
     const fnSym = fn.asSymbol();
     if (fnSym) {
@@ -463,9 +465,13 @@ export class Compiler {
         // Compile as primitive call
         let result: Insn = new PrimitiveCallInsn(args.length, primitive, next);
 
-        // Compile arguments from right to left
+        // Compile arguments - last arg compiled executes first
+        // We want to evaluate left-to-right: args[0], ..., args[n-1]
+        // So compile them right-to-left: args[n-1], ..., args[0]
         for (let i = args.length - 1; i >= 0; i--) {
-          result = this.compile(args[i], env, result);
+          // Arg i will execute with i values already on stack
+          const numPushed = i;
+          result = this.compile(args[i], env, stackPos + numPushed, result);
         }
 
         return result;
