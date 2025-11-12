@@ -40,8 +40,12 @@ fn main() -> Result<()> {
 
     if args.verbose {
         info!("Dazzle v{}", dazzle_core::VERSION);
-        info!("Template: {}", args.template.display());
-        info!("Input: {}", args.input.display());
+        if let Some(ref template) = args.template {
+            info!("Template: {}", template.display());
+        }
+        if let Some(ref input) = args.input {
+            info!("Input: {}", input.display());
+        }
         if !args.variables.is_empty() {
             info!("Variables: {:?}", args.variables);
         }
@@ -52,12 +56,16 @@ fn main() -> Result<()> {
 }
 
 fn run(args: Args) -> Result<()> {
+    // Get required arguments (safe because of required_unless_present)
+    let input = args.input.as_ref().unwrap().clone();
+    let template = args.template.as_ref().unwrap().clone();
+
     // 1. Load and parse input XML
-    debug!("Loading XML: {}", args.input.display());
+    debug!("Loading XML: {}", input.display());
 
     // Use parse_file instead of parse_string to ensure proper DTD entity resolution
     // libxml2 can resolve relative DTD paths and external entities better when parsing from file
-    let input_path = args.input.to_str().ok_or_else(|| anyhow::anyhow!("Invalid input path"))?;
+    let input_path = input.to_str().ok_or_else(|| anyhow::anyhow!("Invalid input path"))?;
     let grove = LibXml2Grove::parse_file(input_path, true)
         .map_err(|e| anyhow::anyhow!("Failed to parse XML: {}", e))?;
     let grove_rc = Rc::new(grove);
@@ -70,10 +78,10 @@ fn run(args: Args) -> Result<()> {
     // 3. Initialize backend based on -t flag
     match args.backend.as_str() {
         "text" | "xml" => {
-            run_sgml_backend(args, grove_rc, output_dir)
+            run_sgml_backend(args, &template, grove_rc, output_dir)
         }
         "rtf" => {
-            run_rtf_backend(args, grove_rc)
+            run_rtf_backend(args, &template, grove_rc)
         }
         _ => {
             anyhow::bail!("Unknown backend: {} (supported: text, xml, rtf)", args.backend);
@@ -81,7 +89,7 @@ fn run(args: Args) -> Result<()> {
     }
 }
 
-fn run_sgml_backend(args: Args, grove_rc: Rc<LibXml2Grove>, output_dir: PathBuf) -> Result<()> {
+fn run_sgml_backend(args: Args, template: &PathBuf, grove_rc: Rc<LibXml2Grove>, output_dir: PathBuf) -> Result<()> {
     // Initialize SGML backend (wrapped in Rc<RefCell> for shared mutable access)
     let backend = std::rc::Rc::new(std::cell::RefCell::new(SgmlBackend::new(&output_dir)));
     debug!("SGML backend initialized: output_dir={}", output_dir.display());
@@ -111,8 +119,8 @@ fn run_sgml_backend(args: Args, grove_rc: Rc<LibXml2Grove>, output_dir: PathBuf)
     }
 
     // 8. Load and evaluate template
-    debug!("Loading template: {}", args.template.display());
-    let template_path = find_template(&args.template, &args.search_dirs)?;
+    debug!("Loading template: {}", template.display());
+    let template_path = find_template(template, &args.search_dirs)?;
     let template_content = fs::read_to_string(&template_path)
         .with_context(|| format!("Failed to read template: {}", template_path.display()))?;
 
@@ -209,9 +217,11 @@ fn run_sgml_backend(args: Args, grove_rc: Rc<LibXml2Grove>, output_dir: PathBuf)
     Ok(())
 }
 
-fn run_rtf_backend(args: Args, grove_rc: Rc<LibXml2Grove>) -> Result<()> {
+fn run_rtf_backend(args: Args, template: &PathBuf, grove_rc: Rc<LibXml2Grove>) -> Result<()> {
     // Derive output filename from input (e.g., dsssl.xml -> dsssl.rtf)
-    let output_path = args.input.with_extension("rtf");
+    // Input must exist if we got here (required_unless_present = "version")
+    let input = args.input.as_ref().expect("input required for RTF backend");
+    let output_path = input.with_extension("rtf");
     let output_file = fs::File::create(&output_path)
         .with_context(|| format!("Failed to create output file: {}", output_path.display()))?;
     let output_writer = std::io::BufWriter::new(output_file);
@@ -247,8 +257,8 @@ fn run_rtf_backend(args: Args, grove_rc: Rc<LibXml2Grove>) -> Result<()> {
     }
 
     // Load and evaluate template
-    debug!("Loading template: {}", args.template.display());
-    let template_path = find_template(&args.template, &args.search_dirs)?;
+    debug!("Loading template: {}", template.display());
+    let template_path = find_template(template, &args.search_dirs)?;
     let template_content = fs::read_to_string(&template_path)
         .with_context(|| format!("Failed to read template: {}", template_path.display()))?;
 

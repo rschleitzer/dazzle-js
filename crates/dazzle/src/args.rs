@@ -13,8 +13,8 @@ pub struct Args {
     #[arg(long = "version")]
     pub version: bool,
     /// Template file (.scm)
-    #[arg(short = 'd', long = "template", required = true)]
-    pub template: PathBuf,
+    #[arg(short = 'd', long = "template", required_unless_present = "version")]
+    pub template: Option<PathBuf>,
 
     /// Backend selection (text, xml, or rtf)
     #[arg(short = 't', long = "backend", default_value = "text")]
@@ -29,8 +29,8 @@ pub struct Args {
     pub search_dirs: Vec<PathBuf>,
 
     /// Input XML file
-    #[arg(required = true)]
-    pub input: PathBuf,
+    #[arg(required_unless_present = "version")]
+    pub input: Option<PathBuf>,
 
     /// Enable verbose output
     #[arg(short, long)]
