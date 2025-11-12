@@ -112,29 +112,9 @@ export class AndInsn extends Insn {
   }
 }
 
-/**
- * Case instruction - Pattern matching
- * Port from: Insn.h CaseInsn
- *
- * TODO: Full implementation pending
- */
-export class CaseInsn extends Insn {
-  constructor(
-    private _key: ELObj,      // Will be used for equality check
-    private _match: Insn | null,  // Will be used when key matches
-    private fail: Insn | null
-  ) {
-    super();
-  }
-
-  execute(_vm: VM): Insn | null {
-    // TODO: implement proper equality check between value on stack and key
-    // For now, always fail
-    return this.fail;
-  }
-}
-
 // More instruction types will be added as we implement the compiler:
+// - CaseInsn (pattern matching)
+
 // - CallInsn (function calls)
 // - LetInsn (let bindings)
 // - DefineInsn (define)
