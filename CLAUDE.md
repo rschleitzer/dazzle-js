@@ -1,6 +1,6 @@
 # CLAUDE.md - Dazzle Project Context
 
-> **Dazzle**: Rust port of OpenJade's SGML backend for modern code generation
+> **Dazzle**: TypeScript port of OpenJade's SGML backend for modern code generation
 
 ## Table of Contents
 
@@ -20,16 +20,18 @@
 
 ---
 
-## Critical Decision - October 2025
+## Critical Decision - November 2025
 
-**Porting OpenJade's Scheme interpreter to Rust** (NOT using Steel Scheme)
+**Porting OpenJade's Scheme interpreter to TypeScript** (NOT using existing Scheme implementations)
 
-**Steel Issues** (Oct 19, 2025):
-- Parser bug: `let` bindings must be on same line (not R4RS compliant)
-- Error reporting: spans (byte offsets), not line numbers
-- User's existing DSSSL has multi-line `let` bindings (sql.scm:652, 819, 828)
+**Why TypeScript**:
+- ✅ Excellent tooling and IDE support
+- ✅ Familiar to wider developer audience
+- ✅ Easy distribution via npm
+- ✅ Strong type system for maintainability
+- ✅ Native string and Unicode support
 
-**Solution**: Port OpenJade interpreter (~12K C++ → ~10K Rust)
+**Solution**: Port OpenJade interpreter (~12K C++ → ~10K TypeScript)
 - ✅ 100% compatible (25 years proven)
 - ✅ Whitespace-agnostic (R4RS compliant)
 - ✅ Human-friendly errors (line numbers)
@@ -41,16 +43,16 @@
 
 ## Project Overview
 
-**Dazzle**: Rust-based code generation tool using Scheme templates
+**Dazzle**: TypeScript-based code generation tool using Scheme templates
 
 - **Purpose**: Template-driven code generation from XML input
-- **Language**: Rust + Scheme (ported from OpenJade)
+- **Language**: TypeScript + Scheme (ported from OpenJade)
 - **Use Case**: fire (FHIR 5 server) code generation
 - **Name**: Available everywhere, no conflicts
 
 **Problem**: OpenJade disappearing from package managers (dropped from Homebrew, aging in MacPorts, unmaintained C++)
 
-**Solution**: Pure Rust, libxml2 (UTF-8 support), OpenJade CLI-compatible, focus on code generation
+**Solution**: Pure TypeScript/Node.js, libxmljs2 (UTF-8 support), OpenJade CLI-compatible, focus on code generation
 
 ---
 
@@ -99,7 +101,7 @@
 - `SgmlFOTBuilder.cxx` - 2,824 lines (SGML backend)
 - `Node.{h,cxx}` - 2,400 lines (grove interface)
 
-**OpenSP**: ~100-150K lines C++ (separate library) → **Dazzle uses libxml2**
+**OpenSP**: ~100-150K lines C++ (separate library) → **Dazzle uses libxmljs2**
 
 **Dazzle Must Implement**:
 1. **224 primitives**: ~90 R4RS + ~50 grove + ~20 processing + ~30 type stubs + ~24 utilities
@@ -153,15 +155,33 @@
 
 ## Technical Stack
 
-**Host**: Rust (maintainable, cross-platform, good FFI)
-**Scheme**: Ported from OpenJade (~12K C++ → ~10K Rust) - NOT Steel (parser bugs)
-**XML**: libxml2 (industry standard, DTD validation, UTF-8 support, clean C FFI)
+**Host**: TypeScript/Node.js (maintainable, cross-platform, universal - Node.js + Browser)
+**Scheme**: Ported from OpenJade (~12K C++ → ~10K TypeScript)
+**XML**: Abstract grove interface (pluggable implementations)
+  - **Node.js**: libxmljs2 (industry standard, DTD validation, UTF-8 support)
+  - **Browser**: Future implementation (DOM-based or other)
 
-**Dependencies**:
-```toml
-libxml = "0.3"    # libxml2 bindings
-clap = "4"        # CLI parsing
-gc = "0.5"        # Garbage collection
+**Core Dependencies**:
+```json
+{
+  "commander": "^11.0.0"   // CLI parsing (Node.js only)
+}
+```
+
+**Grove Implementation (Node.js)**:
+```json
+{
+  "libxmljs2": "^0.33.0"   // XML parsing with DTD validation
+}
+```
+
+**Dev Dependencies**:
+```json
+{
+  "typescript": "^5.0.0",
+  "vitest": "^1.0.0",
+  "@types/node": "^20.0.0"
+}
 ```
 
 **Template Format**: XML wrapper with entity references (OpenJade compatible)
@@ -186,74 +206,94 @@ Parser resolves entities, extracts `<style-specification>` content, passes to in
 
 ## Architecture Design
 
-**Goal**: Port OpenJade's trait-based architecture to Rust
+**Goal**: Port OpenJade's interface-based architecture to TypeScript (exact replica)
 
-**Workspace** (multi-crate):
+**Monorepo** (npm workspaces):
 ```
-dazzle-core/          → Interpreter + traits (scheme, dsssl, grove, fot)
-dazzle-grove-libxml2/ → XML grove ✅ COMPLETE
-dazzle-backend-sgml/  → Code gen backend ✅ COMPLETE
-dazzle-backend-rtf/   → RTF backend 🔄 IN PROGRESS
-dazzle/               → CLI ✅ COMPLETE
+packages/
+  dazzle-core/            → Interpreter + interfaces (scheme, dsssl, grove, fot)
+  dazzle-grove-libxmljs2/ → XML grove for Node.js
+  dazzle-backend-sgml/    → Code gen backend
+  dazzle-backend-rtf/     → RTF backend (FUTURE)
+  dazzle-cli/             → CLI tool
 ```
 
-Future: `dazzle-backend-pdf`
+**Key Components** (direct port from OpenJade):
 
-**Key Traits**:
-
-```rust
-// Grove abstraction (port of grove/spgrove pattern)
-pub trait Node {
-    fn gi(&self) -> Option<&str>;  // Element name
-    fn id(&self) -> Option<&str>;
-    fn data(&self) -> Option<&str>;
-    fn parent(&self) -> Option<Box<dyn Node>>;
-    fn children(&self) -> Box<dyn NodeList>;
-    fn attributes(&self) -> Box<dyn NodeList>;
-    fn attribute_string(&self, name: &str) -> Option<String>;
-    // ... all DSSSL node properties
+```typescript
+// 1. Grove abstraction - EXACT replica of OpenJade's grove/spgrove pattern
+// Port from: grove/Node.{h,cxx} (2,400 lines)
+export interface Node {
+  // All methods match OpenJade's Node interface exactly
+  gi(): string | null;
+  id(): string | null;
+  data(): string | null;
+  parent(): Node | null;
+  children(): NodeList;
+  attributes(): NodeList;
+  attributeString(name: string): string | null;
+  // ... all other DSSSL node properties from OpenJade
 }
 
-pub trait NodeList {
-    fn first(&self) -> Option<Box<dyn Node>>;
-    fn rest(&self) -> Option<Box<dyn NodeList>>;
-    fn length(&self) -> usize;
-    // ... all DSSSL operations
+export interface NodeList {
+  // Matches OpenJade's NodeList interface
+  first(): Node | null;
+  rest(): NodeList | null;
+  length(): number;
+  // ... all other operations
 }
 
-pub trait Grove {
-    fn root(&self) -> Box<dyn Node>;
-    fn element_with_id(&self, id: &str) -> Option<Box<dyn Node>>;
+export interface Grove {
+  root(): Node;
+  elementWithId(id: string): Node | null;
 }
 
-// Backend abstraction (port of FOTBuilder pattern)
-pub trait FotBuilder {
-    fn entity(&mut self, system_id: &str, content: &str) -> Result<()>;
-    fn formatting_instruction(&mut self, data: &str) -> Result<()>;
-    // ... other flow objects for document formatting
+// 2. Backend abstraction - EXACT replica of FOTBuilder pattern
+// Port from: jade/FOTBuilder.h
+export interface FotBuilder {
+  entity(systemId: string, content: string): void;
+  formattingInstruction(data: string): void;
+  // ... other flow objects
 }
 
-// Interpreter (port of style/)
-pub struct Interpreter {
-    symbols: SymbolTable,
-    identifiers: IdentifierTable,
-    grove: Box<dyn Grove>,           // Pluggable
-    backend: Box<dyn FotBuilder>,    // Pluggable
-    collector: gc::Gc,
-    // ...
+// 3. Bytecode evaluator - Port from style/Insn.{h,cxx}
+// OpenJade compiles Scheme to bytecode instructions for performance
+export abstract class Insn {
+  abstract eval(context: Context): EvalResult;
+  // Instruction hierarchy: LiteralInsn, CallInsn, IfInsn, LetInsn, etc.
+}
+
+// 4. Interpreter - Port from style/Interpreter.cxx (2,390 lines)
+export class Interpreter {
+  private symbolTable: SymbolTable;
+  private vm: VM;  // Bytecode VM
+  compile(expr: any): Insn;
+  eval(insn: Insn): Value;
 }
 ```
+
+**Critical Files to Port**:
+- `style/Insn.{h,cxx}` - Bytecode instruction hierarchy
+- `style/Interpreter.{h,cxx}` - Interpreter and compiler
+- `style/EvalContext.{h,cxx}` - Evaluation context
+- `style/SchemeParser.cxx` - Scheme parser
+- `style/primitive.{h,cxx}` - 224 primitives
+- `grove/Node.{h,cxx}` - Grove interface
+- `jade/FOTBuilder.h` - Backend interface
 
 **Principles**:
-- Trait-based abstraction (groves, backends pluggable)
-- Faithful port (preserve structure + optimizations)
-- Clean separation (groves don't know backends, etc.)
-- Testable components
+- **VERY faithful port**: Preserve OpenJade's complete architecture
+- **Bytecode VM**: Port instruction-based evaluator (compile → bytecode → eval)
+- **Interface-based**: Exact OpenJade patterns (Node, NodeList, Grove, FotBuilder)
+- **Clean separation**: Groves don't know backends, core doesn't know grove impl
+- **Pluggable**: Groves and backends implement interfaces
+- **Universal**: Core + grove interfaces work everywhere (Node.js, Browser)
+- **Performance**: Same optimizations as OpenJade (bytecode, lazy evaluation, etc.)
 
 **Implementation Phases**:
-1. ✅ Phase 1: SGML backend + libxml2 (code gen) - COMPLETE
-2. 🔄 Phase 2: RTF backend (document formatting) - IN PROGRESS
-3. 🚧 Phase 3: PDF backend (via RTF)
+1. 🚧 Phase 1: Core interpreter + SGML backend + libxmljs2 grove
+2. 🚧 Phase 2: RTF backend
+3. 🚧 Phase 3: PDF backend
 
 ---
 
@@ -287,15 +327,14 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 
 ## Distribution
 
-**Target**: crates.io, Arch AUR, Homebrew, MacPorts, Fedora, openSUSE, Debian
+**Target**: npm, GitHub releases, optional native binaries
 
 **Release**:
-1. Week 1: crates.io, GitHub releases, musl binaries
-2. Month 1-2: Arch AUR, Homebrew tap, MacPorts submission
-3. Month 3-6: Homebrew core, MacPorts official, Fedora
-4. 6+ months: Debian/Ubuntu
+1. Week 1: npm, GitHub releases
+2. Month 1-2: Optional standalone binaries (pkg/nexe)
+3. Month 3+: Homebrew, MacPorts if needed
 
-**Priority**: MacPorts (stable) + Homebrew (popular) for macOS, Arch AUR (fast) for Linux
+**Priority**: npm (universal), standalone binaries optional
 
 ---
 
@@ -308,73 +347,91 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 
 **Projects**:
 - OpenJade: https://openjade.sourceforge.net/ (72K C++, `/Users/r.schleitzer/repos/openjade/style/`)
-- libxml2: https://gitlab.gnome.org/GNOME/libxml2
+- libxmljs2: https://github.com/marudor/libxmljs2 (Node.js bindings for libxml2)
 
 ---
 
 ## Quick Reference
 
 **What Dazzle Is**:
-- Modern Rust port of OpenJade's DSSSL processor for code generation
-- 10K lines of Rust (vs 72K C++ in OpenJade)
+- Modern TypeScript port of OpenJade's DSSSL processor for code generation
+- Target: ~10K lines of TypeScript (vs 72K C++ in OpenJade)
 - 260 language features (258 primitives + 2 special forms)
-- **Performance**: 1.07x-2.08x slower on realistic workloads (>1,000 lines)
 - Full DSSSL processing model with automatic tree traversal
-- Production-validated on 4 real-world test cases (45 files, 15,798 lines)
-- **UTF-8 advantage**: Handles modern XML that OpenJade rejects
+- **UTF-8 native**: Handles modern XML perfectly
+- **Universal**: Runs in Node.js and Browser (with appropriate grove implementation)
 
 **OpenJade Comparison**:
 - OpenJade: 72K C++ (117 files), 224 primitives
-- Dazzle: 10K Rust (multi-crate), 260 features
+- Dazzle: ~10K TypeScript (monorepo), 260 features
 - Compatibility: Full DSSSL + OpenJade extensions
-- Performance: **1.07x-4x slower** (near-parity on realistic workloads >1,000 lines)
-- **UTF-8**: Dazzle handles modern XML natively
+- Architecture: Exact replica of OpenJade's interface-based design
 
 **Architecture**:
-- Trait-based (grove/backend pluggable), multi-crate workspace
-- Faithful port with optimizations: instruction-based eval, string interning, lazy lists
-- Pure Rust + libxml2 (no OpenSP dependency)
+- **VERY faithful port**: Complete OpenJade architecture including bytecode VM
+- **Bytecode evaluator**: Compile Scheme → Instructions → Eval (port from Insn.{h,cxx})
+- Interface-based (grove/backend pluggable), npm workspace monorepo
+- TypeScript + libxmljs2 for Node.js (no OpenSP dependency)
+- Pluggable groves: Web apps can provide custom data sources
+- Same optimizations: lazy evaluation, string interning, instruction caching
 
-**Key Features**:
-- ✅ Complete R4RS Scheme interpreter with named let
-- ✅ Full DSSSL processing model (process-root, rules, modes, next-match)
-- ✅ 50+ grove query primitives (XML + DTD validation)
-- ✅ Flow objects (make entity, formatting-instruction)
-- ✅ XML template wrapper support (.dsl format)
-- ✅ 322 tests passing, zero warnings
+**Target Features**:
+- 🚧 Complete R4RS Scheme interpreter with named let
+- 🚧 Full DSSSL processing model (process-root, rules, modes, next-match)
+- 🚧 50+ grove query primitives (XML + DTD validation)
+- 🚧 Flow objects (make entity, formatting-instruction)
+- 🚧 XML template wrapper support (.dsl format)
 
-**Install**: `cargo install dazzle`
+**Install**: `npm install -g dazzle` (when available)
 
-**License**: MIT | **Status**: v0.2.0 Production Ready (Oct 2025)
+**License**: MIT | **Status**: In Development (Nov 2025)
 
 ---
 
-## Current Status (November 7, 2025)
+## Current Status (November 12, 2025)
 
-### 🚀 v0.4.4 - SGML Backend Complete, RTF Backend Starting
+### 🚧 v0.1.0 - Starting TypeScript Port
 
-**Phase 1 Complete**: SGML backend production-ready
-**Phase 2 In Progress**: RTF backend for document formatting
+**Decision**: Complete rewrite in TypeScript (discontinuing Rust implementation)
 
-**SGML Backend (v0.2.0-v0.4.4) - COMPLETE:**
-- ✅ R4RS Scheme interpreter with 260 language features
-- ✅ Full DSSSL processing model (rules, modes, process-root)
-- ✅ libxml2 grove with DTD validation
-- ✅ SGML backend for code generation
-- ✅ Production-validated on 4 real-world projects (100% OpenJade compatible)
-- ✅ Published to crates.io
+**Why TypeScript**:
+- Wider developer reach and ecosystem
+- Universal runtime (Node.js + Browser)
+- Better tooling and IDE support
+- Easier distribution via npm
+- Native UTF-8 and string handling
 
-**RTF Backend (Nov 2025) - IN PROGRESS:**
-- 🔄 Document formatting flow objects
-- 🔄 RTF output generation
-- 🔄 Byte-for-byte OpenJade compatibility
+**Starting Fresh - All Components To Be Ported:**
+- 🚧 **Scheme parser**: Port from `SchemeParser.cxx` (2,300 lines)
+- 🚧 **Bytecode VM**: Port instruction hierarchy from `Insn.{h,cxx}`
+  - LiteralInsn, CallInsn, IfInsn, LetInsn, DefineInsn, etc.
+  - Compile-time optimization passes
+- 🚧 **Interpreter**: Port from `Interpreter.cxx` (2,390 lines)
+  - Symbol table, identifier table
+  - Compile: Scheme AST → bytecode instructions
+  - Eval: Execute bytecode with context
+- 🚧 **260 primitives**: Port from `primitive.cxx` (5,704 lines)
+  - R4RS, grove queries, DSSSL processing, type constructors
+- 🚧 **Grove interface**: Exact replica from `Node.{h,cxx}` (2,400 lines)
+- 🚧 **libxmljs2 grove**: Implement Node/NodeList for libxmljs2
+- 🚧 **DSSSL processing**: Rules, modes, next-match
+- 🚧 **SGML backend**: Port from `SgmlFOTBuilder.cxx` (2,824 lines)
+- 🚧 **CLI tool**: OpenJade-compatible command line
+- 🚧 **Test suite**: Port OpenJade's test cases
 
-**Implementation Stats:**
-- **Lines of Code**: ~10,000 Rust (vs 72,000 C++ in OpenJade)
-- **Language Features**: **260 total** (258 primitives + 2 special forms)
-- **Tests**: 322 passing (100% success rate)
-- **Build**: Zero warnings, zero errors
-- **Performance**: **~4x slower than OpenJade** (~110ms vs ~27ms on Icons test case)
+**Previous Rust Implementation v0.4.6** (archived):
+- Achieved production-ready SGML backend
+- 100% OpenJade-compatible output (byte-for-byte)
+- **Performance: Much slower than OpenJade**
+- 322 tests passing, 4 real-world test cases validated
+- Now serving as reference for TypeScript port
+
+**Port Strategy**:
+- **VERY faithful port**: Preserve OpenJade's architecture completely
+- **Bytecode (insn) architecture**: Port instruction-based evaluator from `Insn.{h,cxx}`
+- **Complete implementation**: All optimizations, patterns, and structures from OpenJade
+- **Direct translation**: C++ → TypeScript, preserving class hierarchy and logic
+- **Performance goal**: Match OpenJade's speed by using the same bytecode VM architecture
 
 **v0.2.0 Major Features:**
 - ✅ **DSSSL Processing Model** - Full OpenJade-compatible automatic tree traversal
