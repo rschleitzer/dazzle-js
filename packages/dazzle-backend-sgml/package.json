@@ -7,14 +7,14 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "test": "vitest",
+    "test": "vitest run",
     "lint": "tsc --noEmit"
   },
   "keywords": ["sgml", "codegen", "backend", "dsssl"],
   "author": "Ralf Schleitzer <r.schleitzer@users.noreply.github.com>",
   "license": "MIT",
   "dependencies": {
-    "dazzle-core": "workspace:*"
+    "dazzle-core": "*"
   },
   "devDependencies": {
     "typescript": "^5.3.0",

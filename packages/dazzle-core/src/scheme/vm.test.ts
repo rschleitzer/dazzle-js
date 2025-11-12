@@ -19,14 +19,17 @@ describe('VM', () => {
     expect(result.asNumber()?.value).toBe(42);
   });
 
-  it('should execute a sequence of constant instructions', () => {
+  it('should execute a sequence of instructions through TestInsn', () => {
     const vm = new VM();
-    const insn2 = new ConstantInsn(makeNumber(10), null);
-    const insn1 = new ConstantInsn(makeNumber(5), insn2);
+    // Test: if true then 10 else 20
+    const consequent = new ConstantInsn(makeNumber(10), null);
+    const alternative = new ConstantInsn(makeNumber(20), null);
+    const test = new TestInsn(consequent, alternative);
+    const pushTest = new ConstantInsn(theTrueObj, test);
 
-    const result = vm.eval(insn1);
+    const result = vm.eval(pushTest);
 
-    // Last value should be on stack
+    // Should take true branch
     expect(result.asNumber()?.value).toBe(10);
   });
 
