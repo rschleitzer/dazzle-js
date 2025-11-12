@@ -157,9 +157,9 @@ fn test_parent() {
     let result = eval_scheme(&mut evaluator, env.clone(), code);
     assert!(is_symbol(&result, "root"));
 
-    // Root node should have no parent
-    let result = eval_scheme(&mut evaluator, env.clone(), "(parent (current-node))");
-    assert!(is_bool(&result, false));
+    // Root node should have no parent (returns empty node-list, not #f)
+    let result = eval_scheme(&mut evaluator, env.clone(), "(node-list-empty? (parent (current-node)))");
+    assert!(is_bool(&result, true));
 }
 
 #[test]

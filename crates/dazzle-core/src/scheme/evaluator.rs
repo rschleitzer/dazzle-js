@@ -30,11 +30,16 @@ use crate::scheme::environment::Environment;
 use crate::scheme::parser::Position;
 use crate::scheme::value::{Procedure, Value};
 use crate::scheme::arena::{Arena, ValueId, ValueData};
+use crate::scheme::vm::VM;
+use crate::scheme::compiler::Compiler;
+use crate::scheme::instruction::Instruction;
+use crate::scheme::bridge::{value_to_arena, arena_to_value};
 use crate::grove::{Grove, Node};
 use crate::fot::FotBuilder;
 use gc::Gc;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 // Thread-local evaluator context for primitives
 //
@@ -189,6 +194,14 @@ pub struct ConstructionRule {
     /// Source position where this rule was defined (for error reporting)
     pub source_file: Option<String>,
     pub source_pos: Option<Position>,
+
+    /// Cached bytecode instructions (OpenJade's InsnPtr optimization)
+    ///
+    /// When VM is enabled, we compile the expression once and cache the instructions.
+    /// This is the key optimization that makes OpenJade fast: compile once, run many times.
+    ///
+    /// Tuple: (instructions, start_ip)
+    pub cached_instructions: RefCell<Option<(Vec<Instruction>, usize)>>,
 }
 
 /// Processing mode containing construction rules
@@ -225,7 +238,8 @@ impl ProcessingMode {
                 context,
                 expr,
                 source_file,
-                source_pos
+                source_pos,
+                cached_instructions: RefCell::new(None),
             });
     }
 
@@ -385,6 +399,31 @@ pub struct Evaluator {
     /// this maps output line numbers to (source_file, source_line) pairs.
     /// Used to provide accurate file names and line numbers in error messages.
     line_mappings: Vec<LineMapping>,
+
+    /// Enable VM-based execution (OpenJade's bytecode model)
+    ///
+    /// When true, expressions are compiled to bytecode and executed with the VM.
+    /// When false, uses tree-walking interpreter (slower but simpler).
+    /// This flag allows benchmarking VM vs tree-walker performance.
+    use_vm: bool,
+
+    /// Instruction cache for lambda expressions
+    ///
+    /// Maps lambda Value pointers to cached (instructions, start_ip).
+    /// This enables "compile once, run many" for frequently-called lambdas.
+    lambda_cache: HashMap<usize, (Vec<Instruction>, usize)>,
+
+    /// VM global variables (name -> ValueId)
+    ///
+    /// When use_vm is true, this HashMap persists global variables across evaluations.
+    /// Each VM execution saves its globals here and restores them on next execution.
+    vm_globals: HashMap<String, ValueId>,
+
+    /// Counter for processed nodes (for periodic GC)
+    ///
+    /// Tracks how many nodes have been processed. Used to trigger garbage collection
+    /// periodically to prevent memory accumulation during long-running document processing.
+    nodes_processed: usize,
 }
 
 /// Line mapping entry - maps a line number in concatenated code to its source file and line
@@ -411,6 +450,10 @@ impl Evaluator {
             current_source_file: None,
             current_position: None,
             line_mappings: Vec::new(),
+            use_vm: std::env::var("DAZZLE_VM").is_ok(), // Enable VM via environment variable
+            lambda_cache: HashMap::new(),
+            vm_globals: HashMap::new(), // Persists VM globals across evaluations
+            nodes_processed: 0,
         }
     }
 
@@ -428,7 +471,21 @@ impl Evaluator {
             current_source_file: None,
             current_position: None,
             line_mappings: Vec::new(),
+            use_vm: std::env::var("DAZZLE_VM").is_ok(), // Enable VM via environment variable
+            lambda_cache: HashMap::new(),
+            vm_globals: HashMap::new(), // Persists VM globals across evaluations
+            nodes_processed: 0,
         }
+    }
+
+    /// Enable VM-based execution (for benchmarking)
+    pub fn enable_vm(&mut self) {
+        self.use_vm = true;
+    }
+
+    /// Disable VM-based execution (use tree-walker)
+    pub fn disable_vm(&mut self) {
+        self.use_vm = false;
     }
 
     /// Set line mappings for error reporting
@@ -1569,6 +1626,20 @@ impl Evaluator {
     ///    b. If rule found, evaluate it (returns sosofo)
     ///    c. If no rule, default behavior: process-children
     pub fn process_node(&mut self, env: Gc<Environment>) -> EvalResult {
+        // Increment node counter and trigger periodic GC
+        self.nodes_processed += 1;
+
+        // Trigger GC every 100 nodes to prevent memory accumulation
+        if self.nodes_processed % 100 == 0 {
+            // Collect Gc-wrapped values (tree-walker mode)
+            gc::force_collect();
+
+            // Collect arena values (VM mode)
+            // Preserve VM globals as GC roots
+            let roots: Vec<_> = self.vm_globals.values().copied().collect();
+            self.arena.gc(&roots);
+        }
+
         let node = match self.current_node() {
             Some(n) => n.clone(),
             None => return Err(EvalError::new("No current node".to_string())),
@@ -1617,8 +1688,16 @@ impl Evaluator {
                 self.current_position = Some(rule_pos.clone());
             }
 
-            // Evaluate the construction expression
-            let result = self.eval(rule.expr.clone(), env);
+            // Extract rule data to avoid borrow conflicts
+            let rule_expr = rule.expr.clone();
+            let rule_cached = rule.cached_instructions.clone();
+
+            // Evaluate the construction expression (with instruction caching if VM is enabled)
+            let result = if self.use_vm {
+                self.eval_rule_with_cache(rule_expr, rule_cached, env)
+            } else {
+                self.eval(rule_expr, env)
+            };
 
             // Restore previous source context
             self.current_source_file = saved_file;
@@ -1635,6 +1714,181 @@ impl Evaluator {
         }
     }
 
+    /// Evaluate a construction rule with instruction caching (OpenJade's InsnPtr optimization)
+    ///
+    /// This implements OpenJade's key performance optimization:
+    /// ```cpp
+    /// class Identifier {
+    ///     Owner<Expression> def_;   // Parsed AST
+    ///     InsnPtr insn_;            // Compiled instructions (cached!)
+    /// };
+    /// ```
+    ///
+    /// Each construction rule compiles its expression ONCE and caches the bytecode.
+    /// Subsequent evaluations execute the cached instructions directly.
+    ///
+    /// This is why OpenJade is 50-74x faster than tree-walking interpreters on
+    /// real DSSSL workloads (e.g., DocBook processing with thousands of rule applications).
+    fn eval_rule_with_cache(
+        &mut self,
+        rule_expr: Value,
+        rule_cached: RefCell<Option<(Vec<Instruction>, usize)>>,
+        _env: Gc<Environment>
+    ) -> EvalResult {
+        // Check if we have cached instructions (clone to avoid holding the borrow)
+        let cached_data = rule_cached.borrow().clone();
+
+        if let Some((instructions, start_ip)) = cached_data {
+            // Cache hit! Execute cached instructions directly
+            // Create VM with primitives and extend with saved user-defined globals
+            let mut vm = VM::with_primitives(&mut self.arena);
+            vm.extend_globals(self.vm_globals.clone());
+
+            let result_id = vm.run(&instructions, start_ip)
+                .map_err(|e| EvalError::new(format!("VM error: {}", e)))?;
+
+            // Save globals for next execution
+            self.vm_globals = vm.get_user_globals();
+
+        // Debug: Log saved globals
+        if std::env::var("DAZZLE_DEBUG").is_ok() {
+            let saved: Vec<_> = self.vm_globals.keys().filter(|k| k.starts_with('%')).collect();
+            if !saved.is_empty() {
+                eprintln!("Evaluator: Saved {} user globals (% vars: {:?})", self.vm_globals.len(), saved);
+            }
+        }
+
+            // Convert back: ValueId → Value
+            return Ok(arena_to_value(&self.arena, result_id));
+        }
+
+        // Cache miss - compile and cache the instructions
+        let expr_id = value_to_arena(&mut self.arena, &rule_expr);
+
+        let mut compiler = Compiler::new(&self.arena);
+        let start_ip = compiler.compile(expr_id)
+            .map_err(|e| EvalError::new(format!("Compilation error: {}", e)))?;
+
+        let mut program = compiler.into_program();
+        program.emit(Instruction::Return);
+
+        // Cache the compiled instructions
+        let instructions = program.instructions.clone();
+        *rule_cached.borrow_mut() = Some((instructions.clone(), start_ip));
+
+        // Execute the newly compiled instructions
+        let mut vm = VM::with_primitives(&mut self.arena);
+        vm.extend_globals(self.vm_globals.clone());
+
+        let result_id = vm.run(&instructions, start_ip)
+            .map_err(|e| EvalError::new(format!("VM error: {}", e)))?;
+
+        // Save globals for next execution
+        self.vm_globals = vm.get_user_globals();
+
+        // Debug: Log saved globals
+        if std::env::var("DAZZLE_DEBUG").is_ok() {
+            let saved: Vec<_> = self.vm_globals.keys().filter(|k| k.starts_with('%')).collect();
+            if !saved.is_empty() {
+                eprintln!("Evaluator: Saved {} user globals (% vars: {:?})", self.vm_globals.len(), saved);
+            }
+        }
+
+        // Convert back: ValueId → Value
+        Ok(arena_to_value(&self.arena, result_id))
+    }
+
+    /// Evaluate an expression using the VM (bytecode execution)
+    ///
+    /// This is OpenJade's optimization: compile expressions to bytecode once,
+    /// execute with a fast stack-based VM. Key advantages:
+    /// - No recursion (flat while loop)
+    /// - No pattern matching overhead
+    /// - Pre-resolved closures (no environment lookup)
+    /// - Stack-based (minimal GC pressure)
+    ///
+    /// Returns Err if compilation or execution fails.
+    fn eval_with_vm(&mut self, expr: Value, _env: Gc<Environment>) -> EvalResult {
+        // Convert Value → ValueId (using bridge)
+        let expr_id = value_to_arena(&mut self.arena, &expr);
+
+        // Compile to bytecode
+        let mut compiler = Compiler::new(&self.arena);
+        let start_ip = compiler.compile(expr_id)
+            .map_err(|e| EvalError::new(format!("Compilation error: {}", e)))?;
+
+        let mut program = compiler.into_program();
+
+        // Add Return instruction at the end (top-level eval needs this)
+        program.emit(Instruction::Return);
+
+        // Create VM with primitives registered and extend with saved user-defined globals
+        let mut vm = VM::with_primitives(&mut self.arena);
+        vm.extend_globals(self.vm_globals.clone());
+
+        // Execute bytecode
+        let result_id = vm.run(&program.instructions, start_ip)
+            .map_err(|e| EvalError::new(format!("VM error: {}", e)))?;
+
+        // Save globals for next execution
+        self.vm_globals = vm.get_user_globals();
+
+        // Debug: Log saved globals
+        if std::env::var("DAZZLE_DEBUG").is_ok() {
+            let saved: Vec<_> = self.vm_globals.keys().filter(|k| k.starts_with('%')).collect();
+            if !saved.is_empty() {
+                eprintln!("Evaluator: Saved {} user globals (% vars: {:?})", self.vm_globals.len(), saved);
+            }
+        }
+
+        // Convert back: ValueId → Value
+        Ok(arena_to_value(&self.arena, result_id))
+    }
+
+    /// Temporarily disable VM mode (returns previous state)
+    ///
+    /// This is useful for operations like template loading where VM mode's
+    /// arena allocation doesn't work well with intermediate values.
+    pub fn set_use_vm(&mut self, enabled: bool) -> bool {
+        let previous = self.use_vm;
+        self.use_vm = enabled;
+        previous
+    }
+
+    /// Sync all Environment definitions to vm_globals
+    ///
+    /// This is needed when switching from tree-walker mode to VM mode.
+    /// Definitions made in tree-walker mode are stored in Environment (Gc),
+    /// but VM mode looks in vm_globals (HashMap<String, ValueId>).
+    pub fn sync_env_to_vm(&mut self, env: Gc<Environment>) -> Result<(), EvalError> {
+        use crate::scheme::bridge::value_to_arena;
+
+        // Get all bindings from environment
+        let bindings = env.all_bindings();
+
+        // Convert each binding to arena and store in vm_globals
+        for (name, value) in bindings {
+            let value_id = value_to_arena(&mut self.arena, &value);
+            self.vm_globals.insert(name, value_id);
+        }
+
+        Ok(())
+    }
+
+    /// Trigger garbage collection if needed
+    ///
+    /// This should be called periodically during long-running operations like
+    /// template loading to prevent memory accumulation.
+    pub fn gc_if_needed(&mut self) {
+        // Collect Gc-wrapped values (tree-walker mode)
+        gc::force_collect();
+
+        // Collect arena values (VM mode)
+        // Preserve VM globals as GC roots
+        let roots: Vec<_> = self.vm_globals.values().copied().collect();
+        self.arena.gc(&roots);
+    }
+
     /// Evaluate an expression in an environment
     ///
     /// Corresponds to OpenJade's `Interpreter::eval()`.
@@ -1645,6 +1899,11 @@ impl Evaluator {
     /// 2. **Symbols**: Variable lookup in environment
     /// 3. **Lists**: Check first element for special forms, otherwise apply
     pub fn eval(&mut self, expr: Value, env: Gc<Environment>) -> EvalResult {
+        // Check if VM execution is enabled
+        if self.use_vm {
+            return self.eval_with_vm(expr, env);
+        }
+
         // Save previous context state
         let context_was_set = has_evaluator_context();
         let previous_context = get_evaluator_context();
@@ -2297,6 +2556,7 @@ impl Evaluator {
 
         // Process each child (using DSSSL node-list iteration pattern)
         let mut result = Value::Unspecified;
+
         while !children.is_empty() {
             // Get first child
             if let Some(child_node) = children.first() {
@@ -2497,7 +2757,19 @@ impl Evaluator {
                             format!("make: keyword {} requires a value", kw),
                         ));
                     }
+
+                    // Debug: Log keyword processing
+                    if std::env::var("DAZZLE_DEBUG").is_ok() {
+                        eprintln!("EVAL_MAKE: Processing keyword '{}:', value expr = {:?}",
+                                  kw, args_vec[i + 1]);
+                    }
+
                     let value = self.eval(args_vec[i + 1].clone(), env.clone())?;
+
+                    // Debug: Log evaluated value
+                    if std::env::var("DAZZLE_DEBUG").is_ok() {
+                        eprintln!("EVAL_MAKE: Keyword '{}' evaluated to {:?}", kw, value);
+                    }
 
                     match kw.as_ref() {
                         "system-id" => {
@@ -3239,8 +3511,9 @@ impl Evaluator {
             }
         }
 
-        // No match found - R4RS says result is unspecified
-        Ok(Value::Unspecified)
+        // No match found - OpenJade treats this as an error for better error detection
+        // R4RS says result is unspecified, but OpenJade's behavior is more useful
+        Err(EvalError::new("case: no matching clause and no else clause".to_string()))
     }
 
     /// (and expr...)
@@ -3638,7 +3911,7 @@ impl Evaluator {
         }
 
         // Evaluate the filename argument
-        let filename_val = self.eval_inner(args_vec[0].clone(), env.clone())?;
+        let filename_val = self.eval(args_vec[0].clone(), env.clone())?;
 
         let filename = match filename_val {
             Value::String(s) => s.to_string(),
@@ -3670,7 +3943,7 @@ impl Evaluator {
                     // Set position for this expression
                     self.current_position = Some(pos);
 
-                    match self.eval_inner(expr, env.clone()) {
+                    match self.eval(expr, env.clone()) {
                         Ok(val) => result = val,
                         Err(e) => break Err(e),
                     }
@@ -4425,5 +4698,55 @@ mod tests {
 
         let result = eval.eval(expr, env);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_vm_simple_arithmetic() {
+        let mut eval = Evaluator::new();
+        eval.enable_vm(); // Enable VM execution
+
+        let env = make_env();
+
+        // Test: (+ 10 32)
+        let expr = Value::cons(
+            Value::symbol("+"),
+            Value::cons(
+                Value::Integer(10),
+                Value::cons(Value::Integer(32), Value::Nil),
+            ),
+        );
+
+        let result = eval.eval(expr, env);
+        assert!(result.is_ok());
+        let value = result.unwrap();
+        assert!(matches!(value, Value::Integer(42)));
+    }
+
+    #[test]
+    fn test_vm_vs_tree_walker() {
+        // Test that VM and tree-walker produce the same results
+        let expr = Value::cons(
+            Value::symbol("+"),
+            Value::cons(
+                Value::Integer(10),
+                Value::cons(Value::Integer(32), Value::Nil),
+            ),
+        );
+
+        // Tree-walker
+        let mut eval1 = Evaluator::new();
+        eval1.disable_vm();
+        let env1 = make_env();
+        let result1 = eval1.eval(expr.clone(), env1).unwrap();
+
+        // VM
+        let mut eval2 = Evaluator::new();
+        eval2.enable_vm();
+        let env2 = make_env();
+        let result2 = eval2.eval(expr, env2).unwrap();
+
+        // Both should produce Integer(42)
+        assert!(matches!(result1, Value::Integer(42)));
+        assert!(matches!(result2, Value::Integer(42)));
     }
 }

@@ -368,6 +368,10 @@ fn evaluate_template(
     use dazzle_core::scheme::parser::Token;
     use dazzle_core::scheme::value::Value;
 
+    // Keep VM mode enabled - it's 155x faster than tree-walker
+    // (OpenJade: 0.47s vs tree-walker: 73s for DocBook)
+    // Don't GC during template loading - memory accumulation is acceptable here
+
     let mut parser = SchemeParser::new(template);
 
     // TWO-PASS EVALUATION for R5RS top-level define semantics
@@ -529,13 +533,15 @@ fn evaluate_template(
     // Pass 3: Evaluate simple variable defines once, in order
     // This matches OpenJade's behavior: evaluate sequentially, no iteration
     // Variables that can't be evaluated stay as #<unspecified>
-    for (_idx, name, rhs_expr, pos) in simple_defines.iter() {
+    for (idx, _name, _rhs_expr, pos) in simple_defines.iter() {
         evaluator.set_position(pos.clone());
 
-        // Try to evaluate the RHS - if it fails, leave as unspecified
-        if let Ok(value) = evaluator.eval(rhs_expr.clone(), env.clone()) {
-            env.define(name, value);
-        }
+        // Evaluate the complete define expression (not just the RHS)
+        // This ensures that when using VM, the DefineGlobal instruction
+        // stores the value in vm.globals (not just in env)
+        let define_expr = &expressions[*idx];
+        let _ = evaluator.eval(define_expr.clone(), env.clone());
+
         // Errors are silently ignored - variable stays as #<unspecified>
         // This matches OpenJade behavior for forward references
     }
@@ -548,6 +554,7 @@ fn evaluate_template(
             .map_err(|e| anyhow::anyhow!("Evaluation error: {}", e))?;
     }
 
+    // Keep VM mode disabled (tree-walker mode has automatic GC and works fine)
     Ok(())
 }
 

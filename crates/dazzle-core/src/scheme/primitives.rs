@@ -604,7 +604,7 @@ pub fn add(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
                 sum += f;
             }
             ValueData::Quantity { magnitude, unit } => {
-                if let Some(existing_unit) = quantity_unit {
+                if let Some(_existing_unit) = quantity_unit {
                     // OpenJade allows adding quantities with different units - just use first unit
                     quantity_magnitude = Some(quantity_magnitude.unwrap() + magnitude);
                 } else {
@@ -3889,7 +3889,7 @@ pub fn read_char(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// eof-object? - test if value is EOF object
-pub fn eof_object_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn eof_object_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("eof-object?: expected 1 argument".to_string());
     }
@@ -4139,7 +4139,7 @@ pub fn gi(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
                 // #f means no node - return #f
                 return Ok(crate::scheme::arena::FALSE_ID);
             }
-            ValueData::Symbol(s) => {
+            ValueData::Symbol(_s) => {
                 // Symbol passed directly - return it unchanged (OpenJade compatibility)
                 return Ok(args[0]);
             }
@@ -4743,7 +4743,7 @@ pub fn quantity_to_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// number->quantity - convert number to quantity (stub - returns number as-is)
-pub fn number_to_quantity(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn number_to_quantity(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 || args.len() > 3 {
         return Err("number->quantity: expected 2 or 3 arguments".to_string());
     }
@@ -4754,7 +4754,7 @@ pub fn number_to_quantity(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// quantity-convert - convert quantity between units (stub - returns input)
-pub fn quantity_convert(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn quantity_convert(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("quantity-convert: expected 2 arguments".to_string());
     }
@@ -6099,7 +6099,7 @@ pub fn glyph_subst_table(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
 }
 
 /// glyph-subst - Return a glyph substitution (stub: return unspecified)
-pub fn glyph_subst(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn glyph_subst(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: return unspecified
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
@@ -6123,7 +6123,7 @@ pub fn time_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// time<=? - Time less-than-or-equal comparison (stub: always false)
-pub fn time_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn time_le(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("time<=?: expected 2 arguments, got {}", args.len()));
     }
@@ -6132,7 +6132,7 @@ pub fn time_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// time<? - Time less-than comparison (stub: always false)
-pub fn time_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn time_lt(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("time<?: expected 2 arguments, got {}", args.len()));
     }
@@ -6141,7 +6141,7 @@ pub fn time_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// time>=? - Time greater-than-or-equal comparison (stub: always false)
-pub fn time_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn time_ge(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("time>=?: expected 2 arguments, got {}", args.len()));
     }
@@ -6150,7 +6150,7 @@ pub fn time_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// time>? - Time greater-than comparison (stub: always false)
-pub fn time_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn time_gt(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("time>?: expected 2 arguments, got {}", args.len()));
     }
@@ -6162,7 +6162,7 @@ pub fn time_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 // These are stubs - language/style types not fully implemented yet
 
 /// language? - Check if value is a language (stub: always false)
-pub fn language_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn language_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("language?: expected 1 argument, got {}", args.len()));
     }
@@ -6180,7 +6180,7 @@ pub fn language(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
 }
 
 /// style? - Check if value is a style (stub: always false)
-pub fn style_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn style_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("style?: expected 1 argument, got {}", args.len()));
     }
@@ -6214,7 +6214,7 @@ pub fn string_equiv_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// label-length - Return label length (stub: return 0)
-pub fn label_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn label_length(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: return 0
     Ok(arena.int(0))
 }
@@ -6270,31 +6270,31 @@ pub fn external_procedure(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 // These are stubs - DTD/SGML operations not fully implemented
 
 /// declaration - Return declaration (stub: return unspecified)
-pub fn declaration(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn declaration(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: DTD declarations not implemented
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// dtd - Return DTD (stub: return unspecified)
-pub fn dtd(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn dtd(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: DTD access not implemented
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// epilog - Return epilog (stub: return empty node-list)
-pub fn epilog(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn epilog(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: return empty node-list
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// prolog - Return prolog (stub: return empty node-list)
-pub fn prolog(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn prolog(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: return empty node-list
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// sgml-declaration - Return SGML declaration (stub: return unspecified)
-pub fn sgml_declaration(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn sgml_declaration(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: SGML declarations not implemented
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
@@ -6309,7 +6309,7 @@ pub fn sgml_parse(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
 // These are stubs - entity operations not fully implemented
 
 /// entity-address - Return entity address (stub: return unspecified)
-pub fn entity_address(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn entity_address(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: entity addresses not implemented
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
@@ -6419,19 +6419,19 @@ pub fn tree_root(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// declare-default-language - Declare default language (stub: return unspecified)
-pub fn declare_default_language(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn declare_default_language(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: language declarations not implemented
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// read-entity - Read entity (stub: return empty string)
-pub fn read_entity(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn read_entity(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: entity reading not implemented, return empty string
     Ok(arena.string(String::new()))
 }
 
 /// set-visited! - Set visited flag (stub: return unspecified)
-pub fn set_visited(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn set_visited(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: visited tracking not implemented
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
@@ -6448,20 +6448,20 @@ pub fn sosofo_contains_node_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// page-number-sosofo - Return page number sosofo (stub: return empty sosofo)
-pub fn page_number_sosofo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn page_number_sosofo(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: page numbering not fully implemented, return empty sosofo
     // TODO: Implement actual page numbering
     Ok(arena.alloc(ValueData::Sosofo))
 }
 
 /// ifollow - Inverse follow navigation (stub: return empty node-list)
-pub fn ifollow(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn ifollow(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: inverse navigation not implemented, return empty node-list
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// with-language - Execute with language (stub: evaluate body)
-pub fn with_language(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn with_language(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: language switching not implemented
     // Just return unspecified since we can't evaluate the body here
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
@@ -6470,7 +6470,7 @@ pub fn with_language(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 // Phase 3 Batch 52: Element numbering stubs (3 primitives)
 
 /// all-element-number - Return all element number (stub: return 0)
-pub fn all_element_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn all_element_number(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: element numbering not implemented, return 0
     Ok(arena.int(0))
 }
@@ -6485,7 +6485,7 @@ pub fn ancestor_child_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
 }
 
 /// element-number-list - Return element number list (stub: return empty list)
-pub fn element_number_list(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn element_number_list(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: element numbering not implemented, return empty list
     Ok(crate::scheme::arena::NIL_ID)
 }
@@ -6511,19 +6511,19 @@ pub fn inherited_element_attribute_string(arena: &mut Arena, args: &[ValueId]) -
 }
 
 /// inherited-start-indent - Get inherited start indent (stub: return 0)
-pub fn inherited_start_indent(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_start_indent(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: inherited indent not implemented, return 0
     Ok(arena.int(0))
 }
 
 /// inherited-end-indent - Get inherited end indent (stub: return 0)
-pub fn inherited_end_indent(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_end_indent(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: inherited indent not implemented, return 0
     Ok(arena.int(0))
 }
 
 /// inherited-line-spacing - Get inherited line spacing (stub: return 0)
-pub fn inherited_line_spacing(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_line_spacing(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: inherited line spacing not implemented, return 0
     Ok(arena.int(0))
 }
@@ -6531,25 +6531,25 @@ pub fn inherited_line_spacing(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 // Phase 3 Batch 54: Inherited property stubs - Part 2 (6 primitives)
 
 /// inherited-font-family-name - Get inherited font family (stub: return empty string)
-pub fn inherited_font_family_name(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_font_family_name(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: inherited font family not implemented, return empty string
     Ok(arena.string(String::new()))
 }
 
 /// inherited-font-size - Get inherited font size (stub: return 12)
-pub fn inherited_font_size(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_font_size(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: inherited font size not implemented, return 12pt
     Ok(arena.int(12))
 }
 
 /// inherited-font-weight - Get inherited font weight (stub: return empty string)
-pub fn inherited_font_weight(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_font_weight(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: inherited font weight not implemented, return empty string
     Ok(arena.string(String::new()))
 }
 
 /// inherited-font-posture - Get inherited font posture (stub: return empty string)
-pub fn inherited_font_posture(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_font_posture(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: inherited font posture not implemented, return empty string
     Ok(arena.string(String::new()))
 }
@@ -6746,7 +6746,7 @@ pub fn node_list_address(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// node-list-error - Create error node list (stub: return empty node list)
-pub fn node_list_error(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_error(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("node-list-error: expected 1 argument, got {}", args.len()));
     }

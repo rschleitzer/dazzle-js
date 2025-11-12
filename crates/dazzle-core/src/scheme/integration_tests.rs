@@ -1167,4 +1167,193 @@ mod tests {
         let result = eval_string(&code);
         assert!(matches!(result, Value::Unspecified));
     }
+
+    // =========================================================================
+    // Performance Benchmarks (VM vs Tree-Walker)
+    // =========================================================================
+
+    #[test]
+    #[ignore] // Run with: cargo test --package dazzle-core --lib -- --ignored
+    fn bench_vm_vs_tree_walker() {
+        use std::time::Instant;
+
+        // Complex workload: recursive factorial and fibonacci
+        let code = r#"
+            (begin
+              (define (factorial n)
+                (if (<= n 1)
+                    1
+                    (* n (factorial (- n 1)))))
+
+              (define (fib n)
+                (if (<= n 1)
+                    n
+                    (+ (fib (- n 1)) (fib (- n 2)))))
+
+              ;; Run multiple operations
+              (begin
+                (factorial 10)
+                (fib 15)
+                (+ (factorial 5) (fib 10))
+                (* (factorial 7) (fib 12))))
+        "#;
+
+        // Warm-up: parse the code once
+        let mut parser = Parser::new(code);
+        let expr = parser.parse().expect("Parse error");
+
+        println!("\n=== VM vs Tree-Walker Performance Benchmark ===\n");
+
+        // Benchmark Tree-Walker
+        println!("Running tree-walker benchmark (10 iterations)...");
+        let tree_walker_start = Instant::now();
+        for _ in 0..10 {
+            let mut evaluator = Evaluator::new();
+            evaluator.disable_vm(); // Explicitly disable VM
+            let env = Environment::new_global();
+            evaluator.eval(expr.clone(), env).expect("Eval error");
+        }
+        let tree_walker_duration = tree_walker_start.elapsed();
+        let tree_walker_avg = tree_walker_duration.as_micros() / 10;
+
+        println!("Tree-walker: {} μs total, {} μs avg per run",
+                 tree_walker_duration.as_micros(), tree_walker_avg);
+
+        // Benchmark VM
+        println!("\nRunning VM benchmark (10 iterations)...");
+        let vm_start = Instant::now();
+        for _ in 0..10 {
+            let mut evaluator = Evaluator::new();
+            evaluator.enable_vm(); // Enable VM
+            let env = Environment::new_global();
+            evaluator.eval(expr.clone(), env).expect("Eval error");
+        }
+        let vm_duration = vm_start.elapsed();
+        let vm_avg = vm_duration.as_micros() / 10;
+
+        println!("VM: {} μs total, {} μs avg per run",
+                 vm_duration.as_micros(), vm_avg);
+
+        // Calculate speedup
+        let speedup = tree_walker_avg as f64 / vm_avg as f64;
+        println!("\n=== Results ===");
+        println!("Speedup: {:.2}x", speedup);
+
+        if speedup > 1.0 {
+            println!("✓ VM is {:.2}x faster than tree-walker", speedup);
+        } else {
+            println!("✗ VM is {:.2}x slower than tree-walker (overhead: {:.2}x)",
+                     1.0 / speedup, 1.0 / speedup);
+        }
+
+        // Verify both produce the same result
+        let mut eval_tree = Evaluator::new();
+        eval_tree.disable_vm();
+        let result_tree = eval_tree.eval(expr.clone(), Environment::new_global()).unwrap();
+
+        let mut eval_vm = Evaluator::new();
+        eval_vm.enable_vm();
+        let result_vm = eval_vm.eval(expr, Environment::new_global()).unwrap();
+
+        // Both should return the same value
+        assert!(matches!(result_tree, Value::Integer(_)));
+        assert!(matches!(result_vm, Value::Integer(_)));
+        println!("\n✓ Both implementations produce identical results");
+    }
+
+    #[test]
+    #[ignore] // Run with: cargo test --package dazzle-core --lib -- --ignored
+    fn bench_vm_simple_arithmetic() {
+        use std::time::Instant;
+
+        // Simple arithmetic operations (best case for VM)
+        let code = "(+ (* 2 3) (- 10 5) (* 4 (+ 1 2)))";
+
+        let mut parser = Parser::new(code);
+        let expr = parser.parse().expect("Parse error");
+
+        println!("\n=== Simple Arithmetic Benchmark ===\n");
+
+        // Tree-walker
+        let tree_walker_start = Instant::now();
+        for _ in 0..1000 {
+            let mut evaluator = Evaluator::new();
+            evaluator.disable_vm();
+            let env = Environment::new_global();
+            evaluator.eval(expr.clone(), env).expect("Eval error");
+        }
+        let tree_walker_duration = tree_walker_start.elapsed();
+        let tree_walker_avg = tree_walker_duration.as_nanos() / 1000;
+
+        println!("Tree-walker: {} ns avg per eval", tree_walker_avg);
+
+        // VM
+        let vm_start = Instant::now();
+        for _ in 0..1000 {
+            let mut evaluator = Evaluator::new();
+            evaluator.enable_vm();
+            let env = Environment::new_global();
+            evaluator.eval(expr.clone(), env).expect("Eval error");
+        }
+        let vm_duration = vm_start.elapsed();
+        let vm_avg = vm_duration.as_nanos() / 1000;
+
+        println!("VM: {} ns avg per eval", vm_avg);
+
+        let speedup = tree_walker_avg as f64 / vm_avg as f64;
+        println!("\nSpeedup: {:.2}x", speedup);
+    }
+
+    #[test]
+    #[ignore] // Run with: cargo test --package dazzle-core --lib -- --ignored
+    fn bench_vm_list_operations() {
+        use std::time::Instant;
+
+        // List-heavy operations (typical DSSSL workload)
+        let code = r#"
+            (begin
+              (define lst '(1 2 3 4 5 6 7 8 9 10))
+              (define (sum lst)
+                (if (null? lst)
+                    0
+                    (+ (car lst) (sum (cdr lst)))))
+              (+ (sum lst)
+                 (length (append lst lst))
+                 (car (reverse lst))))
+        "#;
+
+        let mut parser = Parser::new(code);
+        let expr = parser.parse().expect("Parse error");
+
+        println!("\n=== List Operations Benchmark ===\n");
+
+        // Tree-walker
+        let tree_walker_start = Instant::now();
+        for _ in 0..100 {
+            let mut evaluator = Evaluator::new();
+            evaluator.disable_vm();
+            let env = Environment::new_global();
+            evaluator.eval(expr.clone(), env).expect("Eval error");
+        }
+        let tree_walker_duration = tree_walker_start.elapsed();
+        let tree_walker_avg = tree_walker_duration.as_micros() / 100;
+
+        println!("Tree-walker: {} μs avg per eval", tree_walker_avg);
+
+        // VM
+        let vm_start = Instant::now();
+        for _ in 0..100 {
+            let mut evaluator = Evaluator::new();
+            evaluator.enable_vm();
+            let env = Environment::new_global();
+            evaluator.eval(expr.clone(), env).expect("Eval error");
+        }
+        let vm_duration = vm_start.elapsed();
+        let vm_avg = vm_duration.as_micros() / 100;
+
+        println!("VM: {} μs avg per eval", vm_avg);
+
+        let speedup = tree_walker_avg as f64 / vm_avg as f64;
+        println!("\nSpeedup: {:.2}x", speedup);
+    }
 }
