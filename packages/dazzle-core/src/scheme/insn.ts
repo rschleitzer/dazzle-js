@@ -6,7 +6,7 @@
  * to execute, forming a linked chain.
  */
 
-import type { ELObj } from './value';
+import type { ELObj } from './elobj';
 
 /**
  * Forward declaration of VM
