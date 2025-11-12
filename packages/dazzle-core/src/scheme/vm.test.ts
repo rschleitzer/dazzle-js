@@ -16,8 +16,9 @@ import {
   ClosureRefInsn,
   ReturnInsn,
   PrimitiveCallInsn,
+  ClosureInsn,
 } from './insn';
-import { makeNumber, makeBoolean, makeSymbol, theTrueObj, theFalseObj, theNilObj, FunctionObj } from './elobj';
+import { makeNumber, makeBoolean, makeSymbol, theTrueObj, theFalseObj, theNilObj, FunctionObj, type Signature } from './elobj';
 
 describe('VM', () => {
   it('should execute a constant instruction', () => {
@@ -383,5 +384,87 @@ describe('VM', () => {
     const result = vm.eval(call);
 
     expect(result.asNumber()?.value).toBeCloseTo(3.14159);
+  });
+
+  it('should create closures with ClosureInsn', () => {
+    const vm = new VM();
+
+    // Create a simple closure that returns a constant
+    // (lambda () 42)
+    const lambdaBody = new ConstantInsn(makeNumber(42), null);
+    const signature: Signature = {
+      nRequiredArgs: 0,
+      nOptionalArgs: 0,
+      restArg: false,
+      nKeyArgs: 0,
+    };
+
+    const createClosure = new ClosureInsn(signature, lambdaBody, 0, null);
+
+    const result = vm.eval(createClosure);
+
+    // Result should be a function object
+    const func = result.asFunction();
+    expect(func).not.toBeNull();
+    expect(func?.isClosure()).toBe(true);
+    expect(func?.code).toBe(lambdaBody);
+  });
+
+  it('should create closures with captured variables', () => {
+    const vm = new VM();
+
+    // Create a closure that captures one variable
+    // Simulate: (let ((x 10)) (lambda () x))
+    // Push 10 onto stack (this will be captured)
+    // Then create closure with display length 1
+
+    const lambdaBody = new ClosureRefInsn(0, null); // Reference captured variable at index 0
+    const signature: Signature = {
+      nRequiredArgs: 0,
+      nOptionalArgs: 0,
+      restArg: false,
+      nKeyArgs: 0,
+    };
+
+    const createClosure = new ClosureInsn(signature, lambdaBody, 1, null);
+    const pushX = new ConstantInsn(makeNumber(10), createClosure);
+
+    const result = vm.eval(pushX);
+
+    // Result should be a closure with a display
+    const func = result.asFunction();
+    expect(func).not.toBeNull();
+    expect(func?.isClosure()).toBe(true);
+    expect(func?.display).toBeDefined();
+    expect(func?.display?.length).toBe(1);
+    expect(func?.display?.[0].asNumber()?.value).toBe(10);
+  });
+
+  it('should create closures with multiple captured variables', () => {
+    const vm = new VM();
+
+    // Create a closure that captures two variables
+    // Simulate: (let ((x 10) (y 20)) (lambda () ...))
+    // The lambda can reference both x and y
+
+    const lambdaBody = new ConstantInsn(makeNumber(0), null); // Dummy body
+    const signature: Signature = {
+      nRequiredArgs: 0,
+      nOptionalArgs: 0,
+      restArg: false,
+      nKeyArgs: 0,
+    };
+
+    const createClosure = new ClosureInsn(signature, lambdaBody, 2, null);
+    const pushY = new ConstantInsn(makeNumber(20), createClosure);
+    const pushX = new ConstantInsn(makeNumber(10), pushY);
+
+    const result = vm.eval(pushX);
+
+    // Verify the closure captured both variables
+    const func = result.asFunction();
+    expect(func?.display?.length).toBe(2);
+    expect(func?.display?.[0].asNumber()?.value).toBe(10);
+    expect(func?.display?.[1].asNumber()?.value).toBe(20);
   });
 });

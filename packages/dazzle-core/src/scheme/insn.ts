@@ -8,6 +8,7 @@
 
 import type { ELObj } from './elobj';
 import type { VM } from './vm';
+import { FunctionObj, type Signature } from './elobj';
 
 /**
  * Base class for all instructions
@@ -368,12 +369,58 @@ export class PrimitiveCallInsn extends Insn {
   }
 }
 
+/**
+ * Closure instruction - Create a closure (lambda function)
+ * Port from: Insn.h ClosureInsn
+ *
+ * Creates a closure by capturing variables from the stack.
+ * The top displayLength values on the stack become the closure's display
+ * (captured environment).
+ */
+export class ClosureInsn extends Insn {
+  constructor(
+    private signature: Signature,
+    private code: Insn | null,
+    private displayLength: number,
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Capture variables from stack for the closure's display
+    const display: ELObj[] = [];
+    for (let i = 0; i < this.displayLength; i++) {
+      // Get values from bottom of the display region to top
+      display.push(vm.getStackValue(vm.stackSize() - this.displayLength + i));
+    }
+
+    // Create the closure object
+    const closure = new FunctionObj(
+      null, // anonymous lambda
+      undefined, // not a primitive
+      this.code, // bytecode to execute
+      this.signature, // function signature
+      display // captured variables
+    );
+
+    // Pop the display values from stack
+    for (let i = 0; i < this.displayLength; i++) {
+      vm.pop();
+    }
+
+    // Push the closure onto the stack
+    vm.push(closure);
+
+    return this.next;
+  }
+}
+
 // More instruction types will be added as we implement the compiler:
 // - AppendInsn (list append - more complex, will add when needed)
 // - FunctionCallInsn (user-defined function calls)
 // - ApplyInsn (generic apply)
 // - LetInsn (let bindings)
 // - DefineInsn (define)
-// - LambdaInsn (lambda)
 // - SetInsn (set!)
 // - etc.

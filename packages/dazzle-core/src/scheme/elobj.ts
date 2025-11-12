@@ -165,14 +165,27 @@ export class VectorObj extends ELObj {
 export type PrimitiveFunction = (args: ELObj[]) => ELObj;
 
 /**
+ * Function signature - describes expected arguments
+ * Port from: Insn.h struct Signature
+ */
+export interface Signature {
+  nRequiredArgs: number;   // Number of required arguments
+  nOptionalArgs: number;   // Number of optional arguments
+  restArg: boolean;        // Whether there's a rest argument
+  nKeyArgs: number;        // Number of keyword arguments
+}
+
+/**
  * Function (primitive or lambda)
- * Port from: ELObj.h FunctionObj, PrimitiveObj
+ * Port from: ELObj.h FunctionObj, PrimitiveObj, ClosureObj
  */
 export class FunctionObj extends ELObj {
   constructor(
     public name: string | null,
     public primitive?: PrimitiveFunction,
-    public code?: any // For closures/lambdas - will be Insn later
+    public code?: any, // For closures/lambdas - will be Insn
+    public signature?: Signature,
+    public display?: ELObj[] // Captured variables for closures
   ) {
     super();
   }
@@ -184,6 +197,13 @@ export class FunctionObj extends ELObj {
    */
   isPrimitive(): boolean {
     return this.primitive !== undefined;
+  }
+
+  /**
+   * Check if this is a closure (user-defined function)
+   */
+  isClosure(): boolean {
+    return this.code !== undefined && this.primitive === undefined;
   }
 
   /**
