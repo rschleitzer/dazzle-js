@@ -7,16 +7,7 @@
  */
 
 import type { ELObj } from './elobj';
-
-/**
- * Forward declaration of VM
- */
-export interface VM {
-  push(value: ELObj): void;
-  pop(): ELObj;
-  peek(): ELObj;
-  stackSize(): number;
-}
+import type { VM } from './vm';
 
 /**
  * Base class for all instructions
@@ -127,19 +118,17 @@ export class AndInsn extends Insn {
  */
 export class CaseInsn extends Insn {
   constructor(
-    private key: ELObj,
+    private _key: ELObj,
     private match: Insn | null,
     private fail: Insn | null
   ) {
     super();
   }
 
-  execute(vm: VM): Insn | null {
-    const value = vm.peek();
-    // Simple equality check (will need proper equal? implementation)
-    // For now, this is a placeholder
-    const matches = false; // TODO: implement proper equality
-    return matches ? this.match : this.fail;
+  execute(_vm: VM): Insn | null {
+    // TODO: implement proper equality check between value on stack and key
+    // For now, always fail
+    return this.fail;
   }
 }
 
