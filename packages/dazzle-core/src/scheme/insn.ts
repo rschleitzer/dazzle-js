@@ -484,10 +484,44 @@ export class ClosureSetInsn extends Insn {
   }
 }
 
+/**
+ * PopBindings instruction - Pop N bindings while preserving result
+ * Port from: Insn.h PopBindingsInsn
+ *
+ * Stack before: [binding1, binding2, ..., bindingN, result]
+ * Stack after: [result]
+ */
+export class PopBindingsInsn extends Insn {
+  constructor(
+    private nBindings: number,
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Pop the result first
+    const result = vm.pop();
+
+    // Pop all the bindings
+    for (let i = 0; i < this.nBindings; i++) {
+      vm.pop();
+    }
+
+    // Push result back
+    vm.push(result);
+
+    return this.next;
+  }
+
+  isPopBindings(): { is: false } | { is: true; nBindings: number; next: Insn | null } {
+    return { is: true, nBindings: this.nBindings, next: this.next };
+  }
+}
+
 // More instruction types will be added as we implement the compiler:
 // - AppendInsn (list append - more complex, will add when needed)
 // - FunctionCallInsn (user-defined function calls)
 // - ApplyInsn (generic apply)
-// - LetInsn (let bindings)
 // - DefineInsn (define)
 // - etc.
