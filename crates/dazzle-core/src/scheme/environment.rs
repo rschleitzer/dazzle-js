@@ -161,6 +161,26 @@ impl Environment {
             .map(|(k, v)| (k.clone(), v.clone()))
             .collect()
     }
+
+    /// Get all bindings in this environment and all parents
+    ///
+    /// Returns a HashMap of all variable bindings, with child bindings
+    /// shadowing parent bindings. Used for syncing to VM globals.
+    pub fn all_bindings(&self) -> HashMap<String, Value> {
+        let mut result = HashMap::new();
+
+        // Walk up parent chain first (so child bindings override parent)
+        if let Some(ref parent) = self.parent {
+            result = parent.all_bindings();
+        }
+
+        // Add/override with this frame's bindings
+        for (name, value) in self.bindings.borrow().iter() {
+            result.insert(name.to_string(), value.clone());
+        }
+
+        result
+    }
 }
 
 #[cfg(test)]

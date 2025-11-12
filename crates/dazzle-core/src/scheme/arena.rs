@@ -23,6 +23,7 @@ pub const ERROR_ID: ValueId = ValueId(4);
 pub const FIRST_USER_ID: u32 = 5;
 
 /// Value data (no GC fields)
+#[derive(Debug)]
 pub enum ValueData {
     Nil,
     Bool(bool),
@@ -51,7 +52,7 @@ pub enum ValueData {
 pub enum ProcedureData {
     Primitive {
         name: &'static str,
-        func: fn(&Arena, &[ValueId]) -> Result<ValueId, String>,
+        func: fn(&mut Arena, &[ValueId]) -> Result<ValueId, String>,
     },
     Lambda {
         params: Vec<String>,
@@ -62,6 +63,32 @@ pub enum ProcedureData {
         source: Option<SourceInfo>,
         name: Option<String>,
     },
+    /// Compiled lambda (bytecode)
+    CompiledLambda {
+        params: Vec<String>,
+        required_count: usize,
+        optional_defaults: Vec<ValueId>,
+        body_ip: usize, // Instruction pointer to lambda body
+        env: ValueId,
+        source: Option<SourceInfo>,
+        name: Option<String>,
+    },
+}
+
+impl std::fmt::Debug for ProcedureData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProcedureData::Primitive { name, .. } => {
+                write!(f, "Primitive {{ name: {:?}, func: <fn> }}", name)
+            }
+            ProcedureData::Lambda { params, required_count, name, .. } => {
+                write!(f, "Lambda {{ params: {:?}, required_count: {}, name: {:?}, ... }}", params, required_count, name)
+            }
+            ProcedureData::CompiledLambda { params, required_count, body_ip, name, .. } => {
+                write!(f, "CompiledLambda {{ params: {:?}, required_count: {}, body_ip: {}, name: {:?}, ... }}", params, required_count, body_ip, name)
+            }
+        }
+    }
 }
 
 /// Arena with separate mark bitmap
@@ -193,6 +220,15 @@ impl Arena {
             }) => {
                 let mut ids = optional_defaults.clone();
                 ids.push(*body);
+                ids.push(*env);
+                ids
+            }
+            ValueData::Procedure(ProcedureData::CompiledLambda {
+                optional_defaults,
+                env,
+                ..
+            }) => {
+                let mut ids = optional_defaults.clone();
                 ids.push(*env);
                 ids
             }
