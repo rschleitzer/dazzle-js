@@ -416,11 +416,78 @@ export class ClosureInsn extends Insn {
   }
 }
 
+/**
+ * StackSet instruction - Mutate stack variable
+ * Port from: Insn.h StackSetInsn
+ *
+ * Sets a stack variable to the value on top of stack.
+ * The old value is returned (left on stack).
+ */
+export class StackSetInsn extends Insn {
+  constructor(
+    private index: number,        // negative offset from sp
+    private frameIndex: number,   // for debugging/validation
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Get the old value at the target location
+    const oldValue = vm.getStackRelative(this.index);
+
+    // Get the new value from top of stack
+    const newValue = vm.peek();
+
+    // Set the target location to the new value
+    vm.setStackRelative(this.index, newValue);
+
+    // Leave the old value on stack (this is what OpenJade does)
+    // Actually, pop new value and push old value
+    vm.pop();
+    vm.push(oldValue);
+
+    return this.next;
+  }
+}
+
+/**
+ * ClosureSet instruction - Mutate closure variable
+ * Port from: Insn.h (simplified without Box)
+ *
+ * Sets a closure variable to the value on top of stack.
+ * The old value is returned (left on stack).
+ */
+export class ClosureSetInsn extends Insn {
+  constructor(
+    private index: number,
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Get the old value from closure
+    const oldValue = vm.getClosure(this.index);
+
+    // Get the new value from top of stack
+    const newValue = vm.peek();
+
+    // Set the closure variable
+    vm.setClosure(this.index, newValue);
+
+    // Leave the old value on stack
+    vm.pop();
+    vm.push(oldValue);
+
+    return this.next;
+  }
+}
+
 // More instruction types will be added as we implement the compiler:
 // - AppendInsn (list append - more complex, will add when needed)
 // - FunctionCallInsn (user-defined function calls)
 // - ApplyInsn (generic apply)
 // - LetInsn (let bindings)
 // - DefineInsn (define)
-// - SetInsn (set!)
 // - etc.

@@ -169,6 +169,21 @@ export class VM {
   }
 
   /**
+   * Set stack variable relative to sp (index is negative)
+   * Port from: VM.h vm.sp[index] = value
+   */
+  setStackRelative(index: number, value: ELObj): void {
+    if (index >= 0) {
+      throw new Error(`Stack relative index must be negative, got ${index}`);
+    }
+    const absoluteIndex = this.sp + index;
+    if (absoluteIndex < 0) {
+      throw new Error(`Stack relative index ${index} out of bounds (stack size: ${this.sp})`);
+    }
+    this.stack[absoluteIndex] = value;
+  }
+
+  /**
    * Access closure variable by index
    * Port from: VM.h vm.closure[index]
    */
@@ -180,6 +195,20 @@ export class VM {
       throw new Error(`Closure index ${index} out of bounds`);
     }
     return this.closure[index];
+  }
+
+  /**
+   * Set closure variable by index
+   * Port from: VM.h vm.closure[index] = value
+   */
+  setClosure(index: number, value: ELObj): void {
+    if (!this.closure) {
+      throw new Error('No closure available');
+    }
+    if (index < 0 || index >= this.closure.length) {
+      throw new Error(`Closure index ${index} out of bounds`);
+    }
+    this.closure[index] = value;
   }
 
   /**

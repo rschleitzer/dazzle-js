@@ -17,6 +17,8 @@ import {
   ReturnInsn,
   PrimitiveCallInsn,
   ClosureInsn,
+  StackSetInsn,
+  ClosureSetInsn,
 } from './insn';
 import { makeNumber, makeBoolean, makeSymbol, theTrueObj, theFalseObj, theNilObj, FunctionObj, type Signature } from './elobj';
 
@@ -466,5 +468,80 @@ describe('VM', () => {
     expect(func?.display?.length).toBe(2);
     expect(func?.display?.[0].asNumber()?.value).toBe(10);
     expect(func?.display?.[1].asNumber()?.value).toBe(20);
+  });
+
+  it('should mutate stack variables with StackSetInsn', () => {
+    const vm = new VM();
+
+    // Push values: 10, 20, 30
+    vm.push(makeNumber(10));
+    vm.push(makeNumber(20));
+    vm.push(makeNumber(30));
+
+    // Push new value 99 and set stack[-2]
+    // Stack before set: [10, 20, 30, 99], sp=4
+    // stack[-2] = stack[4-2] = stack[2] = 30
+    const setStack = new StackSetInsn(-2, 0, null);
+    const push99 = new ConstantInsn(makeNumber(99), setStack);
+
+    let current: Insn | null = push99;
+    while (current) {
+      current = current.execute(vm);
+    }
+
+    // Stack should be: [10, 20, 99, 30]
+    // The old value (30) is left on top
+    expect(vm.stackSize()).toBe(4);
+    expect(vm.pop().asNumber()?.value).toBe(30); // old value
+    expect(vm.pop().asNumber()?.value).toBe(99); // new value set here
+    expect(vm.pop().asNumber()?.value).toBe(20);
+    expect(vm.pop().asNumber()?.value).toBe(10);
+  });
+
+  it('should mutate closure variables with ClosureSetInsn', () => {
+    const vm = new VM();
+
+    // Set up a closure with two variables: [10, 20]
+    vm.closure = [makeNumber(10), makeNumber(20)];
+
+    // Push new value 99 and set closure[1] (which is 20)
+    const setClosure = new ClosureSetInsn(1, null);
+    const push99 = new ConstantInsn(makeNumber(99), setClosure);
+
+    let current: Insn | null = push99;
+    while (current) {
+      current = current.execute(vm);
+    }
+
+    // Closure should now be: [10, 99]
+    expect(vm.closure?.[0].asNumber()?.value).toBe(10);
+    expect(vm.closure?.[1].asNumber()?.value).toBe(99);
+
+    // Old value (20) should be on stack
+    expect(vm.stackSize()).toBe(1);
+    expect(vm.pop().asNumber()?.value).toBe(20);
+  });
+
+  it('should handle set! semantics with mutations', () => {
+    const vm = new VM();
+
+    // Simulate basic mutation: push x=10, push newval=20, set x to newval
+    // Stack: [10, 20]
+    // After set stack[-2]: [20, 10]  (10 is the old value returned)
+
+    vm.push(makeNumber(10));  // x = 10
+    vm.push(makeNumber(20));  // new value
+
+    const setX = new StackSetInsn(-2, 0, null);
+    let current: Insn | null = setX;
+    while (current) {
+      current = current.execute(vm);
+    }
+
+    // Stack: [20, 10]
+    // x was mutated to 20, old value 10 is on top
+    expect(vm.stackSize()).toBe(2);
+    expect(vm.pop().asNumber()?.value).toBe(10); // old value
+    expect(vm.peek().asNumber()?.value).toBe(20); // mutated value still at stack[0]
   });
 });
