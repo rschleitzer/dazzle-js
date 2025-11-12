@@ -1,0 +1,25 @@
+{
+  "name": "dazzle-grove-libxmljs2",
+  "version": "0.1.0",
+  "description": "libxmljs2-based grove implementation for Dazzle (Node.js XML parsing with DTD validation)",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": ["grove", "xml", "libxmljs2", "dsssl"],
+  "author": "Ralf Schleitzer <r.schleitzer@users.noreply.github.com>",
+  "license": "MIT",
+  "dependencies": {
+    "dazzle-core": "workspace:*",
+    "libxmljs2": "^0.33.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0",
+    "@types/libxmljs2": "^0.2.0"
+  }
+}

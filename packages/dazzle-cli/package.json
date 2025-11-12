@@ -1,0 +1,30 @@
+{
+  "name": "dazzle",
+  "version": "0.1.0",
+  "description": "CLI tool for Dazzle: Template-driven code generation powered by Scheme and XML (DSSSL)",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "bin": {
+    "dazzle": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": ["cli", "code-generation", "template", "scheme", "dsssl", "xml"],
+  "author": "Ralf Schleitzer <r.schleitzer@users.noreply.github.com>",
+  "license": "MIT",
+  "dependencies": {
+    "dazzle-core": "workspace:*",
+    "dazzle-grove-libxmljs2": "workspace:*",
+    "dazzle-backend-sgml": "workspace:*",
+    "commander": "^11.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0",
+    "vitest": "^1.0.0",
+    "@types/node": "^20.0.0"
+  }
+}
