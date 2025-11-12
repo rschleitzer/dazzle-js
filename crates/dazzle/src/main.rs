@@ -1101,15 +1101,12 @@ fn resolve_xml_template(
                         if content.starts_with("<![CDATA[") {
                             content = content[9..].to_string(); // Strip "<![CDATA["
 
-                            // Strip ]]> suffix - handle Windows (CRLF), Unix (LF), and no newline
-                            if content.ends_with("]]>\r\n") {
-                                content = content[..content.len() - 5].to_string(); // Strip "]]>\r\n"
-                                content.push_str("\r\n"); // Keep the final newline for correct line counting
-                            } else if content.ends_with("]]>\n") {
-                                content = content[..content.len() - 4].to_string(); // Strip "]]>\n"
-                                content.push('\n'); // Keep the final newline for correct line counting
-                            } else if content.ends_with("]]>") {
-                                content = content[..content.len() - 3].to_string(); // Strip "]]>"
+                            // Strip ]]> suffix - handle any number of trailing newlines
+                            // Find the last occurrence of ]]> and remove it, preserving trailing newlines
+                            if let Some(pos) = content.rfind("]]>") {
+                                let trailing = content[pos + 3..].to_string(); // Get everything after ]]>
+                                content = content[..pos].to_string(); // Remove ]]> and everything after
+                                content.push_str(&trailing); // Add back the trailing newlines
                             }
                         }
                         // After stripping CDATA markers, line numbers are preserved:
