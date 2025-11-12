@@ -18,6 +18,7 @@ export abstract class ELObj {
   asNumber(): NumberObj | null { return null; }
   asString(): StringObj | null { return null; }
   asSymbol(): SymbolObj | null { return null; }
+  asChar(): CharObj | null { return null; }
   asKeyword(): KeywordObj | null { return null; }
   asPair(): PairObj | null { return null; }
   asVector(): VectorObj | null { return null; }
@@ -100,6 +101,18 @@ export class StringObj extends ELObj {
 
   asString(): StringObj { return this; }
   stringData(): string { return this.value; }
+}
+
+/**
+ * Character
+ * Port from: ELObj.h CharObj
+ */
+export class CharObj extends ELObj {
+  constructor(public value: string) {
+    super();
+  }
+
+  asChar(): CharObj { return this; }
 }
 
 /**
@@ -258,6 +271,10 @@ export function makeNumber(value: number, exact = true): NumberObj {
 
 export function makeString(value: string): StringObj {
   return new StringObj(value);
+}
+
+export function makeChar(value: string): CharObj {
+  return new CharObj(value);
 }
 
 export function makeSymbol(name: string): SymbolObj {
