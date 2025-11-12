@@ -25,11 +25,10 @@
 //! Total: ~12,200 lines C++ → estimated ~10,000 lines Rust
 
 pub mod arena;
-pub mod arena_primitives;
+pub mod primitives;
 pub mod environment;
 pub mod evaluator;
 pub mod parser;
-pub mod primitives;
 pub mod value;
 
 // Integration tests (cfg(test) only)

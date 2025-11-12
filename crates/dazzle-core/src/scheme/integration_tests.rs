@@ -12,7 +12,7 @@ mod tests {
     use crate::scheme::environment::Environment;
     use crate::scheme::evaluator::Evaluator;
     use crate::scheme::parser::Parser;
-    use crate::scheme::primitives;
+    
     use crate::scheme::value::Value;
 
     /// Helper: Parse, eval, and return result
@@ -23,18 +23,6 @@ mod tests {
 
         // Create environment with primitives
         let env = Environment::new_global();
-        primitives::register_list_primitives(&env);
-        primitives::register_number_primitives(&env);
-        primitives::register_string_primitives(&env);
-        primitives::register_boolean_primitives(&env);
-        primitives::register_io_primitives(&env);
-        primitives::register_conversion_primitives(&env);
-        primitives::register_keyword_primitives(&env);
-        primitives::register_dsssl_type_primitives(&env);
-        primitives::register_format_primitives(&env);
-        primitives::register_grove_primitives(&env);
-        primitives::register_sosofo_primitives(&env);
-        primitives::register_utility_primitives(&env);
 
         // Eval
         let mut evaluator = Evaluator::new();
