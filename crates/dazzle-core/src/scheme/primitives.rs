@@ -19,7 +19,7 @@ pub type ArenaResult = Result<ValueId, String>;
 ///
 /// Arena version: Zero overhead - just copy u32
 #[inline]
-pub fn arena_car(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn car(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("car requires exactly 1 argument".to_string());
     }
@@ -34,7 +34,7 @@ pub fn arena_car(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 ///
 /// Arena version: Zero overhead - just copy u32
 #[inline]
-pub fn arena_cdr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn cdr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("cdr requires exactly 1 argument".to_string());
     }
@@ -49,7 +49,7 @@ pub fn arena_cdr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 ///
 /// Arena version: Direct arena allocation
 #[inline]
-pub fn arena_cons(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn cons(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("cons requires exactly 2 arguments".to_string());
     }
@@ -61,7 +61,7 @@ pub fn arena_cons(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 ///
 /// Arena version: Simple equality check
 #[inline]
-pub fn arena_null(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn null(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("null? requires exactly 1 argument".to_string());
     }
@@ -76,12 +76,12 @@ pub fn arena_null(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (equal? obj1 obj2) → boolean
 ///
 /// Arena version: Recursive structural equality
-pub fn arena_equal(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn equal(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("equal? requires exactly 2 arguments".to_string());
     }
 
-    Ok(if arena_equal_impl(arena, args[0], args[1]) {
+    Ok(if equal_impl(arena, args[0], args[1]) {
         crate::scheme::arena::TRUE_ID
     } else {
         crate::scheme::arena::FALSE_ID
@@ -89,7 +89,7 @@ pub fn arena_equal(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// Implementation of structural equality
-fn arena_equal_impl(arena: &Arena, a: ValueId, b: ValueId) -> bool {
+fn equal_impl(arena: &Arena, a: ValueId, b: ValueId) -> bool {
     // Fast path: same ID
     if a == b {
         return true;
@@ -99,13 +99,13 @@ fn arena_equal_impl(arena: &Arena, a: ValueId, b: ValueId) -> bool {
         // Structural equality for pairs
         (ValueData::Pair { car: car1, cdr: cdr1, .. },
          ValueData::Pair { car: car2, cdr: cdr2, .. }) => {
-            arena_equal_impl(arena, *car1, *car2) && arena_equal_impl(arena, *cdr1, *cdr2)
+            equal_impl(arena, *car1, *car2) && equal_impl(arena, *cdr1, *cdr2)
         }
 
         // Structural equality for vectors
         (ValueData::Vector(v1), ValueData::Vector(v2)) => {
             v1.len() == v2.len() &&
-            v1.iter().zip(v2.iter()).all(|(a, b)| arena_equal_impl(arena, *a, *b))
+            v1.iter().zip(v2.iter()).all(|(a, b)| equal_impl(arena, *a, *b))
         }
 
         // Value equality for primitives
@@ -127,42 +127,42 @@ fn arena_equal_impl(arena: &Arena, a: ValueId, b: ValueId) -> bool {
 /// (cadr list) → value
 /// Equivalent to (car (cdr list))
 #[inline]
-pub fn arena_cadr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn cadr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("cadr requires exactly 1 argument".to_string());
     }
-    let cdr_result = arena_cdr(arena, args)?;
-    arena_car(arena, &[cdr_result])
+    let cdr_result = cdr(arena, args)?;
+    car(arena, &[cdr_result])
 }
 
 /// (caddr list) → value
 /// Equivalent to (car (cdr (cdr list)))
 #[inline]
-pub fn arena_caddr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn caddr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("caddr requires exactly 1 argument".to_string());
     }
-    let cdr1 = arena_cdr(arena, args)?;
-    let cdr2 = arena_cdr(arena, &[cdr1])?;
-    arena_car(arena, &[cdr2])
+    let cdr1 = cdr(arena, args)?;
+    let cdr2 = cdr(arena, &[cdr1])?;
+    car(arena, &[cdr2])
 }
 
 /// (cadddr list) → value
 /// Equivalent to (car (cdr (cdr (cdr list))))
 #[inline]
-pub fn arena_cadddr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn cadddr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("cadddr requires exactly 1 argument".to_string());
     }
-    let cdr1 = arena_cdr(arena, args)?;
-    let cdr2 = arena_cdr(arena, &[cdr1])?;
-    let cdr3 = arena_cdr(arena, &[cdr2])?;
-    arena_car(arena, &[cdr3])
+    let cdr1 = cdr(arena, args)?;
+    let cdr2 = cdr(arena, &[cdr1])?;
+    let cdr3 = cdr(arena, &[cdr2])?;
+    car(arena, &[cdr3])
 }
 
 /// (list obj ...) → list
 /// Create a list from arguments
-pub fn arena_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     let mut result = NIL_ID;
     for &arg in args.iter().rev() {
         result = arena.cons(arg, result);
@@ -172,7 +172,7 @@ pub fn arena_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (length list) → integer
 /// Return the length of a list
-pub fn arena_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("length requires exactly 1 argument".to_string());
     }
@@ -197,7 +197,7 @@ pub fn arena_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (reverse list) → list
 /// Reverse a list
-pub fn arena_reverse(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn reverse(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("reverse requires exactly 1 argument".to_string());
     }
@@ -223,7 +223,7 @@ pub fn arena_reverse(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (append list ...) → list
 /// Concatenate lists
-pub fn arena_append(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn append(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Ok(NIL_ID);
     }
@@ -265,7 +265,7 @@ pub fn arena_append(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (list? obj) → boolean
 /// Check if object is a proper list
-pub fn arena_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("list? requires exactly 1 argument".to_string());
     }
@@ -287,7 +287,7 @@ pub fn arena_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (list-ref list k) → value
 /// Return the kth element of list (0-indexed)
-pub fn arena_list_ref(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn list_ref(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("list-ref requires exactly 2 arguments".to_string());
     }
@@ -321,7 +321,7 @@ pub fn arena_list_ref(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (pair? obj) → boolean
 /// Check if object is a pair
 #[inline]
-pub fn arena_pair_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn pair_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("pair? requires exactly 1 argument".to_string());
     }
@@ -335,7 +335,7 @@ pub fn arena_pair_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (number? obj) → boolean
 /// Check if object is a number (integer or real)
 #[inline]
-pub fn arena_number_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn number_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("number? requires exactly 1 argument".to_string());
     }
@@ -349,7 +349,7 @@ pub fn arena_number_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (integer? obj) → boolean
 /// Check if object is an integer
 #[inline]
-pub fn arena_integer_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn integer_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("integer? requires exactly 1 argument".to_string());
     }
@@ -363,7 +363,7 @@ pub fn arena_integer_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (real? obj) → boolean
 /// Check if object is a real number
 #[inline]
-pub fn arena_real_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn real_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("real? requires exactly 1 argument".to_string());
     }
@@ -377,7 +377,7 @@ pub fn arena_real_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (string? obj) → boolean
 /// Check if object is a string
 #[inline]
-pub fn arena_string_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("string? requires exactly 1 argument".to_string());
     }
@@ -391,7 +391,7 @@ pub fn arena_string_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (symbol? obj) → boolean
 /// Check if object is a symbol
 #[inline]
-pub fn arena_symbol_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn symbol_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("symbol? requires exactly 1 argument".to_string());
     }
@@ -405,7 +405,7 @@ pub fn arena_symbol_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (char? obj) → boolean
 /// Check if object is a character
 #[inline]
-pub fn arena_char_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("char? requires exactly 1 argument".to_string());
     }
@@ -419,7 +419,7 @@ pub fn arena_char_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (boolean? obj) → boolean
 /// Check if object is a boolean
 #[inline]
-pub fn arena_boolean_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn boolean_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("boolean? requires exactly 1 argument".to_string());
     }
@@ -433,7 +433,7 @@ pub fn arena_boolean_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (zero? num) → boolean
 /// Check if number is zero
 #[inline]
-pub fn arena_zero_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn zero_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("zero? requires exactly 1 argument".to_string());
     }
@@ -460,7 +460,7 @@ pub fn arena_zero_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (positive? num) → boolean
 /// Check if number is positive
 #[inline]
-pub fn arena_positive_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn positive_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("positive? requires exactly 1 argument".to_string());
     }
@@ -487,7 +487,7 @@ pub fn arena_positive_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (negative? num) → boolean
 /// Check if number is negative
 #[inline]
-pub fn arena_negative_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn negative_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("negative? requires exactly 1 argument".to_string());
     }
@@ -514,7 +514,7 @@ pub fn arena_negative_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (odd? n) → boolean
 /// Check if integer is odd
 #[inline]
-pub fn arena_odd_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn odd_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("odd? requires exactly 1 argument".to_string());
     }
@@ -534,7 +534,7 @@ pub fn arena_odd_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (even? n) → boolean
 /// Check if integer is even
 #[inline]
-pub fn arena_even_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn even_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("even? requires exactly 1 argument".to_string());
     }
@@ -580,7 +580,7 @@ fn from_number(arena: &mut Arena, n: f64) -> ValueId {
 /// (+ num ...) → number
 /// Add numbers or quantities (quantities must have compatible units)
 /// DSSSL: (+ quantity number) → quantity, (+ quantity quantity) → quantity
-pub fn arena_add(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn add(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Ok(arena.int(0));
     }
@@ -636,7 +636,7 @@ pub fn arena_add(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (- num ...) → number
 /// Subtract numbers
-pub fn arena_subtract(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn subtract(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Err("-: requires at least 1 argument".to_string());
     }
@@ -670,7 +670,7 @@ pub fn arena_subtract(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (* num ...) → number
 /// Multiply numbers or scale a quantity by a number
 /// DSSSL: (* quantity number) → quantity (scales the quantity)
-pub fn arena_multiply(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn multiply(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Ok(arena.int(1));
     }
@@ -720,7 +720,7 @@ pub fn arena_multiply(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (/ num ...) → number
 /// Divide numbers (always returns real in R4RS)
-pub fn arena_divide(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn divide(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Err("/: requires at least 1 argument".to_string());
     }
@@ -750,7 +750,7 @@ pub fn arena_divide(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (quotient n1 n2) → integer
 /// Integer division quotient
-pub fn arena_quotient(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn quotient(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("quotient requires exactly 2 arguments".to_string());
     }
@@ -768,7 +768,7 @@ pub fn arena_quotient(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (remainder n1 n2) → integer
 /// Integer division remainder
-pub fn arena_remainder(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn remainder(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("remainder requires exactly 2 arguments".to_string());
     }
@@ -786,7 +786,7 @@ pub fn arena_remainder(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (modulo n1 n2) → integer
 /// Modulo operation
-pub fn arena_modulo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn modulo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("modulo requires exactly 2 arguments".to_string());
     }
@@ -804,7 +804,7 @@ pub fn arena_modulo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (= num1 num2 ...) → boolean
 /// Numeric equality
-pub fn arena_num_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn num_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err("=: requires at least 2 arguments".to_string());
     }
@@ -820,7 +820,7 @@ pub fn arena_num_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (< num1 num2 ...) → boolean
 /// Numeric less-than
-pub fn arena_num_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn num_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err("<: requires at least 2 arguments".to_string());
     }
@@ -838,7 +838,7 @@ pub fn arena_num_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (> num1 num2 ...) → boolean
 /// Numeric greater-than
-pub fn arena_num_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn num_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err(">: requires at least 2 arguments".to_string());
     }
@@ -856,7 +856,7 @@ pub fn arena_num_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (<= num1 num2 ...) → boolean
 /// Numeric less-than-or-equal
-pub fn arena_num_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn num_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err("<=: requires at least 2 arguments".to_string());
     }
@@ -874,7 +874,7 @@ pub fn arena_num_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (>= num1 num2 ...) → boolean
 /// Numeric greater-than-or-equal
-pub fn arena_num_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn num_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err(">=: requires at least 2 arguments".to_string());
     }
@@ -892,7 +892,7 @@ pub fn arena_num_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (abs num) → number
 /// Absolute value
-pub fn arena_abs(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn abs(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("abs requires exactly 1 argument".to_string());
     }
@@ -906,7 +906,7 @@ pub fn arena_abs(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (min num ...) → number
 /// Minimum value
-pub fn arena_min(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn min(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Err("min requires at least 1 argument".to_string());
     }
@@ -933,7 +933,7 @@ pub fn arena_min(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (max num ...) → number
 /// Maximum value
-pub fn arena_max(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn max(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Err("max requires at least 1 argument".to_string());
     }
@@ -960,7 +960,7 @@ pub fn arena_max(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (floor num) → integer
 /// Round down
-pub fn arena_floor(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn floor(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("floor requires exactly 1 argument".to_string());
     }
@@ -971,7 +971,7 @@ pub fn arena_floor(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (ceiling num) → integer
 /// Round up
-pub fn arena_ceiling(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn ceiling(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("ceiling requires exactly 1 argument".to_string());
     }
@@ -982,7 +982,7 @@ pub fn arena_ceiling(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (truncate num) → integer
 /// Round toward zero
-pub fn arena_truncate(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn truncate(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("truncate requires exactly 1 argument".to_string());
     }
@@ -993,7 +993,7 @@ pub fn arena_truncate(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (round num) → integer
 /// Round to nearest
-pub fn arena_round(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn round(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("round requires exactly 1 argument".to_string());
     }
@@ -1004,7 +1004,7 @@ pub fn arena_round(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (sqrt num) → number
 /// Square root
-pub fn arena_sqrt(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn sqrt(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("sqrt requires exactly 1 argument".to_string());
     }
@@ -1015,7 +1015,7 @@ pub fn arena_sqrt(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (sin num) → number
 /// Sine
-pub fn arena_sin(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn sin(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("sin requires exactly 1 argument".to_string());
     }
@@ -1026,7 +1026,7 @@ pub fn arena_sin(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (cos num) → number
 /// Cosine
-pub fn arena_cos(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn cos(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("cos requires exactly 1 argument".to_string());
     }
@@ -1037,7 +1037,7 @@ pub fn arena_cos(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (tan num) → number
 /// Tangent
-pub fn arena_tan(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn tan(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("tan requires exactly 1 argument".to_string());
     }
@@ -1048,7 +1048,7 @@ pub fn arena_tan(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (asin num) → number
 /// Arcsine
-pub fn arena_asin(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn asin(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("asin requires exactly 1 argument".to_string());
     }
@@ -1059,7 +1059,7 @@ pub fn arena_asin(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (acos num) → number
 /// Arccosine
-pub fn arena_acos(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn acos(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("acos requires exactly 1 argument".to_string());
     }
@@ -1070,7 +1070,7 @@ pub fn arena_acos(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (atan num) → number
 /// Arctangent
-pub fn arena_atan(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn atan(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("atan requires exactly 1 argument".to_string());
     }
@@ -1081,7 +1081,7 @@ pub fn arena_atan(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (exp num) → number
 /// Exponential (e^x)
-pub fn arena_exp(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn exp(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("exp requires exactly 1 argument".to_string());
     }
@@ -1092,7 +1092,7 @@ pub fn arena_exp(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (log num) → number
 /// Natural logarithm
-pub fn arena_log(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn log(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("log requires exactly 1 argument".to_string());
     }
@@ -1103,7 +1103,7 @@ pub fn arena_log(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (expt base exponent) → number
 /// Exponentiation
-pub fn arena_expt(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn expt(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("expt requires exactly 2 arguments".to_string());
     }
@@ -1119,7 +1119,7 @@ pub fn arena_expt(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (string-length str) → integer
 /// Return length of string
-pub fn arena_string_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("string-length requires exactly 1 argument".to_string());
     }
@@ -1134,7 +1134,7 @@ pub fn arena_string_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (string-ref str k) → char
 /// Return character at position k
-pub fn arena_string_ref(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_ref(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("string-ref requires exactly 2 arguments".to_string());
     }
@@ -1158,7 +1158,7 @@ pub fn arena_string_ref(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (substring str start end) → string
 /// Extract substring from start to end
-pub fn arena_substring(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn substring(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 3 {
         return Err("substring requires exactly 3 arguments".to_string());
     }
@@ -1196,7 +1196,7 @@ pub fn arena_substring(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (string-append str ...) → string
 /// Concatenate strings
-pub fn arena_string_append(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_append(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     let mut result = String::new();
 
     for &arg in args {
@@ -1222,7 +1222,7 @@ fn get_string_data<'a>(arena: &'a Arena, id: ValueId, prim_name: &str) -> Result
 
 /// (string=? str1 str2 ...) → boolean
 /// String equality (case-sensitive)
-pub fn arena_string_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err("string=?: requires at least 2 arguments".to_string());
     }
@@ -1241,7 +1241,7 @@ pub fn arena_string_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (string<? str1 str2 ...) → boolean
 /// String less-than (case-sensitive)
-pub fn arena_string_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err("string<?: requires at least 2 arguments".to_string());
     }
@@ -1261,7 +1261,7 @@ pub fn arena_string_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (string>? str1 str2 ...) → boolean
 /// String greater-than (case-sensitive)
-pub fn arena_string_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err("string>?: requires at least 2 arguments".to_string());
     }
@@ -1281,7 +1281,7 @@ pub fn arena_string_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (string<=? str1 str2 ...) → boolean
 /// String less-than-or-equal (case-sensitive)
-pub fn arena_string_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err("string<=?: requires at least 2 arguments".to_string());
     }
@@ -1301,7 +1301,7 @@ pub fn arena_string_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (string>=? str1 str2 ...) → boolean
 /// String greater-than-or-equal (case-sensitive)
-pub fn arena_string_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err("string>=?: requires at least 2 arguments".to_string());
     }
@@ -1321,7 +1321,7 @@ pub fn arena_string_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (string-ci=? str1 str2 ...) → boolean
 /// String equality (case-insensitive)
-pub fn arena_string_ci_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_ci_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err("string-ci=?: requires at least 2 arguments".to_string());
     }
@@ -1340,7 +1340,7 @@ pub fn arena_string_ci_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (string-ci<? str1 str2 ...) → boolean
 /// String less-than (case-insensitive)
-pub fn arena_string_ci_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_ci_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err("string-ci<?: requires at least 2 arguments".to_string());
     }
@@ -1361,7 +1361,7 @@ pub fn arena_string_ci_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (string-ci>? str1 str2 ...) → boolean
 /// String greater-than (case-insensitive)
-pub fn arena_string_ci_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_ci_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err("string-ci>?: requires at least 2 arguments".to_string());
     }
@@ -1382,7 +1382,7 @@ pub fn arena_string_ci_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (string-ci<=? str1 str2 ...) → boolean
 /// String less-than-or-equal (case-insensitive)
-pub fn arena_string_ci_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_ci_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err("string-ci<=?: requires at least 2 arguments".to_string());
     }
@@ -1403,7 +1403,7 @@ pub fn arena_string_ci_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (string-ci>=? str1 str2 ...) → boolean
 /// String greater-than-or-equal (case-insensitive)
-pub fn arena_string_ci_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_ci_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 {
         return Err("string-ci>=?: requires at least 2 arguments".to_string());
     }
@@ -1429,7 +1429,7 @@ pub fn arena_string_ci_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (char=? char1 char2) → boolean
 /// Character equality (case-sensitive)
 #[inline]
-pub fn arena_char_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("char=? requires exactly 2 arguments".to_string());
     }
@@ -1454,7 +1454,7 @@ pub fn arena_char_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (char<? char1 char2) → boolean
 /// Character less-than (case-sensitive)
 #[inline]
-pub fn arena_char_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("char<? requires exactly 2 arguments".to_string());
     }
@@ -1479,7 +1479,7 @@ pub fn arena_char_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (char>? char1 char2) → boolean
 /// Character greater-than (case-sensitive)
 #[inline]
-pub fn arena_char_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("char>? requires exactly 2 arguments".to_string());
     }
@@ -1504,7 +1504,7 @@ pub fn arena_char_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (char<=? char1 char2) → boolean
 /// Character less-than-or-equal (case-sensitive)
 #[inline]
-pub fn arena_char_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("char<=? requires exactly 2 arguments".to_string());
     }
@@ -1529,7 +1529,7 @@ pub fn arena_char_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (char>=? char1 char2) → boolean
 /// Character greater-than-or-equal (case-sensitive)
 #[inline]
-pub fn arena_char_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("char>=? requires exactly 2 arguments".to_string());
     }
@@ -1554,7 +1554,7 @@ pub fn arena_char_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (char-ci=? char1 char2) → boolean
 /// Character equality (case-insensitive)
 #[inline]
-pub fn arena_char_ci_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_ci_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("char-ci=? requires exactly 2 arguments".to_string());
     }
@@ -1579,7 +1579,7 @@ pub fn arena_char_ci_eq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (char-ci<? char1 char2) → boolean
 /// Character less-than (case-insensitive)
 #[inline]
-pub fn arena_char_ci_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_ci_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("char-ci<? requires exactly 2 arguments".to_string());
     }
@@ -1604,7 +1604,7 @@ pub fn arena_char_ci_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (char-ci>? char1 char2) → boolean
 /// Character greater-than (case-insensitive)
 #[inline]
-pub fn arena_char_ci_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_ci_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("char-ci>? requires exactly 2 arguments".to_string());
     }
@@ -1629,7 +1629,7 @@ pub fn arena_char_ci_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (char-ci<=? char1 char2) → boolean
 /// Character less-than-or-equal (case-insensitive)
 #[inline]
-pub fn arena_char_ci_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_ci_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("char-ci<=? requires exactly 2 arguments".to_string());
     }
@@ -1654,7 +1654,7 @@ pub fn arena_char_ci_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (char-ci>=? char1 char2) → boolean
 /// Character greater-than-or-equal (case-insensitive)
 #[inline]
-pub fn arena_char_ci_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_ci_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("char-ci>=? requires exactly 2 arguments".to_string());
     }
@@ -1678,7 +1678,7 @@ pub fn arena_char_ci_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (char-upcase char) → char
 /// Convert character to uppercase
-pub fn arena_char_upcase(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_upcase(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("char-upcase requires exactly 1 argument".to_string());
     }
@@ -1691,7 +1691,7 @@ pub fn arena_char_upcase(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (char-downcase char) → char
 /// Convert character to lowercase
-pub fn arena_char_downcase(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_downcase(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("char-downcase requires exactly 1 argument".to_string());
     }
@@ -1705,7 +1705,7 @@ pub fn arena_char_downcase(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (char-alphabetic? char) → boolean
 /// Test if character is alphabetic
 #[inline]
-pub fn arena_char_alphabetic_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_alphabetic_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("char-alphabetic? requires exactly 1 argument".to_string());
     }
@@ -1723,7 +1723,7 @@ pub fn arena_char_alphabetic_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (char-numeric? char) → boolean
 /// Test if character is numeric
 #[inline]
-pub fn arena_char_numeric_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_numeric_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("char-numeric? requires exactly 1 argument".to_string());
     }
@@ -1741,7 +1741,7 @@ pub fn arena_char_numeric_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (char-whitespace? char) → boolean
 /// Test if character is whitespace
 #[inline]
-pub fn arena_char_whitespace_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_whitespace_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("char-whitespace? requires exactly 1 argument".to_string());
     }
@@ -1758,7 +1758,7 @@ pub fn arena_char_whitespace_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (char->integer char) → integer
 /// Convert character to its Unicode code point
-pub fn arena_char_to_integer(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_to_integer(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("char->integer requires exactly 1 argument".to_string());
     }
@@ -1771,7 +1771,7 @@ pub fn arena_char_to_integer(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
 
 /// (integer->char n) → char
 /// Convert integer code point to character
-pub fn arena_integer_to_char(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn integer_to_char(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("integer->char requires exactly 1 argument".to_string());
     }
@@ -1792,7 +1792,7 @@ pub fn arena_integer_to_char(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
 
 /// (char-property char) → string
 /// DSSSL extension - returns dummy value
-pub fn arena_char_property(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_property(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("char-property requires exactly 1 argument".to_string());
     }
@@ -1805,7 +1805,7 @@ pub fn arena_char_property(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (char-script-case char) → symbol
 /// DSSSL extension - returns dummy value
-pub fn arena_char_script_case(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_script_case(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("char-script-case requires exactly 1 argument".to_string());
     }
@@ -1822,7 +1822,7 @@ pub fn arena_char_script_case(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 
 /// (symbol->string symbol) → string
 /// Convert symbol to its string name
-pub fn arena_symbol_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn symbol_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("symbol->string requires exactly 1 argument".to_string());
     }
@@ -1835,7 +1835,7 @@ pub fn arena_symbol_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 
 /// (string->symbol string) → symbol
 /// Convert string to a symbol
-pub fn arena_string_to_symbol(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_to_symbol(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("string->symbol requires exactly 1 argument".to_string());
     }
@@ -1849,7 +1849,7 @@ pub fn arena_string_to_symbol(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 /// (keyword? obj) → boolean
 /// Test if object is a keyword
 #[inline]
-pub fn arena_keyword_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn keyword_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("keyword? requires exactly 1 argument".to_string());
     }
@@ -1862,7 +1862,7 @@ pub fn arena_keyword_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (keyword->string keyword) → string
 /// Convert keyword to its string name
-pub fn arena_keyword_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn keyword_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("keyword->string requires exactly 1 argument".to_string());
     }
@@ -1875,7 +1875,7 @@ pub fn arena_keyword_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResu
 
 /// (string->keyword string) → keyword
 /// Convert string to a keyword
-pub fn arena_string_to_keyword(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_to_keyword(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("string->keyword requires exactly 1 argument".to_string());
     }
@@ -1891,7 +1891,7 @@ pub fn arena_string_to_keyword(arena: &mut Arena, args: &[ValueId]) -> ArenaResu
 // ============================================================================
 
 /// Helper: eq? comparison for arena values
-fn arena_eq(arena: &Arena, a: ValueId, b: ValueId) -> bool {
+fn eq(arena: &Arena, a: ValueId, b: ValueId) -> bool {
     // Fast path: same ID means same object
     if a == b {
         return true;
@@ -1909,7 +1909,7 @@ fn arena_eq(arena: &Arena, a: ValueId, b: ValueId) -> bool {
 }
 
 /// Helper: eqv? comparison for arena values
-fn arena_eqv(arena: &Arena, a: ValueId, b: ValueId) -> bool {
+fn eqv(arena: &Arena, a: ValueId, b: ValueId) -> bool {
     // Fast path: same ID
     if a == b {
         return true;
@@ -1928,7 +1928,7 @@ fn arena_eqv(arena: &Arena, a: ValueId, b: ValueId) -> bool {
 
 /// (memq obj list) → list or #f
 /// Search list for obj using eq? comparison
-pub fn arena_memq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn memq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("memq requires exactly 2 arguments".to_string());
     }
@@ -1943,7 +1943,7 @@ pub fn arena_memq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
         match arena.get(current) {
             ValueData::Pair { car, cdr, .. } => {
-                if arena_eq(arena, obj, *car) {
+                if eq(arena, obj, *car) {
                     return Ok(current);
                 }
                 current = *cdr;
@@ -1955,7 +1955,7 @@ pub fn arena_memq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (memv obj list) → list or #f
 /// Search list for obj using eqv? comparison
-pub fn arena_memv(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn memv(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("memv requires exactly 2 arguments".to_string());
     }
@@ -1970,7 +1970,7 @@ pub fn arena_memv(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
         match arena.get(current) {
             ValueData::Pair { car, cdr, .. } => {
-                if arena_eqv(arena, obj, *car) {
+                if eqv(arena, obj, *car) {
                     return Ok(current);
                 }
                 current = *cdr;
@@ -1982,7 +1982,7 @@ pub fn arena_memv(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (member obj list) → list or #f
 /// Search list for obj using equal? comparison
-pub fn arena_member(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn member(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("member requires exactly 2 arguments".to_string());
     }
@@ -1997,7 +1997,7 @@ pub fn arena_member(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
         match arena.get(current) {
             ValueData::Pair { car, cdr, .. } => {
-                if arena_equal_impl(arena, obj, *car) {
+                if equal_impl(arena, obj, *car) {
                     return Ok(current);
                 }
                 current = *cdr;
@@ -2009,7 +2009,7 @@ pub fn arena_member(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (assq obj alist) → pair or #f
 /// Search association list for pair with car eq? to obj
-pub fn arena_assq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn assq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("assq requires exactly 2 arguments".to_string());
     }
@@ -2026,7 +2026,7 @@ pub fn arena_assq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
             ValueData::Pair { car, cdr, .. } => {
                 // Check if car is a pair
                 if let ValueData::Pair { car: inner_car, .. } = arena.get(*car) {
-                    if arena_eq(arena, obj, *inner_car) {
+                    if eq(arena, obj, *inner_car) {
                         return Ok(*car);
                     }
                 }
@@ -2039,7 +2039,7 @@ pub fn arena_assq(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (assv obj alist) → pair or #f
 /// Search association list for pair with car eqv? to obj
-pub fn arena_assv(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn assv(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("assv requires exactly 2 arguments".to_string());
     }
@@ -2056,7 +2056,7 @@ pub fn arena_assv(arena: &Arena, args: &[ValueId]) -> ArenaResult {
             ValueData::Pair { car, cdr, .. } => {
                 // Check if car is a pair
                 if let ValueData::Pair { car: inner_car, .. } = arena.get(*car) {
-                    if arena_eqv(arena, obj, *inner_car) {
+                    if eqv(arena, obj, *inner_car) {
                         return Ok(*car);
                     }
                 }
@@ -2069,7 +2069,7 @@ pub fn arena_assv(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// (assoc obj alist) → pair or #f
 /// Search association list for pair with car equal? to obj
-pub fn arena_assoc(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn assoc(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("assoc requires exactly 2 arguments".to_string());
     }
@@ -2086,7 +2086,7 @@ pub fn arena_assoc(arena: &Arena, args: &[ValueId]) -> ArenaResult {
             ValueData::Pair { car, cdr, .. } => {
                 // Check if car is a pair
                 if let ValueData::Pair { car: inner_car, .. } = arena.get(*car) {
-                    if arena_equal_impl(arena, obj, *inner_car) {
+                    if equal_impl(arena, obj, *inner_car) {
                         return Ok(*car);
                     }
                 }
@@ -2104,7 +2104,7 @@ pub fn arena_assoc(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (not obj) → boolean
 /// Logical not - returns #t if obj is false, #f otherwise
 #[inline]
-pub fn arena_not(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn not(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("not requires exactly 1 argument".to_string());
     }
@@ -2121,12 +2121,12 @@ pub fn arena_not(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (eq? obj1 obj2) → boolean
 /// Test for object identity (pointer equality)
 #[inline]
-pub fn arena_eq_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn eq_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("eq? requires exactly 2 arguments".to_string());
     }
 
-    Ok(if arena_eq(arena, args[0], args[1]) {
+    Ok(if eq(arena, args[0], args[1]) {
         crate::scheme::arena::TRUE_ID
     } else {
         crate::scheme::arena::FALSE_ID
@@ -2136,12 +2136,12 @@ pub fn arena_eq_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (eqv? obj1 obj2) → boolean
 /// Test for equivalence (numbers and chars by value, others by identity)
 #[inline]
-pub fn arena_eqv_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn eqv_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("eqv? requires exactly 2 arguments".to_string());
     }
 
-    Ok(if arena_eqv(arena, args[0], args[1]) {
+    Ok(if eqv(arena, args[0], args[1]) {
         crate::scheme::arena::TRUE_ID
     } else {
         crate::scheme::arena::FALSE_ID
@@ -2151,37 +2151,37 @@ pub fn arena_eqv_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (caar list) → value
 /// Equivalent to (car (car list))
 #[inline]
-pub fn arena_caar(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn caar(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("caar requires exactly 1 argument".to_string());
     }
 
-    let car1 = arena_car(arena, args)?;
-    arena_car(arena, &[car1])
+    let car1 = car(arena, args)?;
+    car(arena, &[car1])
 }
 
 /// (cdar list) → value
 /// Equivalent to (cdr (car list))
 #[inline]
-pub fn arena_cdar(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn cdar(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("cdar requires exactly 1 argument".to_string());
     }
 
-    let car_val = arena_car(arena, args)?;
-    arena_cdr(arena, &[car_val])
+    let car_val = car(arena, args)?;
+    cdr(arena, &[car_val])
 }
 
 /// (cddr list) → value
 /// Equivalent to (cdr (cdr list))
 #[inline]
-pub fn arena_cddr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn cddr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("cddr requires exactly 1 argument".to_string());
     }
 
-    let cdr1 = arena_cdr(arena, args)?;
-    arena_cdr(arena, &[cdr1])
+    let cdr1 = cdr(arena, args)?;
+    cdr(arena, &[cdr1])
 }
 
 // Phase 3 Batch 9: Extended List Accessors (7 primitives)
@@ -2189,85 +2189,85 @@ pub fn arena_cddr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (caaar list) → value
 /// Equivalent to (car (car (car list)))
 #[inline]
-pub fn arena_caaar(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn caaar(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("caaar requires exactly 1 argument".to_string());
     }
-    let car1 = arena_car(arena, args)?;
-    let car2 = arena_car(arena, &[car1])?;
-    arena_car(arena, &[car2])
+    let car1 = car(arena, args)?;
+    let car2 = car(arena, &[car1])?;
+    car(arena, &[car2])
 }
 
 /// (caadr list) → value
 /// Equivalent to (car (car (cdr list)))
 #[inline]
-pub fn arena_caadr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn caadr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("caadr requires exactly 1 argument".to_string());
     }
-    let cdr1 = arena_cdr(arena, args)?;
-    let car2 = arena_car(arena, &[cdr1])?;
-    arena_car(arena, &[car2])
+    let cdr1 = cdr(arena, args)?;
+    let car2 = car(arena, &[cdr1])?;
+    car(arena, &[car2])
 }
 
 /// (cadar list) → value
 /// Equivalent to (car (cdr (car list)))
 #[inline]
-pub fn arena_cadar(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn cadar(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("cadar requires exactly 1 argument".to_string());
     }
-    let car1 = arena_car(arena, args)?;
-    let cdr2 = arena_cdr(arena, &[car1])?;
-    arena_car(arena, &[cdr2])
+    let car1 = car(arena, args)?;
+    let cdr2 = cdr(arena, &[car1])?;
+    car(arena, &[cdr2])
 }
 
 /// (cdaar list) → value
 /// Equivalent to (cdr (car (car list)))
 #[inline]
-pub fn arena_cdaar(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn cdaar(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("cdaar requires exactly 1 argument".to_string());
     }
-    let car1 = arena_car(arena, args)?;
-    let car2 = arena_car(arena, &[car1])?;
-    arena_cdr(arena, &[car2])
+    let car1 = car(arena, args)?;
+    let car2 = car(arena, &[car1])?;
+    cdr(arena, &[car2])
 }
 
 /// (cdadr list) → value
 /// Equivalent to (cdr (car (cdr list)))
 #[inline]
-pub fn arena_cdadr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn cdadr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("cdadr requires exactly 1 argument".to_string());
     }
-    let cdr1 = arena_cdr(arena, args)?;
-    let car2 = arena_car(arena, &[cdr1])?;
-    arena_cdr(arena, &[car2])
+    let cdr1 = cdr(arena, args)?;
+    let car2 = car(arena, &[cdr1])?;
+    cdr(arena, &[car2])
 }
 
 /// (cddar list) → value
 /// Equivalent to (cdr (cdr (car list)))
 #[inline]
-pub fn arena_cddar(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn cddar(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("cddar requires exactly 1 argument".to_string());
     }
-    let car1 = arena_car(arena, args)?;
-    let cdr2 = arena_cdr(arena, &[car1])?;
-    arena_cdr(arena, &[cdr2])
+    let car1 = car(arena, args)?;
+    let cdr2 = cdr(arena, &[car1])?;
+    cdr(arena, &[cdr2])
 }
 
 /// (cdddr list) → value
 /// Equivalent to (cdr (cdr (cdr list)))
 #[inline]
-pub fn arena_cdddr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn cdddr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("cdddr requires exactly 1 argument".to_string());
     }
-    let cdr1 = arena_cdr(arena, args)?;
-    let cdr2 = arena_cdr(arena, &[cdr1])?;
-    arena_cdr(arena, &[cdr2])
+    let cdr1 = cdr(arena, args)?;
+    let cdr2 = cdr(arena, &[cdr1])?;
+    cdr(arena, &[cdr2])
 }
 
 // Phase 3 Batch 10: Vector Operations (8 primitives)
@@ -2275,14 +2275,14 @@ pub fn arena_cdddr(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (vector obj ...) → vector
 /// Create a vector from the given arguments
 #[inline]
-pub fn arena_vector(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn vector(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     Ok(arena.vector(args.to_vec()))
 }
 
 /// (make-vector k [fill]) → vector
 /// Create a vector of length k, optionally filled with fill value
 #[inline]
-pub fn arena_make_vector(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn make_vector(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() || args.len() > 2 {
         return Err("make-vector requires 1 or 2 arguments".to_string());
     }
@@ -2306,7 +2306,7 @@ pub fn arena_make_vector(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (vector-length vec) → integer
 /// Return the length of the vector
 #[inline]
-pub fn arena_vector_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn vector_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("vector-length requires exactly 1 argument".to_string());
     }
@@ -2320,7 +2320,7 @@ pub fn arena_vector_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (vector-ref vec k) → value
 /// Return the element at index k
 #[inline]
-pub fn arena_vector_ref(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn vector_ref(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("vector-ref requires exactly 2 arguments".to_string());
     }
@@ -2349,7 +2349,7 @@ pub fn arena_vector_ref(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// Set the element at index k to obj
 /// NOTE: This mutates the vector in place (returns unspecified)
 #[inline]
-pub fn arena_vector_set(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn vector_set(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 3 {
         return Err("vector-set! requires exactly 3 arguments".to_string());
     }
@@ -2380,7 +2380,7 @@ pub fn arena_vector_set(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (vector->list vec) → list
 /// Convert a vector to a list
 #[inline]
-pub fn arena_vector_to_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn vector_to_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("vector->list requires exactly 1 argument".to_string());
     }
@@ -2402,7 +2402,7 @@ pub fn arena_vector_to_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
 /// (list->vector list) → vector
 /// Convert a list to a vector
 #[inline]
-pub fn arena_list_to_vector(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn list_to_vector(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("list->vector requires exactly 1 argument".to_string());
     }
@@ -2428,7 +2428,7 @@ pub fn arena_list_to_vector(arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
 /// (vector-fill! vec fill) → unspecified
 /// Fill all elements of the vector with the fill value
 #[inline]
-pub fn arena_vector_fill(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn vector_fill(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("vector-fill! requires exactly 2 arguments".to_string());
     }
@@ -2452,7 +2452,7 @@ pub fn arena_vector_fill(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (vector? obj) → boolean
 /// Returns #t if obj is a vector, #f otherwise
 #[inline]
-pub fn arena_vector_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn vector_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("vector? requires exactly 1 argument".to_string());
     }
@@ -2466,7 +2466,7 @@ pub fn arena_vector_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (procedure? obj) → boolean
 /// Returns #t if obj is a procedure, #f otherwise
 #[inline]
-pub fn arena_procedure_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn procedure_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("procedure? requires exactly 1 argument".to_string());
     }
@@ -2480,7 +2480,7 @@ pub fn arena_procedure_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (set-car! pair obj) → unspecified
 /// Mutate the car of a pair
 #[inline]
-pub fn arena_set_car(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn set_car(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("set-car! requires exactly 2 arguments".to_string());
     }
@@ -2500,7 +2500,7 @@ pub fn arena_set_car(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (set-cdr! pair obj) → unspecified
 /// Mutate the cdr of a pair
 #[inline]
-pub fn arena_set_cdr(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn set_cdr(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("set-cdr! requires exactly 2 arguments".to_string());
     }
@@ -2520,7 +2520,7 @@ pub fn arena_set_cdr(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (list-tail list k) → value
 /// Returns the sublist of list obtained by omitting the first k elements
 #[inline]
-pub fn arena_list_tail(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn list_tail(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("list-tail requires exactly 2 arguments".to_string());
     }
@@ -2550,7 +2550,7 @@ pub fn arena_list_tail(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// (string-upcase str) → string
 /// Convert string to uppercase
 #[inline]
-pub fn arena_string_upcase(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_upcase(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("string-upcase requires exactly 1 argument".to_string());
     }
@@ -2564,7 +2564,7 @@ pub fn arena_string_upcase(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (string-downcase str) → string
 /// Convert string to lowercase
 #[inline]
-pub fn arena_string_downcase(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_downcase(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("string-downcase requires exactly 1 argument".to_string());
     }
@@ -2578,15 +2578,15 @@ pub fn arena_string_downcase(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
 /// (case-fold-down str) → string
 /// DSSSL alias for string-downcase - convert string to lowercase
 #[inline]
-pub fn arena_case_fold_down(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
-    arena_string_downcase(arena, args)
+pub fn case_fold_down(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+    string_downcase(arena, args)
 }
 
 /// (string-index str char-or-string) → integer
 /// Find the index of the first occurrence of a character/substring in a string
 /// Returns the 0-based index, or -1 if not found
 #[inline]
-pub fn arena_string_index(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_index(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("string-index requires exactly 2 arguments".to_string());
     }
@@ -2617,7 +2617,7 @@ pub fn arena_string_index(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (string->number str) → number or #f
 /// Parse a string as a number
 #[inline]
-pub fn arena_string_to_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_to_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("string->number requires exactly 1 argument".to_string());
     }
@@ -2642,7 +2642,7 @@ pub fn arena_string_to_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 /// (number->string num) → string
 /// Convert a number to a string
 #[inline]
-pub fn arena_number_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn number_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("number->string requires exactly 1 argument".to_string());
     }
@@ -2657,7 +2657,7 @@ pub fn arena_number_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 /// (string->list str) → list
 /// Convert a string to a list of characters
 #[inline]
-pub fn arena_string_to_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_to_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("string->list requires exactly 1 argument".to_string());
     }
@@ -2679,7 +2679,7 @@ pub fn arena_string_to_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
 /// (list->string list) → string
 /// Convert a list of characters to a string
 #[inline]
-pub fn arena_list_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn list_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("list->string requires exactly 1 argument".to_string());
     }
@@ -2712,7 +2712,7 @@ pub fn arena_list_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
 /// (gcd n1 n2 ...) → integer
 /// Compute greatest common divisor
 #[inline]
-pub fn arena_gcd(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn gcd(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Ok(arena.int(0));
     }
@@ -2743,7 +2743,7 @@ pub fn arena_gcd(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (lcm n1 n2 ...) → integer
 /// Compute least common multiple
 #[inline]
-pub fn arena_lcm(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn lcm(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Ok(arena.int(1));
     }
@@ -2781,7 +2781,7 @@ pub fn arena_lcm(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (exact->inexact num) → real
 /// Convert exact number to inexact (integer to real)
 #[inline]
-pub fn arena_exact_to_inexact(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn exact_to_inexact(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("exact->inexact requires exactly 1 argument".to_string());
     }
@@ -2796,7 +2796,7 @@ pub fn arena_exact_to_inexact(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 /// (inexact->exact num) → integer
 /// Convert inexact number to exact (real to integer)
 #[inline]
-pub fn arena_inexact_to_exact(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inexact_to_exact(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("inexact->exact requires exactly 1 argument".to_string());
     }
@@ -2811,7 +2811,7 @@ pub fn arena_inexact_to_exact(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 /// (make-string k [char]) → string
 /// Create a string of length k filled with char (or space)
 #[inline]
-pub fn arena_make_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn make_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() || args.len() > 2 {
         return Err("make-string requires 1 or 2 arguments".to_string());
     }
@@ -2838,7 +2838,7 @@ pub fn arena_make_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (string char ...) → string
 /// Construct a string from characters
 #[inline]
-pub fn arena_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     let mut chars = Vec::new();
 
     for &arg in args {
@@ -2855,7 +2855,7 @@ pub fn arena_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// (reverse! list) → list
 /// Destructively reverse a list
 #[inline]
-pub fn arena_reverse_bang(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn reverse_bang(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("reverse! requires exactly 1 argument".to_string());
     }
@@ -2900,7 +2900,7 @@ pub fn arena_reverse_bang(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// string-set! - mutate string at index
 /// Note: Strings in arena are immutable, so this creates a new string
-pub fn arena_string_set(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_set(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 3 {
         return Err("string-set!: expected 3 arguments".to_string());
     }
@@ -2932,7 +2932,7 @@ pub fn arena_string_set(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// string-copy - copy a string
-pub fn arena_string_copy(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_copy(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("string-copy: expected 1 argument".to_string());
     }
@@ -2947,7 +2947,7 @@ pub fn arena_string_copy(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// string-fill! - fill string with character
 /// Note: Strings in arena are immutable, so this creates a new string
-pub fn arena_string_fill(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_fill(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("string-fill!: expected 2 arguments".to_string());
     }
@@ -2967,7 +2967,7 @@ pub fn arena_string_fill(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// char-lower-case? - check if character is lowercase
-pub fn arena_char_lower_case_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_lower_case_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("char-lower-case?: expected 1 argument".to_string());
     }
@@ -2979,7 +2979,7 @@ pub fn arena_char_lower_case_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// char-upper-case? - check if character is uppercase
-pub fn arena_char_upper_case_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn char_upper_case_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("char-upper-case?: expected 1 argument".to_string());
     }
@@ -2995,7 +2995,7 @@ pub fn arena_char_upper_case_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 // =============================================================================
 
 /// last - return last element of list
-pub fn arena_last(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn last(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("last: expected 1 argument".to_string());
     }
@@ -3021,7 +3021,7 @@ pub fn arena_last(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// last-pair - return last pair of list
-pub fn arena_last_pair(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn last_pair(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("last-pair: expected 1 argument".to_string());
     }
@@ -3047,7 +3047,7 @@ pub fn arena_last_pair(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// list-copy - shallow copy a list
-pub fn arena_list_copy(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn list_copy(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("list-copy: expected 1 argument".to_string());
     }
@@ -3085,7 +3085,7 @@ pub fn arena_list_copy(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// append! - destructive append (mutates last cdr of first list)
-pub fn arena_append_bang(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn append_bang(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Ok(crate::scheme::arena::NIL_ID);
     }
@@ -3098,7 +3098,7 @@ pub fn arena_append_bang(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     let first = args[0];
     if matches!(arena.get(first), ValueData::Nil) {
         // If first list is empty, return the rest
-        return arena_append_bang(arena, &args[1..]);
+        return append_bang(arena, &args[1..]);
     }
 
     let mut current = first;
@@ -3108,7 +3108,7 @@ pub fn arena_append_bang(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
                 if matches!(arena.get(*cdr), ValueData::Nil) {
                     // Found the last pair, mutate its cdr
                     let rest = if args.len() > 2 {
-                        arena_append_bang(arena, &args[1..])?
+                        append_bang(arena, &args[1..])?
                     } else {
                         args[1]
                     };
@@ -3128,7 +3128,7 @@ pub fn arena_append_bang(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// iota - generate list of integers from 0 to n-1
-pub fn arena_iota(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn iota(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() || args.len() > 3 {
         return Err("iota: expected 1 to 3 arguments".to_string());
     }
@@ -3174,7 +3174,7 @@ pub fn arena_iota(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 // =============================================================================
 
 /// take - take first n elements of list
-pub fn arena_take(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn take(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("take: expected 2 arguments".to_string());
     }
@@ -3225,7 +3225,7 @@ pub fn arena_take(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// drop - drop first n elements of list
-pub fn arena_drop(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn drop(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("drop: expected 2 arguments".to_string());
     }
@@ -3257,13 +3257,13 @@ pub fn arena_drop(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 
 /// split-at - split list at position n, returns (take n list) . (drop n list)
 /// Note: Returns a pair of lists
-pub fn arena_split_at(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn split_at(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("split-at: expected 2 arguments".to_string());
     }
 
-    let taken = arena_take(arena, args)?;
-    let dropped = arena_drop(arena, args)?;
+    let taken = take(arena, args)?;
+    let dropped = drop(arena, args)?;
 
     Ok(arena.cons(taken, dropped))
 }
@@ -3271,14 +3271,14 @@ pub fn arena_split_at(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 /// filter - filter list by predicate (requires evaluator context)
 /// Note: This is a simplified version that can't call back to the evaluator
 /// For now, we'll make it return an error suggesting use of the non-arena version
-pub fn arena_filter(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn filter(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     Err("filter: not available in arena mode (requires callback to evaluator)".to_string())
 }
 
 /// remove - remove elements matching predicate (requires evaluator context)
 /// Note: This is a simplified version that can't call back to the evaluator
 /// For now, we'll make it return an error suggesting use of the non-arena version
-pub fn arena_remove(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn remove(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     Err("remove: not available in arena mode (requires callback to evaluator)".to_string())
 }
 
@@ -3287,7 +3287,7 @@ pub fn arena_remove(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
 // =============================================================================
 
 /// numerator - get numerator of rational (for now, just return the integer part)
-pub fn arena_numerator(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn numerator(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("numerator: expected 1 argument".to_string());
     }
@@ -3303,7 +3303,7 @@ pub fn arena_numerator(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// denominator - get denominator of rational (for now, always return 1)
-pub fn arena_denominator(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn denominator(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("denominator: expected 1 argument".to_string());
     }
@@ -3315,7 +3315,7 @@ pub fn arena_denominator(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// rationalize - rationalize a number to within tolerance (simplified: just return the number)
-pub fn arena_rationalize(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn rationalize(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("rationalize: expected 2 arguments".to_string());
     }
@@ -3328,7 +3328,7 @@ pub fn arena_rationalize(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// angle - get angle of complex number (for real numbers, 0 or pi)
-pub fn arena_angle(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn angle(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("angle: expected 1 argument".to_string());
     }
@@ -3353,7 +3353,7 @@ pub fn arena_angle(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// magnitude - get magnitude of complex number (for real numbers, absolute value)
-pub fn arena_magnitude(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn magnitude(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("magnitude: expected 1 argument".to_string());
     }
@@ -3367,7 +3367,7 @@ pub fn arena_magnitude(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// string->number with optional radix (note: we already have arena_string_to_number)
 /// This is an extended version that supports radix parameter
-pub fn arena_string_to_number_radix(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_to_number_radix(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() || args.len() > 2 {
         return Err("string->number: expected 1 or 2 arguments".to_string());
     }
@@ -3411,7 +3411,7 @@ pub fn arena_string_to_number_radix(arena: &mut Arena, args: &[ValueId]) -> Aren
 // =============================================================================
 
 /// number->string with radix support
-pub fn arena_number_to_string_radix(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn number_to_string_radix(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() || args.len() > 2 {
         return Err("number->string: expected 1 or 2 arguments".to_string());
     }
@@ -3472,7 +3472,7 @@ fn format_radix(mut n: u64, radix: u32) -> String {
 }
 
 /// list? - check if value is a proper list (improved version)
-pub fn arena_list_p_improved(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn list_p_improved(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("list?: expected 1 argument".to_string());
     }
@@ -3498,7 +3498,7 @@ pub fn arena_list_p_improved(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// null-list? - check if value is empty list (alias for null?)
-pub fn arena_null_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn null_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("null-list?: expected 1 argument".to_string());
     }
@@ -3510,7 +3510,7 @@ pub fn arena_null_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// improper-list? - check if value is an improper list (ends with non-nil atom)
-pub fn arena_improper_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn improper_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("improper-list?: expected 1 argument".to_string());
     }
@@ -3529,7 +3529,7 @@ pub fn arena_improper_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// circular-list? - check if list has a cycle
-pub fn arena_circular_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn circular_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("circular-list?: expected 1 argument".to_string());
     }
@@ -3569,7 +3569,7 @@ pub fn arena_circular_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 // =============================================================================
 
 /// bitwise-and - bitwise AND of integers
-pub fn arena_bitwise_and(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn bitwise_and(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Ok(arena.int(-1)); // Identity element for AND
     }
@@ -3588,7 +3588,7 @@ pub fn arena_bitwise_and(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// bitwise-ior - bitwise inclusive OR of integers
-pub fn arena_bitwise_ior(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn bitwise_ior(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Ok(arena.int(0)); // Identity element for OR
     }
@@ -3607,7 +3607,7 @@ pub fn arena_bitwise_ior(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// bitwise-xor - bitwise exclusive OR of integers
-pub fn arena_bitwise_xor(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn bitwise_xor(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Ok(arena.int(0)); // Identity element for XOR
     }
@@ -3626,7 +3626,7 @@ pub fn arena_bitwise_xor(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// bitwise-not - bitwise NOT (complement)
-pub fn arena_bitwise_not(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn bitwise_not(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("bitwise-not: expected 1 argument".to_string());
     }
@@ -3638,7 +3638,7 @@ pub fn arena_bitwise_not(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// arithmetic-shift - arithmetic left/right shift
-pub fn arena_arithmetic_shift(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn arithmetic_shift(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("arithmetic-shift: expected 2 arguments".to_string());
     }
@@ -3673,7 +3673,7 @@ pub fn arena_arithmetic_shift(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 }
 
 /// bit-extract - extract bits from position start to end
-pub fn arena_bit_extract(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn bit_extract(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 3 {
         return Err("bit-extract: expected 3 arguments".to_string());
     }
@@ -3713,7 +3713,7 @@ pub fn arena_bit_extract(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// bitwise-bit-set? - test if bit at position is set
-pub fn arena_bitwise_bit_set_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn bitwise_bit_set_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("bitwise-bit-set?: expected 2 arguments".to_string());
     }
@@ -3737,7 +3737,7 @@ pub fn arena_bitwise_bit_set_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// bitwise-bit-count - count number of set bits (population count)
-pub fn arena_bitwise_bit_count(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn bitwise_bit_count(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("bitwise-bit-count: expected 1 argument".to_string());
     }
@@ -3761,7 +3761,7 @@ pub fn arena_bitwise_bit_count(arena: &mut Arena, args: &[ValueId]) -> ArenaResu
 // =============================================================================
 
 /// display - display a value (note: arena version just converts to string)
-pub fn arena_display(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn display(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("display: expected 1 argument".to_string());
     }
@@ -3834,7 +3834,7 @@ fn value_to_display_string(arena: &Arena, id: ValueId) -> String {
 }
 
 /// newline - output a newline
-pub fn arena_newline(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn newline(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if !args.is_empty() {
         return Err("newline: expected 0 arguments".to_string());
     }
@@ -3845,7 +3845,7 @@ pub fn arena_newline(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// write - write a value in machine-readable format
-pub fn arena_write(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn write(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("write: expected 1 argument".to_string());
     }
@@ -3864,7 +3864,7 @@ fn value_to_write_string(arena: &Arena, id: ValueId) -> String {
 }
 
 /// write-char - write a character
-pub fn arena_write_char(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn write_char(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("write-char: expected 1 argument".to_string());
     }
@@ -3879,7 +3879,7 @@ pub fn arena_write_char(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// read-char - read a character (stub - not implementable in arena mode)
-pub fn arena_read_char(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn read_char(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if !args.is_empty() {
         return Err("read-char: expected 0 arguments".to_string());
     }
@@ -3889,7 +3889,7 @@ pub fn arena_read_char(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// eof-object? - test if value is EOF object
-pub fn arena_eof_object_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn eof_object_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("eof-object?: expected 1 argument".to_string());
     }
@@ -3904,7 +3904,7 @@ pub fn arena_eof_object_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 // =============================================================================
 
 /// format-number - format a number according to format string
-pub fn arena_format_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn format_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("format-number: expected 2 arguments".to_string());
     }
@@ -4000,7 +4000,7 @@ pub fn arena_format_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// format-number-list - join a list of numbers with separator
-pub fn arena_format_number_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn format_number_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() || args.len() > 2 {
         return Err("format-number-list: expected 1 or 2 arguments".to_string());
     }
@@ -4045,7 +4045,7 @@ pub fn arena_format_number_list(arena: &mut Arena, args: &[ValueId]) -> ArenaRes
 // =============================================================================
 
 /// empty-sosofo - return an empty sosofo (flow object)
-pub fn arena_empty_sosofo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn empty_sosofo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if !args.is_empty() {
         return Err("empty-sosofo: expected no arguments".to_string());
     }
@@ -4053,11 +4053,33 @@ pub fn arena_empty_sosofo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     Ok(arena.alloc(ValueData::Sosofo))
 }
 
+/// (sosofo-append sosofo ...) → sosofo
+/// Returns a sosofo that appends multiple sosofos.
+/// OpenJade: returns empty-sosofo when called with 0 arguments.
+pub fn sosofo_append(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+    // OpenJade: returns empty-sosofo when called with 0 arguments
+    if args.is_empty() {
+        return Ok(arena.alloc(ValueData::Sosofo));
+    }
+
+    // Check all arguments are sosofos, unspecified, or nil (which we treat as empty sosofo)
+    for &arg in args {
+        match arena.get(arg) {
+            ValueData::Sosofo | ValueData::Unspecified | ValueData::Nil => {},
+            _ => return Err(format!("sosofo-append: not a sosofo")),
+        }
+    }
+
+    // Return a sosofo (placeholder for now)
+    // In practice, sosofos are just markers - the actual output happens via backend
+    Ok(arena.alloc(ValueData::Sosofo))
+}
+
 /// (if-first-page then-sosofo else-sosofo) → sosofo
 /// Returns then-sosofo if on the first page, else-sosofo otherwise.
 /// This is a stub implementation for RTF backend - always returns else-sosofo (not first page).
 #[inline]
-pub fn arena_if_first_page(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn if_first_page(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("if-first-page: expected 2 arguments (then-sosofo else-sosofo)".to_string());
     }
@@ -4071,7 +4093,7 @@ pub fn arena_if_first_page(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
 /// Returns then-sosofo if in front matter, else-sosofo otherwise.
 /// This is a stub implementation for RTF backend - always returns else-sosofo (not in front matter).
 #[inline]
-pub fn arena_if_front_page(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn if_front_page(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("if-front-page: expected 2 arguments (then-sosofo else-sosofo)".to_string());
     }
@@ -4086,7 +4108,7 @@ pub fn arena_if_front_page(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
 // =============================================================================
 
 /// current-node - return the current node in the grove
-pub fn arena_current_node(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn current_node(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if !args.is_empty() {
         return Err("current-node: expected no arguments".to_string());
     }
@@ -4103,7 +4125,7 @@ pub fn arena_current_node(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 // =============================================================================
 
 /// gi - return the element name (generic identifier) of a node
-pub fn arena_gi(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn gi(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     let node = if args.is_empty() {
         // No argument: use current node
         match &arena.current_node {
@@ -4169,7 +4191,7 @@ pub fn arena_gi(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// data - return the text content of a node
-pub fn arena_data(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn data(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     // OpenJade: data accepts a node-list and concatenates data from all nodes
     if args.len() > 1 {
         return Err("data: expected 0 or 1 arguments".to_string());
@@ -4232,7 +4254,7 @@ pub fn arena_data(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// id - return the ID attribute of a node
-pub fn arena_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     let node = if args.is_empty() {
         // No argument: use current node
         match &arena.current_node {
@@ -4277,7 +4299,7 @@ pub fn arena_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 // =============================================================================
 
 /// children - return the children of a node as a node-list
-pub fn arena_children(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn children(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     let node = if args.is_empty() {
         // No argument: use current node
         match &arena.current_node {
@@ -4333,7 +4355,7 @@ pub fn arena_children(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// parent - return the parent of a node
-pub fn arena_parent(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn parent(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     let node = if args.is_empty() {
         // No argument: use current node
         match &arena.current_node {
@@ -4377,7 +4399,7 @@ pub fn arena_parent(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// attributes - return the attributes of a node as a node-list
-pub fn arena_attributes(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn attributes(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     let _node = if args.is_empty() {
         // No argument: use current node
         match &arena.current_node {
@@ -4404,7 +4426,7 @@ pub fn arena_attributes(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 // =============================================================================
 
 /// node-list? - check if value is a node-list
-pub fn arena_node_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("node-list?: expected 1 argument".to_string());
     }
@@ -4416,7 +4438,7 @@ pub fn arena_node_list_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// empty-node-list - return an empty node-list
-pub fn arena_empty_node_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn empty_node_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if !args.is_empty() {
         return Err("empty-node-list: expected no arguments".to_string());
     }
@@ -4425,7 +4447,7 @@ pub fn arena_empty_node_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
 }
 
 /// node-list-empty? - check if node-list is empty
-pub fn arena_node_list_empty_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_empty_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("node-list-empty?: expected 1 argument".to_string());
     }
@@ -4448,7 +4470,7 @@ pub fn arena_node_list_empty_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// node-list-length - return the length of a node-list
-pub fn arena_node_list_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("node-list-length: expected 1 argument".to_string());
     }
@@ -4460,7 +4482,7 @@ pub fn arena_node_list_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 }
 
 /// node-list-first - return the first node in a node-list
-pub fn arena_node_list_first(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_first(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("node-list-first: expected 1 argument".to_string());
     }
@@ -4484,7 +4506,7 @@ pub fn arena_node_list_first(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
 
 /// attribute-string - get the value of a named attribute
 /// (attribute-string attr-name [node]) → string or #f
-pub fn arena_attribute_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn attribute_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() || args.len() > 2 {
         return Err("attribute-string: expected 1 or 2 arguments".to_string());
     }
@@ -4542,7 +4564,7 @@ pub fn arena_attribute_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 // =============================================================================
 
 /// node-list-rest - return all but the first node in a node-list
-pub fn arena_node_list_rest(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_rest(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("node-list-rest: expected 1 argument".to_string());
     }
@@ -4557,7 +4579,7 @@ pub fn arena_node_list_rest(arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
 }
 
 /// node-list-ref - return the nth node in a node-list (0-indexed)
-pub fn arena_node_list_ref(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_ref(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("node-list-ref: expected 2 arguments".to_string());
     }
@@ -4598,7 +4620,7 @@ pub fn arena_node_list_ref(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// node-list-reverse - reverse a node-list
-pub fn arena_node_list_reverse(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_reverse(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("node-list-reverse: expected 1 argument".to_string());
     }
@@ -4631,7 +4653,7 @@ pub fn arena_node_list_reverse(arena: &mut Arena, args: &[ValueId]) -> ArenaResu
 // =============================================================================
 
 /// node? - check if value is a node
-pub fn arena_node_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("node?: expected 1 argument".to_string());
     }
@@ -4643,7 +4665,7 @@ pub fn arena_node_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// sosofo? - check if value is a sosofo
-pub fn arena_sosofo_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn sosofo_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("sosofo?: expected 1 argument".to_string());
     }
@@ -4655,7 +4677,7 @@ pub fn arena_sosofo_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// quantity? - check if value is a quantity (stub - returns #f)
-pub fn arena_quantity_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn quantity_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("quantity?: expected 1 argument".to_string());
     }
@@ -4671,7 +4693,7 @@ pub fn arena_quantity_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 // =============================================================================
 
 /// color? - check if value is a color (stub - always returns #f)
-pub fn arena_color_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn color_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("color?: expected 1 argument".to_string());
     }
@@ -4680,14 +4702,14 @@ pub fn arena_color_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// color - create a color (stub - returns #f)
-pub fn arena_color(_arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn color(_arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: color creation not implemented
     // TODO: Implement if needed for document formatting
     Ok(crate::scheme::arena::FALSE_ID)
 }
 
 /// display-space? - check if value is display-space (stub - always returns #f)
-pub fn arena_display_space_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn display_space_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("display-space?: expected 1 argument".to_string());
     }
@@ -4696,7 +4718,7 @@ pub fn arena_display_space_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// inline-space? - check if value is inline-space (stub - always returns #f)
-pub fn arena_inline_space_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inline_space_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("inline-space?: expected 1 argument".to_string());
     }
@@ -4709,7 +4731,7 @@ pub fn arena_inline_space_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 // =============================================================================
 
 /// quantity->number - convert quantity to number (stub - returns 0)
-pub fn arena_quantity_to_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn quantity_to_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("quantity->number: expected 1 argument".to_string());
     }
@@ -4721,7 +4743,7 @@ pub fn arena_quantity_to_number(arena: &mut Arena, args: &[ValueId]) -> ArenaRes
 }
 
 /// number->quantity - convert number to quantity (stub - returns number as-is)
-pub fn arena_number_to_quantity(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn number_to_quantity(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 2 || args.len() > 3 {
         return Err("number->quantity: expected 2 or 3 arguments".to_string());
     }
@@ -4732,7 +4754,7 @@ pub fn arena_number_to_quantity(arena: &mut Arena, args: &[ValueId]) -> ArenaRes
 }
 
 /// quantity-convert - convert quantity between units (stub - returns input)
-pub fn arena_quantity_convert(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn quantity_convert(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("quantity-convert: expected 2 arguments".to_string());
     }
@@ -4742,7 +4764,7 @@ pub fn arena_quantity_convert(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 }
 
 /// device-length - convert length to device units (stub - returns 0)
-pub fn arena_device_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn device_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("device-length: expected 1 argument".to_string());
     }
@@ -4752,7 +4774,7 @@ pub fn arena_device_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// label-distance - get label distance (stub - returns 0)
-pub fn arena_label_distance(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn label_distance(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: return 0
     Ok(arena.int(0))
 }
@@ -4762,7 +4784,7 @@ pub fn arena_label_distance(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult
 // ============================================================================
 
 /// ancestor - get ancestor with specified generic identifier
-pub fn arena_ancestor(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn ancestor(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() || args.len() > 2 {
         return Err("ancestor: expected 1 or 2 arguments".to_string());
     }
@@ -4822,7 +4844,7 @@ pub fn arena_ancestor(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// descendants - get all descendants of a node or node-list
-pub fn arena_descendants(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn descendants(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() > 1 {
         return Err("descendants: expected 0 or 1 arguments".to_string());
     }
@@ -4880,7 +4902,7 @@ pub fn arena_descendants(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// follow - get all nodes following this node in document order
-pub fn arena_follow(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn follow(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() > 1 {
         return Err("follow: expected 0 or 1 arguments".to_string());
     }
@@ -4903,7 +4925,7 @@ pub fn arena_follow(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// preced - get all nodes preceding this node in document order
-pub fn arena_preced(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn preced(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() > 1 {
         return Err("preced: expected 0 or 1 arguments".to_string());
     }
@@ -4926,7 +4948,7 @@ pub fn arena_preced(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// ipreced - get immediately preceding node in document order
-pub fn arena_ipreced(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn ipreced(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() > 1 {
         return Err("ipreced: expected 0 or 1 arguments".to_string());
     }
@@ -4953,7 +4975,7 @@ pub fn arena_ipreced(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 // ============================================================================
 
 /// node-list-last - get the last node in a node-list
-pub fn arena_node_list_last(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_last(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("node-list-last: expected 1 argument".to_string());
     }
@@ -4978,7 +5000,7 @@ pub fn arena_node_list_last(arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
 }
 
 /// node-list-union - combine two node-lists, removing duplicates
-pub fn arena_node_list_union(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_union(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Err("node-list-union: expected at least 1 argument".to_string());
     }
@@ -5017,7 +5039,7 @@ pub fn arena_node_list_union(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
 }
 
 /// node-list-intersection - get nodes present in both node-lists
-pub fn arena_node_list_intersection(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_intersection(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("node-list-intersection: expected 2 arguments".to_string());
     }
@@ -5038,7 +5060,7 @@ pub fn arena_node_list_intersection(arena: &mut Arena, args: &[ValueId]) -> Aren
 }
 
 /// node-list-difference - get nodes in first list but not in second
-pub fn arena_node_list_difference(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_difference(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("node-list-difference: expected 2 arguments".to_string());
     }
@@ -5059,7 +5081,7 @@ pub fn arena_node_list_difference(arena: &mut Arena, args: &[ValueId]) -> ArenaR
 }
 
 /// node-list-remove-duplicates - remove duplicate nodes from a node-list
-pub fn arena_node_list_remove_duplicates(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_remove_duplicates(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("node-list-remove-duplicates: expected 1 argument".to_string());
     }
@@ -5080,7 +5102,7 @@ pub fn arena_node_list_remove_duplicates(arena: &mut Arena, args: &[ValueId]) ->
 
 /// select-elements - select elements by name from children
 /// OpenJade signature: (select-elements node-list pattern)
-pub fn arena_select_elements(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn select_elements(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("select-elements: expected 2 arguments".to_string());
     }
@@ -5117,7 +5139,7 @@ pub fn arena_select_elements(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
 }
 
 /// first-sibling? - check if node is the first sibling
-pub fn arena_first_sibling_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn first_sibling_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() > 1 {
         return Err("first-sibling?: expected 0 or 1 arguments".to_string());
     }
@@ -5167,7 +5189,7 @@ pub fn arena_first_sibling_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
 }
 
 /// last-sibling? - check if node is the last sibling
-pub fn arena_last_sibling_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn last_sibling_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() > 1 {
         return Err("last-sibling?: expected 0 or 1 arguments".to_string());
     }
@@ -5216,7 +5238,7 @@ pub fn arena_last_sibling_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
 }
 
 /// child-number - get the child index of a node (1-based)
-pub fn arena_child_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn child_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() > 1 {
         return Err("child-number: expected 0 or 1 arguments".to_string());
     }
@@ -5264,7 +5286,7 @@ pub fn arena_child_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// element-with-id - find element with specified ID
-pub fn arena_element_with_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn element_with_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("element-with-id: expected 1 argument".to_string());
     }
@@ -5296,7 +5318,7 @@ pub fn arena_element_with_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
 // ============================================================================
 
 /// element-number - get the element number (count of same-named siblings)
-pub fn arena_element_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn element_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() > 1 {
         return Err("element-number: expected 0 or 1 arguments".to_string());
     }
@@ -5319,7 +5341,7 @@ pub fn arena_element_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
 }
 
 /// hierarchical-number - get hierarchical numbering (e.g., 1.2.3)
-pub fn arena_hierarchical_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn hierarchical_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() > 1 {
         return Err("hierarchical-number: expected 0 or 1 arguments".to_string());
     }
@@ -5343,7 +5365,7 @@ pub fn arena_hierarchical_number(arena: &mut Arena, args: &[ValueId]) -> ArenaRe
 }
 
 /// hierarchical-number-recursive - get recursive hierarchical numbering
-pub fn arena_hierarchical_number_recursive(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn hierarchical_number_recursive(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 1 || args.len() > 2 {
         return Err("hierarchical-number-recursive: expected 1 or 2 arguments".to_string());
     }
@@ -5416,7 +5438,7 @@ fn int_to_alpha(n: i32, uppercase: bool) -> String {
 // ============================================================================
 
 /// ancestors - get all ancestors of a node
-pub fn arena_ancestors(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn ancestors(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() > 1 {
         return Err("ancestors: expected 0 or 1 arguments".to_string());
     }
@@ -5467,7 +5489,7 @@ pub fn arena_ancestors(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// document-element - get the document root element
-pub fn arena_document_element(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn document_element(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if !args.is_empty() {
         return Err("document-element: expected no arguments".to_string());
     }
@@ -5482,7 +5504,7 @@ pub fn arena_document_element(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 }
 
 /// have-ancestor? - check if node has ancestor with specified name
-pub fn arena_have_ancestor_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn have_ancestor_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() || args.len() > 2 {
         return Err("have-ancestor?: expected 1 or 2 arguments".to_string());
     }
@@ -5520,7 +5542,7 @@ pub fn arena_have_ancestor_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
 }
 
 /// match-element? - check if node matches element name
-pub fn arena_match_element_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn match_element_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() || args.len() > 2 {
         return Err("match-element?: expected 1 or 2 arguments".to_string());
     }
@@ -5550,7 +5572,7 @@ pub fn arena_match_element_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
 }
 
 /// node-list-map - map a function over a node-list (stub)
-pub fn arena_node_list_map(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_map(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("node-list-map: expected 2 arguments".to_string());
     }
@@ -5571,7 +5593,7 @@ pub fn arena_node_list_map(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 // ============================================================================
 
 /// node-property - get a property value from a node (stub)
-pub fn arena_node_property(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_property(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 1 || args.len() > 2 {
         return Err("node-property: expected 1 or 2 arguments".to_string());
     }
@@ -5621,7 +5643,7 @@ pub fn arena_node_property(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// absolute-first-sibling? - check if node is first sibling at document level
-pub fn arena_absolute_first_sibling_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn absolute_first_sibling_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() > 1 {
         return Err("absolute-first-sibling?: expected 0 or 1 arguments".to_string());
     }
@@ -5644,7 +5666,7 @@ pub fn arena_absolute_first_sibling_p(arena: &mut Arena, args: &[ValueId]) -> Ar
 }
 
 /// absolute-last-sibling? - check if node is last sibling at document level
-pub fn arena_absolute_last_sibling_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn absolute_last_sibling_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() > 1 {
         return Err("absolute-last-sibling?: expected 0 or 1 arguments".to_string());
     }
@@ -5667,7 +5689,7 @@ pub fn arena_absolute_last_sibling_p(arena: &mut Arena, args: &[ValueId]) -> Are
 }
 
 /// node-list->list - convert a node-list to a list
-pub fn arena_node_list_to_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_to_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err("node-list->list: expected 1 argument".to_string());
     }
@@ -5698,7 +5720,7 @@ pub fn arena_node_list_to_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResu
 }
 
 /// node-list-contains? - check if node-list contains a node
-pub fn arena_node_list_contains_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_contains_p(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err("node-list-contains?: expected 2 arguments".to_string());
     }
@@ -5756,7 +5778,7 @@ pub fn arena_node_list_contains_p(arena: &mut Arena, args: &[ValueId]) -> ArenaR
 // ============================================================================
 
 /// entity-system-id - get the system identifier of an entity
-pub fn arena_entity_system_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn entity_system_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Err("entity-system-id: requires at least 1 argument".to_string());
     }
@@ -5774,7 +5796,7 @@ pub fn arena_entity_system_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 }
 
 /// entity-public-id - get the public identifier of an entity
-pub fn arena_entity_public_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn entity_public_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Err("entity-public-id: requires at least 1 argument".to_string());
     }
@@ -5792,7 +5814,7 @@ pub fn arena_entity_public_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResul
 }
 
 /// entity-type - get the type of an entity
-pub fn arena_entity_type(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn entity_type(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Err("entity-type: requires at least 1 argument".to_string());
     }
@@ -5811,7 +5833,7 @@ pub fn arena_entity_type(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// notation-system-id - get the system identifier of a notation
-pub fn arena_notation_system_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn notation_system_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Err("notation-system-id: requires at least 1 argument".to_string());
     }
@@ -5829,7 +5851,7 @@ pub fn arena_notation_system_id(arena: &mut Arena, args: &[ValueId]) -> ArenaRes
 }
 
 /// notation-public-id - get the public identifier of a notation
-pub fn arena_notation_public_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn notation_public_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() {
         return Err("notation-public-id: requires at least 1 argument".to_string());
     }
@@ -5851,7 +5873,7 @@ pub fn arena_notation_public_id(arena: &mut Arena, args: &[ValueId]) -> ArenaRes
 // ============================================================================
 
 /// current-language - get the current language code
-pub fn arena_current_language(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn current_language(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if !args.is_empty() {
         return Err("current-language: requires 0 arguments".to_string());
     }
@@ -5863,7 +5885,7 @@ pub fn arena_current_language(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// current-mode - get the current processing mode
-pub fn arena_current_mode(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn current_mode(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if !args.is_empty() {
         return Err("current-mode: requires 0 arguments".to_string());
     }
@@ -5875,7 +5897,7 @@ pub fn arena_current_mode(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// current-node-address - get the address of the current node
-pub fn arena_current_node_address(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn current_node_address(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if !args.is_empty() {
         return Err("current-node-address: requires 0 arguments".to_string());
     }
@@ -5887,7 +5909,7 @@ pub fn arena_current_node_address(_arena: &Arena, args: &[ValueId]) -> ArenaResu
 }
 
 /// current-node-page-number-sosofo - get page number sosofo for current node
-pub fn arena_current_node_page_number_sosofo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn current_node_page_number_sosofo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if !args.is_empty() {
         return Err("current-node-page-number-sosofo: requires 0 arguments".to_string());
     }
@@ -5899,7 +5921,7 @@ pub fn arena_current_node_page_number_sosofo(arena: &mut Arena, args: &[ValueId]
 }
 
 /// debug - print debug information (output to stderr)
-pub fn arena_debug(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn debug(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     // Print all arguments to stderr for debugging
     eprint!("[DEBUG]");
     for arg_id in args {
@@ -5932,7 +5954,7 @@ pub fn arena_debug(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 // Phase 3 Batch 41: Type predicates and error (3 primitives)
 
 /// exact? - Check if number is exact (integers are exact)
-pub fn arena_exact_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn exact_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("exact?: expected 1 argument, got {}", args.len()));
     }
@@ -5946,7 +5968,7 @@ pub fn arena_exact_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// inexact? - Check if number is inexact (floats are inexact)
-pub fn arena_inexact_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inexact_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("inexact?: expected 1 argument, got {}", args.len()));
     }
@@ -5960,7 +5982,7 @@ pub fn arena_inexact_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// error - Signal an error
-pub fn arena_error(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn error(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     let msg = if args.is_empty() {
         "error".to_string()
     } else {
@@ -5987,7 +6009,7 @@ pub fn arena_error(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 // These are stubs - addresses not implemented yet
 
 /// address? - Check if value is an address (stub: always false)
-pub fn arena_address_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn address_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("address?: expected 1 argument, got {}", args.len()));
     }
@@ -5996,7 +6018,7 @@ pub fn arena_address_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// address-local? - Check if address is local (stub: always false)
-pub fn arena_address_local_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn address_local_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("address-local?: expected 1 argument, got {}", args.len()));
     }
@@ -6005,7 +6027,7 @@ pub fn arena_address_local_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// address-visited? - Check if address has been visited (stub: always false)
-pub fn arena_address_visited_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn address_visited_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("address-visited?: expected 1 argument, got {}", args.len()));
     }
@@ -6017,7 +6039,7 @@ pub fn arena_address_visited_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult 
 // These are stubs - full color/space types not implemented yet
 
 /// color-space? - Check if value is a color-space (stub: always false)
-pub fn arena_color_space_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn color_space_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("color-space?: expected 1 argument, got {}", args.len()));
     }
@@ -6026,19 +6048,19 @@ pub fn arena_color_space_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// color-space - Return a color-space (stub: return unspecified)
-pub fn arena_color_space(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn color_space(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: return unspecified
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// display-space - Return a display-space (stub: return unspecified)
-pub fn arena_display_space(_arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn display_space(_arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: return unspecified
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// inline-space - Return an inline-space (stub: return unspecified)
-pub fn arena_inline_space(_arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn inline_space(_arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: return unspecified
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
@@ -6047,7 +6069,7 @@ pub fn arena_inline_space(_arena: &mut Arena, _args: &[ValueId]) -> ArenaResult 
 // These are stubs - glyph types not implemented yet
 
 /// glyph-id? - Check if value is a glyph-id (stub: always false)
-pub fn arena_glyph_id_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn glyph_id_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("glyph-id?: expected 1 argument, got {}", args.len()));
     }
@@ -6056,13 +6078,13 @@ pub fn arena_glyph_id_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// glyph-id - Return a glyph-id (stub: return unspecified)
-pub fn arena_glyph_id(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn glyph_id(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: return unspecified
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// glyph-subst-table? - Check if value is a glyph-subst-table (stub: always false)
-pub fn arena_glyph_subst_table_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn glyph_subst_table_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("glyph-subst-table?: expected 1 argument, got {}", args.len()));
     }
@@ -6071,13 +6093,13 @@ pub fn arena_glyph_subst_table_p(_arena: &Arena, args: &[ValueId]) -> ArenaResul
 }
 
 /// glyph-subst-table - Return a glyph-subst-table (stub: return unspecified)
-pub fn arena_glyph_subst_table(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn glyph_subst_table(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: return unspecified
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// glyph-subst - Return a glyph substitution (stub: return unspecified)
-pub fn arena_glyph_subst(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn glyph_subst(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: return unspecified
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
@@ -6086,13 +6108,13 @@ pub fn arena_glyph_subst(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 // These are stubs - time type not implemented yet
 
 /// time - Return current time (stub: return unspecified)
-pub fn arena_time(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn time(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: return unspecified
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// time->string - Convert time to string (stub: return empty string)
-pub fn arena_time_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn time_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("time->string: expected 1 argument, got {}", args.len()));
     }
@@ -6101,7 +6123,7 @@ pub fn arena_time_to_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
 }
 
 /// time<=? - Time less-than-or-equal comparison (stub: always false)
-pub fn arena_time_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn time_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("time<=?: expected 2 arguments, got {}", args.len()));
     }
@@ -6110,7 +6132,7 @@ pub fn arena_time_le(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// time<? - Time less-than comparison (stub: always false)
-pub fn arena_time_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn time_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("time<?: expected 2 arguments, got {}", args.len()));
     }
@@ -6119,7 +6141,7 @@ pub fn arena_time_lt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// time>=? - Time greater-than-or-equal comparison (stub: always false)
-pub fn arena_time_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn time_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("time>=?: expected 2 arguments, got {}", args.len()));
     }
@@ -6128,7 +6150,7 @@ pub fn arena_time_ge(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// time>? - Time greater-than comparison (stub: always false)
-pub fn arena_time_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn time_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("time>?: expected 2 arguments, got {}", args.len()));
     }
@@ -6140,7 +6162,7 @@ pub fn arena_time_gt(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 // These are stubs - language/style types not fully implemented yet
 
 /// language? - Check if value is a language (stub: always false)
-pub fn arena_language_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn language_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("language?: expected 1 argument, got {}", args.len()));
     }
@@ -6151,14 +6173,14 @@ pub fn arena_language_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 /// language - Return language (stub: return "en" for English)
 /// In DSSSL, this returns the language of a node or the current language.
 /// For now, we return "en" (English) as a reasonable default.
-pub fn arena_language(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn language(arena: &mut Arena, _args: &[ValueId]) -> ArenaResult {
     // Return "en" (English) as default language
     // DocBook stylesheets expect language codes like "en", "de", "fr", etc.
     Ok(arena.symbol("en".into()))
 }
 
 /// style? - Check if value is a style (stub: always false)
-pub fn arena_style_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn style_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("style?: expected 1 argument, got {}", args.len()));
     }
@@ -6169,7 +6191,7 @@ pub fn arena_style_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 // Phase 3 Batch 47: String comparison and simple stubs (3 primitives)
 
 /// string-equiv? - String equivalence comparison (case-insensitive)
-pub fn arena_string_equiv_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn string_equiv_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("string-equiv?: expected 2 arguments, got {}", args.len()));
     }
@@ -6192,14 +6214,14 @@ pub fn arena_string_equiv_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// label-length - Return label length (stub: return 0)
-pub fn arena_label_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn label_length(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: return 0
     Ok(arena.int(0))
 }
 
 /// external-procedure - Look up external procedure by name and return it as a symbol
 /// The evaluator will recognize this symbol and dispatch to the correct primitive
-pub fn arena_external_procedure(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn external_procedure(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     use crate::scheme::arena::ValueData;
     use std::rc::Rc;
 
@@ -6248,37 +6270,37 @@ pub fn arena_external_procedure(arena: &mut Arena, args: &[ValueId]) -> ArenaRes
 // These are stubs - DTD/SGML operations not fully implemented
 
 /// declaration - Return declaration (stub: return unspecified)
-pub fn arena_declaration(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn declaration(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: DTD declarations not implemented
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// dtd - Return DTD (stub: return unspecified)
-pub fn arena_dtd(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn dtd(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: DTD access not implemented
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// epilog - Return epilog (stub: return empty node-list)
-pub fn arena_epilog(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn epilog(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: return empty node-list
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// prolog - Return prolog (stub: return empty node-list)
-pub fn arena_prolog(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn prolog(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: return empty node-list
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// sgml-declaration - Return SGML declaration (stub: return unspecified)
-pub fn arena_sgml_declaration(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn sgml_declaration(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: SGML declarations not implemented
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// sgml-parse - Parse SGML (stub: return unspecified)
-pub fn arena_sgml_parse(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn sgml_parse(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: SGML parsing not implemented
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
@@ -6287,13 +6309,13 @@ pub fn arena_sgml_parse(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
 // These are stubs - entity operations not fully implemented
 
 /// entity-address - Return entity address (stub: return unspecified)
-pub fn arena_entity_address(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn entity_address(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: entity addresses not implemented
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// entity-generated-system-id - Return generated system ID (stub: return empty string)
-pub fn arena_entity_generated_system_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn entity_generated_system_id(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("entity-generated-system-id: expected 1 argument, got {}", args.len()));
     }
@@ -6302,7 +6324,7 @@ pub fn arena_entity_generated_system_id(arena: &mut Arena, args: &[ValueId]) -> 
 }
 
 /// entity-name-normalize - Normalize entity name (stub: return same string)
-pub fn arena_entity_name_normalize(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn entity_name_normalize(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("entity-name-normalize: expected 1 argument, got {}", args.len()));
     }
@@ -6313,7 +6335,7 @@ pub fn arena_entity_name_normalize(_arena: &mut Arena, args: &[ValueId]) -> Aren
 /// general-name-normalize - Normalize general name (stub: return same string)
 /// (general-name-normalize name [node]) → string
 /// The second argument (node) is optional and ignored in XML processing
-pub fn arena_general_name_normalize(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn general_name_normalize(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() || args.len() > 2 {
         return Err(format!("general-name-normalize: expected 1 or 2 arguments, got {}", args.len()));
     }
@@ -6321,10 +6343,17 @@ pub fn arena_general_name_normalize(_arena: &mut Arena, args: &[ValueId]) -> Are
     Ok(args[0])
 }
 
+/// normalize - Normalize name (alias for general-name-normalize)
+/// (normalize name [node]) → string
+pub fn normalize(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+    // Just delegate to general-name-normalize
+    general_name_normalize(_arena, args)
+}
+
 // Phase 3 Batch 50: Simple navigation and declaration stubs (5 primitives)
 
 /// first-child-gi - Return first child GI (stub: return empty string)
-pub fn arena_first_child_gi(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn first_child_gi(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("first-child-gi: expected 1 argument, got {}", args.len()));
     }
@@ -6333,7 +6362,7 @@ pub fn arena_first_child_gi(arena: &mut Arena, args: &[ValueId]) -> ArenaResult 
 }
 
 /// tree-root - Return tree root
-pub fn arena_tree_root(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn tree_root(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     // Optimization: Use Grove's root() method directly instead of traversing parent chain
     // This is much faster for large documents with deep nesting
 
@@ -6390,19 +6419,19 @@ pub fn arena_tree_root(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// declare-default-language - Declare default language (stub: return unspecified)
-pub fn arena_declare_default_language(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn declare_default_language(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: language declarations not implemented
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// read-entity - Read entity (stub: return empty string)
-pub fn arena_read_entity(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn read_entity(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: entity reading not implemented, return empty string
     Ok(arena.string(String::new()))
 }
 
 /// set-visited! - Set visited flag (stub: return unspecified)
-pub fn arena_set_visited(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn set_visited(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: visited tracking not implemented
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
@@ -6410,7 +6439,7 @@ pub fn arena_set_visited(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 // Phase 3 Batch 51: Sosofo and navigation stubs (4 primitives)
 
 /// sosofo-contains-node? - Check if sosofo contains node (stub: always false)
-pub fn arena_sosofo_contains_node_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn sosofo_contains_node_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("sosofo-contains-node?: expected 2 arguments, got {}", args.len()));
     }
@@ -6419,20 +6448,20 @@ pub fn arena_sosofo_contains_node_p(_arena: &Arena, args: &[ValueId]) -> ArenaRe
 }
 
 /// page-number-sosofo - Return page number sosofo (stub: return empty sosofo)
-pub fn arena_page_number_sosofo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn page_number_sosofo(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: page numbering not fully implemented, return empty sosofo
     // TODO: Implement actual page numbering
     Ok(arena.alloc(ValueData::Sosofo))
 }
 
 /// ifollow - Inverse follow navigation (stub: return empty node-list)
-pub fn arena_ifollow(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn ifollow(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: inverse navigation not implemented, return empty node-list
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// with-language - Execute with language (stub: evaluate body)
-pub fn arena_with_language(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn with_language(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: language switching not implemented
     // Just return unspecified since we can't evaluate the body here
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
@@ -6441,13 +6470,13 @@ pub fn arena_with_language(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 // Phase 3 Batch 52: Element numbering stubs (3 primitives)
 
 /// all-element-number - Return all element number (stub: return 0)
-pub fn arena_all_element_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn all_element_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: element numbering not implemented, return 0
     Ok(arena.int(0))
 }
 
 /// ancestor-child-number - Return ancestor child number (stub: return 0)
-pub fn arena_ancestor_child_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn ancestor_child_number(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("ancestor-child-number: expected 2 arguments, got {}", args.len()));
     }
@@ -6456,7 +6485,7 @@ pub fn arena_ancestor_child_number(arena: &mut Arena, args: &[ValueId]) -> Arena
 }
 
 /// element-number-list - Return element number list (stub: return empty list)
-pub fn arena_element_number_list(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn element_number_list(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: element numbering not implemented, return empty list
     Ok(crate::scheme::arena::NIL_ID)
 }
@@ -6464,7 +6493,7 @@ pub fn arena_element_number_list(arena: &Arena, args: &[ValueId]) -> ArenaResult
 // Phase 3 Batch 53: Inherited property stubs - Part 1 (5 primitives)
 
 /// inherited-attribute-string - Get inherited attribute value (stub: return #f)
-pub fn arena_inherited_attribute_string(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_attribute_string(_arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() || args.len() > 2 {
         return Err(format!("inherited-attribute-string: expected 1-2 arguments, got {}", args.len()));
     }
@@ -6473,7 +6502,7 @@ pub fn arena_inherited_attribute_string(_arena: &mut Arena, args: &[ValueId]) ->
 }
 
 /// inherited-element-attribute-string - Get inherited element attribute (stub: return empty string)
-pub fn arena_inherited_element_attribute_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_element_attribute_string(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() < 1 || args.len() > 2 {
         return Err(format!("inherited-element-attribute-string: expected 1 or 2 arguments, got {}", args.len()));
     }
@@ -6482,19 +6511,19 @@ pub fn arena_inherited_element_attribute_string(arena: &mut Arena, args: &[Value
 }
 
 /// inherited-start-indent - Get inherited start indent (stub: return 0)
-pub fn arena_inherited_start_indent(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_start_indent(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: inherited indent not implemented, return 0
     Ok(arena.int(0))
 }
 
 /// inherited-end-indent - Get inherited end indent (stub: return 0)
-pub fn arena_inherited_end_indent(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_end_indent(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: inherited indent not implemented, return 0
     Ok(arena.int(0))
 }
 
 /// inherited-line-spacing - Get inherited line spacing (stub: return 0)
-pub fn arena_inherited_line_spacing(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_line_spacing(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: inherited line spacing not implemented, return 0
     Ok(arena.int(0))
 }
@@ -6502,31 +6531,31 @@ pub fn arena_inherited_line_spacing(arena: &mut Arena, args: &[ValueId]) -> Aren
 // Phase 3 Batch 54: Inherited property stubs - Part 2 (6 primitives)
 
 /// inherited-font-family-name - Get inherited font family (stub: return empty string)
-pub fn arena_inherited_font_family_name(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_font_family_name(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: inherited font family not implemented, return empty string
     Ok(arena.string(String::new()))
 }
 
 /// inherited-font-size - Get inherited font size (stub: return 12)
-pub fn arena_inherited_font_size(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_font_size(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: inherited font size not implemented, return 12pt
     Ok(arena.int(12))
 }
 
 /// inherited-font-weight - Get inherited font weight (stub: return empty string)
-pub fn arena_inherited_font_weight(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_font_weight(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: inherited font weight not implemented, return empty string
     Ok(arena.string(String::new()))
 }
 
 /// inherited-font-posture - Get inherited font posture (stub: return empty string)
-pub fn arena_inherited_font_posture(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_font_posture(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     // Stub: inherited font posture not implemented, return empty string
     Ok(arena.string(String::new()))
 }
 
 /// inherited-dbhtml-value - Get inherited dbhtml value (stub: return empty string)
-pub fn arena_inherited_dbhtml_value(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_dbhtml_value(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("inherited-dbhtml-value: expected 1 argument, got {}", args.len()));
     }
@@ -6535,7 +6564,7 @@ pub fn arena_inherited_dbhtml_value(arena: &mut Arena, args: &[ValueId]) -> Aren
 }
 
 /// inherited-pi-value - Get inherited PI value (stub: return empty string)
-pub fn arena_inherited_pi_value(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn inherited_pi_value(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("inherited-pi-value: expected 1 argument, got {}", args.len()));
     }
@@ -6548,7 +6577,7 @@ pub fn arena_inherited_pi_value(arena: &mut Arena, args: &[ValueId]) -> ArenaRes
 /// node-list - Create node list from nodes and node-lists
 /// (node-list node-or-list ...) → node-list
 /// Concatenates all arguments (nodes and node-lists) into a single node-list
-pub fn arena_node_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     use crate::grove::VecNodeList;
 
     let mut result_nodes = Vec::new();
@@ -6579,7 +6608,7 @@ pub fn arena_node_list(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
 
 /// node-list=? - Compare node lists for equality
 /// Returns #t if both node-lists contain the same nodes in the same order, #f otherwise
-pub fn arena_node_list_eq_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_eq_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
     use crate::scheme::arena::{FALSE_ID, TRUE_ID};
 
     if args.len() != 2 {
@@ -6677,16 +6706,17 @@ pub fn arena_node_list_eq_p(arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// node-list-count - Count nodes matching predicate (stub: return 0)
-pub fn arena_node_list_count(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
-    if args.len() != 2 {
-        return Err(format!("node-list-count: expected 2 arguments, got {}", args.len()));
+pub fn node_list_count(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+    if args.len() != 1 {
+        return Err(format!("node-list-count: expected 1 argument, got {}", args.len()));
     }
-    // Stub: node list count not implemented, return 0
-    Ok(arena.int(0))
+    // Implementation: node-list-length(node-list-remove-duplicates(nl))
+    let unique_nl = node_list_remove_duplicates(arena, args)?;
+    node_list_length(arena, &[unique_nl])
 }
 
 /// node-list-union-map - Union of mapped node lists (stub: return empty node list)
-pub fn arena_node_list_union_map(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_union_map(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("node-list-union-map: expected 2 arguments, got {}", args.len()));
     }
@@ -6695,7 +6725,7 @@ pub fn arena_node_list_union_map(_arena: &Arena, args: &[ValueId]) -> ArenaResul
 }
 
 /// node-list-symmetrical-difference - Symmetric difference of node lists (stub: return empty node list)
-pub fn arena_node_list_symmetrical_difference(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_symmetrical_difference(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("node-list-symmetrical-difference: expected 2 arguments, got {}", args.len()));
     }
@@ -6707,7 +6737,7 @@ pub fn arena_node_list_symmetrical_difference(_arena: &Arena, args: &[ValueId]) 
 
 /// node-list-address - Get address of node in node list (stub: return empty list)
 /// Takes 1-2 arguments: (node-list-address nl [snl])
-pub fn arena_node_list_address(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_address(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.is_empty() || args.len() > 2 {
         return Err(format!("node-list-address: expected 1-2 arguments, got {}", args.len()));
     }
@@ -6716,7 +6746,7 @@ pub fn arena_node_list_address(_arena: &Arena, args: &[ValueId]) -> ArenaResult 
 }
 
 /// node-list-error - Create error node list (stub: return empty node list)
-pub fn arena_node_list_error(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_error(arena: &mut Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("node-list-error: expected 1 argument, got {}", args.len()));
     }
@@ -6725,7 +6755,7 @@ pub fn arena_node_list_error(arena: &mut Arena, args: &[ValueId]) -> ArenaResult
 }
 
 /// node-list-no-order - Remove ordering from node list (stub: return empty node list)
-pub fn arena_node_list_no_order(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn node_list_no_order(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("node-list-no-order: expected 1 argument, got {}", args.len()));
     }
@@ -6734,7 +6764,7 @@ pub fn arena_node_list_no_order(_arena: &Arena, args: &[ValueId]) -> ArenaResult
 }
 
 /// origin-to-subnode-rel-forest-addr - Get relative forest address (stub: return empty list)
-pub fn arena_origin_to_subnode_rel_forest_addr(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn origin_to_subnode_rel_forest_addr(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("origin-to-subnode-rel-forest-addr: expected 1 argument, got {}", args.len()));
     }
@@ -6745,7 +6775,7 @@ pub fn arena_origin_to_subnode_rel_forest_addr(_arena: &Arena, args: &[ValueId])
 // Phase 3 Batch 57: Named node list stubs (3 primitives)
 
 /// named-node - Get node by name (stub: return #f)
-pub fn arena_named_node(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn named_node(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("named-node: expected 1 argument, got {}", args.len()));
     }
@@ -6754,7 +6784,7 @@ pub fn arena_named_node(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// named-node-list? - Check if value is a named node list (stub: return #f)
-pub fn arena_named_node_list_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn named_node_list_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("named-node-list?: expected 1 argument, got {}", args.len()));
     }
@@ -6763,7 +6793,7 @@ pub fn arena_named_node_list_p(_arena: &Arena, args: &[ValueId]) -> ArenaResult 
 }
 
 /// named-node-list-names - Get names from named node list (stub: return empty list)
-pub fn arena_named_node_list_names(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn named_node_list_names(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("named-node-list-names: expected 1 argument, got {}", args.len()));
     }
@@ -6774,7 +6804,7 @@ pub fn arena_named_node_list_names(_arena: &Arena, args: &[ValueId]) -> ArenaRes
 // Phase 3 Batch 58: Selection operation stubs (2 primitives)
 
 /// select-by-class - Select nodes by class (stub: return empty node list)
-pub fn arena_select_by_class(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn select_by_class(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("select-by-class: expected 1 argument, got {}", args.len()));
     }
@@ -6783,7 +6813,7 @@ pub fn arena_select_by_class(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
 }
 
 /// select-children - Select child elements (stub: return empty node list)
-pub fn arena_select_children(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn select_children(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Takes variable args (element names to match)
     // Stub: select children not implemented, return empty node list
     Ok(crate::scheme::arena::NIL_ID)
@@ -6792,14 +6822,14 @@ pub fn arena_select_children(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
 // Phase 3 Batch 59: Processing operation stubs (5 primitives)
 
 /// process-children-trim - Process children with whitespace trimming (stub: return unspecified)
-pub fn arena_process_children_trim(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn process_children_trim(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: process-children-trim not implemented, return unspecified
     // Note: This is a processing operation that would need evaluator integration
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
 }
 
 /// process-element-with-id - Process element with given ID (stub: return unspecified)
-pub fn arena_process_element_with_id(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn process_element_with_id(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("process-element-with-id: expected 1 argument, got {}", args.len()));
     }
@@ -6809,7 +6839,7 @@ pub fn arena_process_element_with_id(_arena: &Arena, args: &[ValueId]) -> ArenaR
 }
 
 /// process-first-descendant - Process first descendant matching predicate (stub: return unspecified)
-pub fn arena_process_first_descendant(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn process_first_descendant(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 1 {
         return Err(format!("process-first-descendant: expected 1 argument, got {}", args.len()));
     }
@@ -6819,7 +6849,7 @@ pub fn arena_process_first_descendant(_arena: &Arena, args: &[ValueId]) -> Arena
 }
 
 /// process-matching-children - Process children matching predicate (stub: return unspecified)
-pub fn arena_process_matching_children(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
+pub fn process_matching_children(_arena: &Arena, args: &[ValueId]) -> ArenaResult {
     if args.len() != 2 {
         return Err(format!("process-matching-children: expected 2 arguments, got {}", args.len()));
     }
@@ -6829,7 +6859,7 @@ pub fn arena_process_matching_children(_arena: &Arena, args: &[ValueId]) -> Aren
 }
 
 /// next-match - Continue to next matching rule (stub: return unspecified)
-pub fn arena_next_match(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
+pub fn next_match(_arena: &Arena, _args: &[ValueId]) -> ArenaResult {
     // Stub: next-match not implemented as primitive, return unspecified
     // Note: This is typically implemented as a special form in the evaluator
     Ok(crate::scheme::arena::UNSPECIFIED_ID)
@@ -6840,34 +6870,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_arena_car() {
+    fn test_car() {
         let mut arena = Arena::new();
         let one = arena.int(1);
         let two = arena.int(2);
         let pair = arena.cons(one, two);
 
-        let result = arena_car(&arena, &[pair]).unwrap();
+        let result = car(&arena, &[pair]).unwrap();
         assert_eq!(result, one);
     }
 
     #[test]
-    fn test_arena_cdr() {
+    fn test_cdr() {
         let mut arena = Arena::new();
         let one = arena.int(1);
         let two = arena.int(2);
         let pair = arena.cons(one, two);
 
-        let result = arena_cdr(&arena, &[pair]).unwrap();
+        let result = cdr(&arena, &[pair]).unwrap();
         assert_eq!(result, two);
     }
 
     #[test]
-    fn test_arena_cons() {
+    fn test_cons() {
         let mut arena = Arena::new();
         let one = arena.int(1);
         let two = arena.int(2);
 
-        let pair = arena_cons(&mut arena, &[one, two]).unwrap();
+        let pair = cons(&mut arena, &[one, two]).unwrap();
 
         match arena.get(pair) {
             ValueData::Pair { car, cdr, .. } => {
@@ -6879,37 +6909,37 @@ mod tests {
     }
 
     #[test]
-    fn test_arena_null() {
+    fn test_null() {
         let mut arena = Arena::new();
 
         assert_eq!(
-            arena_null(&arena, &[NIL_ID]).unwrap(),
+            null(&arena, &[NIL_ID]).unwrap(),
             crate::scheme::arena::TRUE_ID
         );
 
         let one = arena.int(1);
         assert_eq!(
-            arena_null(&arena, &[one]).unwrap(),
+            null(&arena, &[one]).unwrap(),
             crate::scheme::arena::FALSE_ID
         );
     }
 
     #[test]
-    fn test_arena_equal() {
+    fn test_equal() {
         let mut arena = Arena::new();
 
         // Equal integers
         let one1 = arena.int(1);
         let one2 = arena.int(1);
         assert_eq!(
-            arena_equal(&arena, &[one1, one2]).unwrap(),
+            equal(&arena, &[one1, one2]).unwrap(),
             crate::scheme::arena::TRUE_ID
         );
 
         // Unequal integers
         let two = arena.int(2);
         assert_eq!(
-            arena_equal(&arena, &[one1, two]).unwrap(),
+            equal(&arena, &[one1, two]).unwrap(),
             crate::scheme::arena::FALSE_ID
         );
 
@@ -6917,7 +6947,7 @@ mod tests {
         let list1 = arena.cons(one1, NIL_ID);
         let list2 = arena.cons(one2, NIL_ID);
         assert_eq!(
-            arena_equal(&arena, &[list1, list2]).unwrap(),
+            equal(&arena, &[list1, list2]).unwrap(),
             crate::scheme::arena::TRUE_ID
         );
     }

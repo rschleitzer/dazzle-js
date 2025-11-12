@@ -8,7 +8,6 @@ use dazzle_core::grove::Grove;
 use dazzle_core::scheme::environment::Environment;
 use dazzle_core::scheme::evaluator::Evaluator;
 use dazzle_core::scheme::parser::Parser;
-use dazzle_core::scheme::primitives;
 use dazzle_core::scheme::value::Value;
 use dazzle_backend_sgml::SgmlBackend;
 use dazzle_grove_libxml2::LibXml2Grove;
@@ -30,7 +29,6 @@ fn setup_full_pipeline(xml: &str, output_dir: &std::path::Path) -> (Evaluator, g
 
     // Create environment with all primitives
     let env = Environment::new_global();
-    primitives::register_all_primitives(&env);
 
     // Create SGML backend
     let backend = SgmlBackend::new(output_dir);

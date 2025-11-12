@@ -491,6 +491,354 @@ impl Evaluator {
         self.arena.grove.as_ref()
     }
 
+    /// Get static string name for a known primitive
+    ///
+    /// Returns a `'static str` for the primitive name if it's known,
+    /// allowing it to be stored in a Procedure::Primitive value.
+    fn get_primitive_static_name(&self, name: &str) -> Option<&'static str> {
+        match name {
+            // R4RS list primitives
+            "cons" => Some("cons"),
+            "car" => Some("car"),
+            "cdr" => Some("cdr"),
+            "cadr" => Some("cadr"),
+            "caddr" => Some("caddr"),
+            "cadddr" => Some("cadddr"),
+            "list" => Some("list"),
+            "length" => Some("length"),
+            "append" => Some("append"),
+            "reverse" => Some("reverse"),
+            "list-ref" => Some("list-ref"),
+            "list-tail" => Some("list-tail"),
+            "member" => Some("member"),
+            "memv" => Some("memv"),
+            "memq" => Some("memq"),
+            "assoc" => Some("assoc"),
+            "assv" => Some("assv"),
+            "assq" => Some("assq"),
+            "null?" => Some("null?"),
+            "pair?" => Some("pair?"),
+            "list?" => Some("list?"),
+
+            // R4RS predicates
+            "boolean?" => Some("boolean?"),
+            "symbol?" => Some("symbol?"),
+            "char?" => Some("char?"),
+            "string?" => Some("string?"),
+            "number?" => Some("number?"),
+            "integer?" => Some("integer?"),
+            "real?" => Some("real?"),
+            "exact?" => Some("exact?"),
+            "inexact?" => Some("inexact?"),
+            "procedure?" => Some("procedure?"),
+            "vector?" => Some("vector?"),
+            "zero?" => Some("zero?"),
+            "positive?" => Some("positive?"),
+            "negative?" => Some("negative?"),
+            "odd?" => Some("odd?"),
+            "even?" => Some("even?"),
+
+            // R4RS comparison
+            "eq?" => Some("eq?"),
+            "eqv?" => Some("eqv?"),
+            "equal?" => Some("equal?"),
+            "=" => Some("="),
+            "<" => Some("<"),
+            ">" => Some(">"),
+            "<=" => Some("<="),
+            ">=" => Some(">="),
+
+            // R4RS arithmetic
+            "+" => Some("+"),
+            "-" => Some("-"),
+            "*" => Some("*"),
+            "/" => Some("/"),
+            "quotient" => Some("quotient"),
+            "remainder" => Some("remainder"),
+            "modulo" => Some("modulo"),
+            "abs" => Some("abs"),
+            "max" => Some("max"),
+            "min" => Some("min"),
+            "floor" => Some("floor"),
+            "ceiling" => Some("ceiling"),
+            "truncate" => Some("truncate"),
+            "round" => Some("round"),
+            "sqrt" => Some("sqrt"),
+            "expt" => Some("expt"),
+            "exp" => Some("exp"),
+            "log" => Some("log"),
+            "sin" => Some("sin"),
+            "cos" => Some("cos"),
+            "tan" => Some("tan"),
+            "asin" => Some("asin"),
+            "acos" => Some("acos"),
+            "atan" => Some("atan"),
+            "number->string" => Some("number->string"),
+            "string->number" => Some("string->number"),
+
+            // R4RS strings
+            "string" => Some("string"),
+            "string-append" => Some("string-append"),
+            "substring" => Some("substring"),
+            "string-ref" => Some("string-ref"),
+            "string-length" => Some("string-length"),
+            "string=?" => Some("string=?"),
+            "string<?" => Some("string<?"),
+            "string>?" => Some("string>?"),
+            "string<=?" => Some("string<=?"),
+            "string>=?" => Some("string>=?"),
+            "string-ci=?" => Some("string-ci=?"),
+            "string-ci<?" => Some("string-ci<?"),
+            "string-ci>?" => Some("string-ci>?"),
+            "string-ci<=?" => Some("string-ci<=?"),
+            "string-ci>=?" => Some("string-ci>=?"),
+            "string->list" => Some("string->list"),
+            "list->string" => Some("list->string"),
+            "symbol->string" => Some("symbol->string"),
+            "string->symbol" => Some("string->symbol"),
+            "keyword?" => Some("keyword?"),
+            "keyword->string" => Some("keyword->string"),
+            "string->keyword" => Some("string->keyword"),
+
+            // R4RS characters
+            "char=?" => Some("char=?"),
+            "char<?" => Some("char<?"),
+            "char>?" => Some("char>?"),
+            "char<=?" => Some("char<=?"),
+            "char>=?" => Some("char>=?"),
+            "char-ci=?" => Some("char-ci=?"),
+            "char-ci<?" => Some("char-ci<?"),
+            "char-ci>?" => Some("char-ci>?"),
+            "char-ci<=?" => Some("char-ci<=?"),
+            "char-ci>=?" => Some("char-ci>=?"),
+            "char-alphabetic?" => Some("char-alphabetic?"),
+            "char-numeric?" => Some("char-numeric?"),
+            "char-whitespace?" => Some("char-whitespace?"),
+            "char-upper-case?" => Some("char-upper-case?"),
+            "char-lower-case?" => Some("char-lower-case?"),
+            "char-upcase" => Some("char-upcase"),
+            "char-downcase" => Some("char-downcase"),
+            "char->integer" => Some("char->integer"),
+            "integer->char" => Some("integer->char"),
+            "char-property" => Some("char-property"),
+            "char-script-case" => Some("char-script-case"),
+
+            // R4RS vectors
+            "vector" => Some("vector"),
+            "make-vector" => Some("make-vector"),
+            "vector-ref" => Some("vector-ref"),
+            "vector-set!" => Some("vector-set!"),
+            "vector-length" => Some("vector-length"),
+            "vector->list" => Some("vector->list"),
+            "list->vector" => Some("list->vector"),
+            "vector-fill!" => Some("vector-fill!"),
+
+            // R4RS logic
+            "not" => Some("not"),
+
+            // R4RS I/O (excluding special forms)
+            "display" => Some("display"),
+            "write" => Some("write"),
+            "newline" => Some("newline"),
+            "read" => Some("read"),
+            // Note: "load" is NOT included - it's a special form with eval_load
+
+            // Note: R4RS higher-order "map", "for-each", "apply" are NOT included
+            // They are special forms with eval_map, eval_for_each, eval_apply
+
+            // DSSSL grove primitives
+            "node?" => Some("node?"),
+            "sosofo?" => Some("sosofo?"),
+            "current-node" => Some("current-node"),
+            "gi" => Some("gi"),
+            "id" => Some("id"),
+            "data" => Some("data"),
+            "node-property" => Some("node-property"),
+            "attribute-string" => Some("attribute-string"),
+            "parent" => Some("parent"),
+            "ancestor" => Some("ancestor"),
+            "children" => Some("children"),
+            "descendants" => Some("descendants"),
+            "follow" => Some("follow"),
+            "preced" => Some("preced"),
+            "ipreced" => Some("ipreced"),
+            "attributes" => Some("attributes"),
+            "ancestors" => Some("ancestors"),
+            "document-element" => Some("document-element"),
+            "have-ancestor?" => Some("have-ancestor?"),
+            "hierarchical-number" => Some("hierarchical-number"),
+            "hierarchical-number-recursive" => Some("hierarchical-number-recursive"),
+            "absolute-first-sibling?" => Some("absolute-first-sibling?"),
+            "absolute-last-sibling?" => Some("absolute-last-sibling?"),
+            "select-elements" => Some("select-elements"),
+            "element-with-id" => Some("element-with-id"),
+            "match-element?" => Some("match-element?"),
+            "first-sibling?" => Some("first-sibling?"),
+            "last-sibling?" => Some("last-sibling?"),
+            "child-number" => Some("child-number"),
+            "element-number" => Some("element-number"),
+            "node-list?" => Some("node-list?"),
+            "node-list-first" => Some("node-list-first"),
+            "node-list-rest" => Some("node-list-rest"),
+            "node-list-length" => Some("node-list-length"),
+            "empty-node-list" => Some("empty-node-list"),
+            "node-list-empty?" => Some("node-list-empty?"),
+            "node-list-head" => Some("node-list-head"),
+            "node-list-tail" => Some("node-list-tail"),
+            "node-list-sublist" => Some("node-list-sublist"),
+            "node-list-ref" => Some("node-list-ref"),
+            "node-list-reduce" => Some("node-list-reduce"),
+            "node-list-reduce-right" => Some("node-list-reduce-right"),
+            "node-list-map" => Some("node-list-map"),
+            "node-list-filter" => Some("node-list-filter"),
+            "node-list-contains?" => Some("node-list-contains?"),
+            "node-list-some?" => Some("node-list-some?"),
+            "node-list-every?" => Some("node-list-every?"),
+            "node-list->list" => Some("node-list->list"),
+            "node-list-union" => Some("node-list-union"),
+            "node-list-intersection" => Some("node-list-intersection"),
+            "node-list-difference" => Some("node-list-difference"),
+            "node-list-remove-duplicates" => Some("node-list-remove-duplicates"),
+            "node-list-last" => Some("node-list-last"),
+            "node-list-reverse" => Some("node-list-reverse"),
+
+            // DSSSL processing
+            // Note: "process-children" and "process-node-list" are NOT included
+            // They are special forms with eval_process_children, eval_process_node_list
+            "literal" => Some("literal"),
+            "next-match" => Some("next-match"),
+            "sosofo-append" => Some("sosofo-append"),
+            "empty-sosofo" => Some("empty-sosofo"),
+            "format-number" => Some("format-number"),
+            "format-number-list" => Some("format-number-list"),
+
+            // DSSSL entity/notation primitives
+            "entity-system-id" => Some("entity-system-id"),
+            "entity-public-id" => Some("entity-public-id"),
+            "entity-text" => Some("entity-text"),
+            "entity-type" => Some("entity-type"),
+            "notation-system-id" => Some("notation-system-id"),
+            "notation-public-id" => Some("notation-public-id"),
+
+            // DSSSL quantity primitives (stubs)
+            "quantity?" => Some("quantity?"),
+            "quantity" => Some("quantity"),
+            "quantity->number" => Some("quantity->number"),
+            "number->quantity" => Some("number->quantity"),
+            "quantity-convert" => Some("quantity-convert"),
+            "device-length" => Some("device-length"),
+            "label-distance" => Some("label-distance"),
+
+            // DSSSL color primitives (stubs)
+            "color?" => Some("color?"),
+            "color" => Some("color"),
+            "color-space?" => Some("color-space?"),
+            "color-space" => Some("color-space"),
+
+            // DSSSL address primitives (stubs)
+            "address?" => Some("address?"),
+            "address" => Some("address"),
+            "address-local?" => Some("address-local?"),
+            "address-visited?" => Some("address-visited?"),
+
+            // DSSSL glyph primitives (stubs)
+            "glyph-id?" => Some("glyph-id?"),
+            "glyph-id" => Some("glyph-id"),
+            "glyph-subst-table?" => Some("glyph-subst-table?"),
+            "glyph-subst-table" => Some("glyph-subst-table"),
+            "glyph-subst" => Some("glyph-subst"),
+
+            // DSSSL spacing primitives (stubs)
+            "display-space" => Some("display-space"),
+            "inline-space" => Some("inline-space"),
+            "display-space?" => Some("display-space?"),
+            "inline-space?" => Some("inline-space?"),
+
+            // OpenJade extensions
+            "time" => Some("time"),
+            "time->string" => Some("time->string"),
+            "time<=?" => Some("time<=?"),
+            "time<?" => Some("time<?"),
+            "time>=?" => Some("time>=?"),
+            "time>?" => Some("time>?"),
+            "language?" => Some("language?"),
+            "language" => Some("language"),
+            "style?" => Some("style?"),
+            "string-equiv?" => Some("string-equiv?"),
+            "label-length" => Some("label-length"),
+            "external-procedure" => Some("external-procedure"),
+            "declaration" => Some("declaration"),
+            "dtd" => Some("dtd"),
+            "epilog" => Some("epilog"),
+            "prolog" => Some("prolog"),
+            "sgml-declaration" => Some("sgml-declaration"),
+            "sgml-parse" => Some("sgml-parse"),
+            "entity-address" => Some("entity-address"),
+            "entity-generated-system-id" => Some("entity-generated-system-id"),
+            "entity-name-normalize" => Some("entity-name-normalize"),
+            "general-name-normalize" => Some("general-name-normalize"),
+            "normalize" => Some("normalize"),
+            "first-child-gi" => Some("first-child-gi"),
+            "tree-root" => Some("tree-root"),
+            "declare-default-language" => Some("declare-default-language"),
+            "read-entity" => Some("read-entity"),
+            "set-visited!" => Some("set-visited!"),
+            "sosofo-contains-node?" => Some("sosofo-contains-node?"),
+            "page-number-sosofo" => Some("page-number-sosofo"),
+            "ifollow" => Some("ifollow"),
+            "with-language" => Some("with-language"),
+            "all-element-number" => Some("all-element-number"),
+            "ancestor-child-number" => Some("ancestor-child-number"),
+            "element-number-list" => Some("element-number-list"),
+            "inherited-attribute-string" => Some("inherited-attribute-string"),
+            "inherited-element-attribute-string" => Some("inherited-element-attribute-string"),
+            "inherited-start-indent" => Some("inherited-start-indent"),
+            "inherited-end-indent" => Some("inherited-end-indent"),
+            "inherited-line-spacing" => Some("inherited-line-spacing"),
+            "inherited-font-family-name" => Some("inherited-font-family-name"),
+            "inherited-font-size" => Some("inherited-font-size"),
+            "inherited-font-weight" => Some("inherited-font-weight"),
+            "inherited-font-posture" => Some("inherited-font-posture"),
+            "inherited-dbhtml-value" => Some("inherited-dbhtml-value"),
+            "inherited-pi-value" => Some("inherited-pi-value"),
+            "node-list" => Some("node-list"),
+            "node-list=?" => Some("node-list=?"),
+            "node-list-count" => Some("node-list-count"),
+            "node-list-union-map" => Some("node-list-union-map"),
+            "node-list-symmetrical-difference" => Some("node-list-symmetrical-difference"),
+            "node-list-address" => Some("node-list-address"),
+            "node-list-error" => Some("node-list-error"),
+            "node-list-no-order" => Some("node-list-no-order"),
+            "origin-to-subnode-rel-forest-addr" => Some("origin-to-subnode-rel-forest-addr"),
+            "named-node" => Some("named-node"),
+            "named-node-list?" => Some("named-node-list?"),
+            "named-node-list-names" => Some("named-node-list-names"),
+            "select-by-class" => Some("select-by-class"),
+            "select-children" => Some("select-children"),
+            "process-children-trim" => Some("process-children-trim"),
+            "process-element-with-id" => Some("process-element-with-id"),
+            "process-first-descendant" => Some("process-first-descendant"),
+            "process-matching-children" => Some("process-matching-children"),
+
+            // Additional utility primitives
+            "add" => Some("add"),
+            "divide" => Some("divide"),
+            "equal" => Some("equal"),
+            "char-eq" => Some("char-eq"),
+            "char-lt" => Some("char-lt"),
+            "error" => Some("error"),
+            "eof-object?" => Some("eof-object?"),
+            "debug" => Some("debug"),
+            "current-language" => Some("current-language"),
+            "current-mode" => Some("current-mode"),
+            "current-node-address" => Some("current-node-address"),
+            "current-node-page-number-sosofo" => Some("current-node-page-number-sosofo"),
+
+            // Not a known primitive
+            _ => None,
+        }
+    }
+
     // =========================================================================
     // Arena Conversion Layer (Phase 2 migration)
     // =========================================================================
@@ -545,7 +893,6 @@ impl Evaluator {
             }
             _ => {
                 // For now, unsupported types return NIL
-                // Phase 3 will handle more types
                 NIL_ID
             }
         }
@@ -609,180 +956,121 @@ impl Evaluator {
     }
 
     /// Apply arena primitive (Phase 2+3 hot path)
-    fn apply_arena_primitive(&mut self, name: &str, args: &[Value]) -> EvalResult {
-        use crate::scheme::arena_primitives::{
-            // Phase 2: Hot primitives
-            arena_car, arena_cdr, arena_cons, arena_null, arena_equal,
-            // Phase 3 Batch 1: List operations
-            arena_cadr, arena_caddr, arena_cadddr, arena_list, arena_length,
-            arena_reverse, arena_append, arena_list_p, arena_list_ref,
-            // Phase 3 Batch 2: Type predicates
-            arena_pair_p, arena_number_p, arena_integer_p, arena_real_p,
-            arena_string_p, arena_symbol_p, arena_char_p, arena_boolean_p,
-            arena_zero_p, arena_positive_p, arena_negative_p, arena_odd_p, arena_even_p,
-            // Phase 3 Batch 3: Arithmetic
-            arena_add, arena_subtract, arena_multiply, arena_divide,
-            arena_quotient, arena_remainder, arena_modulo,
-            arena_num_eq, arena_num_lt, arena_num_gt, arena_num_le, arena_num_ge,
-            arena_abs, arena_min, arena_max,
-            arena_floor, arena_ceiling, arena_truncate, arena_round,
-            arena_sqrt, arena_sin, arena_cos, arena_tan,
-            arena_asin, arena_acos, arena_atan, arena_exp, arena_log, arena_expt,
-            // Phase 3 Batch 4: String operations
-            arena_string_length, arena_string_ref, arena_substring, arena_string_append,
-            arena_string_eq, arena_string_lt, arena_string_gt, arena_string_le, arena_string_ge,
-            arena_string_ci_eq, arena_string_ci_lt, arena_string_ci_gt,
-            arena_string_ci_le, arena_string_ci_ge,
-            // Phase 3 Batch 5: Character operations
-            arena_char_eq, arena_char_lt, arena_char_gt, arena_char_le, arena_char_ge,
-            arena_char_ci_eq, arena_char_ci_lt, arena_char_ci_gt, arena_char_ci_le, arena_char_ci_ge,
-            arena_char_upcase, arena_char_downcase,
-            arena_char_alphabetic_p, arena_char_numeric_p, arena_char_whitespace_p,
-            arena_char_to_integer, arena_integer_to_char,
-            arena_char_property, arena_char_script_case,
-            // Phase 3 Batch 6: Symbol/Keyword operations
-            arena_symbol_to_string, arena_string_to_symbol,
-            arena_keyword_p, arena_keyword_to_string, arena_string_to_keyword,
-            // Phase 3 Batch 7: List utilities
-            arena_memq, arena_memv, arena_member,
-            arena_assq, arena_assv, arena_assoc,
-            // Phase 3 Batch 8: Logic and list accessors
-            arena_not, arena_eq_p, arena_eqv_p,
-            arena_caar, arena_cdar, arena_cddr,
-            // Phase 3 Batch 9: Extended list accessors
-            arena_caaar, arena_caadr, arena_cadar,
-            arena_cdaar, arena_cdadr, arena_cddar, arena_cdddr,
-            // Phase 3 Batch 10: Vector operations
-            arena_vector, arena_make_vector, arena_vector_length,
-            arena_vector_ref, arena_vector_set,
-            arena_vector_to_list, arena_list_to_vector, arena_vector_fill,
-            // Phase 3 Batch 11: Additional type predicates & utilities
-            arena_vector_p, arena_procedure_p,
-            arena_set_car, arena_set_cdr, arena_list_tail,
-            // Phase 3 Batch 12: String utilities
-            arena_string_upcase, arena_string_downcase, arena_case_fold_down,
-            arena_string_index,
-            arena_string_to_list, arena_list_to_string,
-            // Phase 3 Batch 13: Miscellaneous utilities
-            arena_gcd, arena_lcm,
-            arena_exact_to_inexact, arena_inexact_to_exact,
-            arena_make_string, arena_string, arena_reverse_bang,
-            // Phase 3 Batch 14: Additional string and character operations
-            arena_string_set, arena_string_copy, arena_string_fill,
-            arena_char_lower_case_p, arena_char_upper_case_p,
-            // Phase 3 Batch 15: List utilities
-            arena_last, arena_last_pair, arena_list_copy,
-            arena_append_bang, arena_iota,
-            // Phase 3 Batch 16: Extended list operations
-            arena_take, arena_drop, arena_split_at,
-            arena_filter, arena_remove,
-            // Phase 3 Batch 17: Additional numeric operations
-            arena_numerator, arena_denominator, arena_rationalize,
-            arena_angle, arena_magnitude, arena_string_to_number_radix,
-            // Phase 3 Batch 18: Conversion and utility operations
-            arena_number_to_string_radix,
-            arena_null_list_p, arena_improper_list_p, arena_circular_list_p,
-            // Phase 3 Batch 19: Bitwise operations
-            arena_bitwise_and, arena_bitwise_ior, arena_bitwise_xor, arena_bitwise_not,
-            arena_arithmetic_shift, arena_bit_extract,
-            arena_bitwise_bit_set_p, arena_bitwise_bit_count,
-            // Phase 3 Batch 20: I/O and display operations
-            arena_display, arena_newline, arena_write, arena_write_char,
-            arena_read_char, arena_eof_object_p,
-            // Phase 3 Batch 21: Number formatting
-            arena_format_number, arena_format_number_list,
-            // Phase 3 Batch 22: Simple constants
-            arena_empty_sosofo, arena_if_first_page, arena_if_front_page,
-            // Phase 3 Batch 23: Grove operations
-            arena_current_node,
-            // Phase 3 Batch 24: Grove node properties
-            arena_gi, arena_data, arena_id,
-            // Phase 3 Batch 25: Grove navigation
-            arena_children, arena_parent, arena_attributes,
-            // Phase 3 Batch 26: Node-list operations
-            arena_node_list_p, arena_empty_node_list, arena_node_list_empty_p,
-            arena_node_list_length, arena_node_list_first,
-            // Phase 3 Batch 27: Attribute operations
-            arena_attribute_string,
-            // Phase 3 Batch 28: More node-list operations
-            arena_node_list_rest, arena_node_list_ref, arena_node_list_reverse,
-            // Phase 3 Batch 29: Type predicates
-            arena_node_p, arena_sosofo_p, arena_quantity_p,
-            // Phase 3 Batch 30: Color and spacing stubs
-            arena_color_p, arena_color, arena_display_space_p, arena_inline_space_p,
-            // Phase 3 Batch 31: Quantity operations
-            arena_quantity_to_number, arena_number_to_quantity, arena_quantity_convert,
-            arena_device_length, arena_label_distance,
-            // Phase 3 Batch 32: Grove navigation operations
-            arena_ancestor, arena_descendants, arena_follow, arena_preced, arena_ipreced,
-            // Phase 3 Batch 33: Node-list set operations
-            arena_node_list_last, arena_node_list_union, arena_node_list_intersection,
-            arena_node_list_difference, arena_node_list_remove_duplicates,
-            // Phase 3 Batch 34: Element selection and position operations
-            arena_select_elements, arena_first_sibling_p, arena_last_sibling_p,
-            arena_child_number, arena_element_with_id,
-            // Phase 3 Batch 35: Element numbering operations
-            arena_element_number, arena_hierarchical_number, arena_hierarchical_number_recursive,
-            // Phase 3 Batch 36: Grove utility operations
-            arena_ancestors, arena_document_element, arena_have_ancestor_p,
-            arena_match_element_p, arena_node_list_map,
-            // Phase 3 Batch 37: Final DSSSL operations
-            arena_node_property, arena_absolute_first_sibling_p, arena_absolute_last_sibling_p,
-            arena_node_list_to_list, arena_node_list_contains_p,
-            // Phase 3 Batch 38: Entity and notation operations
-            arena_entity_system_id, arena_entity_public_id, arena_entity_type,
-            arena_notation_system_id, arena_notation_public_id,
-            // Phase 3 Batch 39: Context and debugging primitives
-            arena_current_language, arena_current_mode, arena_current_node_address,
-            arena_current_node_page_number_sosofo, arena_debug,
-            // Phase 3 Batch 41: Type predicates and error
-            arena_exact_p, arena_inexact_p, arena_error,
-            // Phase 3 Batch 42: Address type stubs
-            arena_address_p, arena_address_local_p, arena_address_visited_p,
-            // Phase 3 Batch 43: Color/display space stubs
-            arena_color_space_p, arena_color_space, arena_display_space, arena_inline_space,
-            // Phase 3 Batch 44: Glyph type stubs
-            arena_glyph_id_p, arena_glyph_id, arena_glyph_subst_table_p,
-            arena_glyph_subst_table, arena_glyph_subst,
-            // Phase 3 Batch 45: Time type stubs
-            arena_time, arena_time_to_string, arena_time_le, arena_time_lt,
-            arena_time_ge, arena_time_gt,
-            // Phase 3 Batch 46: Language and style type stubs
-            arena_language_p, arena_language, arena_style_p,
-            // Phase 3 Batch 47: String comparison and simple stubs
-            arena_string_equiv_p, arena_label_length, arena_external_procedure,
-            // Phase 3 Batch 48: DTD/SGML stubs
-            arena_declaration, arena_dtd, arena_epilog, arena_prolog,
-            arena_sgml_declaration, arena_sgml_parse,
-            // Phase 3 Batch 49: Entity/normalization stubs
-            arena_entity_address, arena_entity_generated_system_id,
-            arena_entity_name_normalize, arena_general_name_normalize,
-            // Phase 3 Batch 50: Simple navigation and declaration stubs
-            arena_first_child_gi, arena_tree_root, arena_declare_default_language,
-            arena_read_entity, arena_set_visited,
-            // Phase 3 Batch 51: Sosofo and navigation stubs
-            arena_sosofo_contains_node_p, arena_page_number_sosofo, arena_ifollow, arena_with_language,
-            // Phase 3 Batch 52: Element numbering stubs
-            arena_all_element_number, arena_ancestor_child_number, arena_element_number_list,
-            // Phase 3 Batch 53: Inherited property stubs - Part 1
-            arena_inherited_attribute_string, arena_inherited_element_attribute_string,
-            arena_inherited_start_indent, arena_inherited_end_indent, arena_inherited_line_spacing,
-            // Phase 3 Batch 54: Inherited property stubs - Part 2
-            arena_inherited_font_family_name, arena_inherited_font_size, arena_inherited_font_weight,
-            arena_inherited_font_posture, arena_inherited_dbhtml_value, arena_inherited_pi_value,
-            // Phase 3 Batch 55: Node-list operation stubs - Part 1 (node-list-count is user-defined)
-            arena_node_list, arena_node_list_eq_p,
-            arena_node_list_union_map, arena_node_list_symmetrical_difference,
-            // Phase 3 Batch 56: Node-list operation stubs - Part 2
-            arena_node_list_address, arena_node_list_error, arena_node_list_no_order,
-            arena_origin_to_subnode_rel_forest_addr,
-            // Phase 3 Batch 57: Named node list stubs
-            arena_named_node, arena_named_node_list_p, arena_named_node_list_names,
-            // Phase 3 Batch 58: Selection operation stubs (1) - NOTE: select-children is user-defined
-            arena_select_by_class,
-            // Phase 3 Batch 59: Processing operation stubs (final 5!)
-            arena_process_children_trim, arena_process_element_with_id, arena_process_first_descendant,
-            arena_process_matching_children, arena_next_match,
+    fn apply_primitive(&mut self, name: &str, args: &[Value]) -> EvalResult {
+        use crate::scheme::primitives::{
+            car, cdr, cons, null, equal,
+            cadr, caddr, cadddr, list, length,
+            reverse, append, list_p, list_ref,
+            pair_p, number_p, integer_p, real_p,
+            string_p, symbol_p, char_p, boolean_p,
+            zero_p, positive_p, negative_p, odd_p, even_p,
+            add, subtract, multiply, divide,
+            quotient, remainder, modulo,
+            num_eq, num_lt, num_gt, num_le, num_ge,
+            abs, min, max,
+            floor, ceiling, truncate, round,
+            sqrt, sin, cos, tan,
+            asin, acos, atan, exp, log, expt,
+            string_length, string_ref, substring, string_append,
+            string_eq, string_lt, string_gt, string_le, string_ge,
+            string_ci_eq, string_ci_lt, string_ci_gt,
+            string_ci_le, string_ci_ge,
+            char_eq, char_lt, char_gt, char_le, char_ge,
+            char_ci_eq, char_ci_lt, char_ci_gt, char_ci_le, char_ci_ge,
+            char_upcase, char_downcase,
+            char_alphabetic_p, char_numeric_p, char_whitespace_p,
+            char_to_integer, integer_to_char,
+            char_property, char_script_case,
+            symbol_to_string, string_to_symbol,
+            keyword_p, keyword_to_string, string_to_keyword,
+            memq, memv, member,
+            assq, assv, assoc,
+            not, eq_p, eqv_p,
+            caar, cdar, cddr,
+            caaar, caadr, cadar,
+            cdaar, cdadr, cddar, cdddr,
+            vector, make_vector, vector_length,
+            vector_ref, vector_set,
+            vector_to_list, list_to_vector, vector_fill,
+            vector_p, procedure_p,
+            set_car, set_cdr, list_tail,
+            string_upcase, string_downcase, case_fold_down,
+            string_index,
+            string_to_list, list_to_string,
+            gcd, lcm,
+            exact_to_inexact, inexact_to_exact,
+            make_string, string, reverse_bang,
+            string_set, string_copy, string_fill,
+            char_lower_case_p, char_upper_case_p,
+            last, last_pair, list_copy,
+            append_bang, iota,
+            take, drop, split_at,
+            filter, remove,
+            numerator, denominator, rationalize,
+            angle, magnitude, string_to_number_radix,
+            number_to_string_radix,
+            null_list_p, improper_list_p, circular_list_p,
+            bitwise_and, bitwise_ior, bitwise_xor, bitwise_not,
+            arithmetic_shift, bit_extract,
+            bitwise_bit_set_p, bitwise_bit_count,
+            display, newline, write, write_char,
+            read_char, eof_object_p,
+            format_number, format_number_list,
+            empty_sosofo, sosofo_append, if_first_page, if_front_page,
+            current_node,
+            gi, data, id,
+            children, parent, attributes,
+            node_list_p, empty_node_list, node_list_empty_p,
+            node_list_length, node_list_first,
+            attribute_string,
+            node_list_rest, node_list_ref, node_list_reverse,
+            node_p, sosofo_p, quantity_p,
+            color_p, color, display_space_p, inline_space_p,
+            quantity_to_number, number_to_quantity, quantity_convert,
+            device_length, label_distance,
+            ancestor, descendants, follow, preced, ipreced,
+            node_list_last, node_list_union, node_list_intersection,
+            node_list_difference, node_list_remove_duplicates,
+            select_elements, first_sibling_p, last_sibling_p,
+            child_number, element_with_id,
+            element_number, hierarchical_number, hierarchical_number_recursive,
+            ancestors, document_element, have_ancestor_p,
+            match_element_p, node_list_map,
+            node_property, absolute_first_sibling_p, absolute_last_sibling_p,
+            node_list_to_list, node_list_contains_p,
+            entity_system_id, entity_public_id, entity_type,
+            notation_system_id, notation_public_id,
+            current_language, current_mode, current_node_address,
+            current_node_page_number_sosofo, debug,
+            exact_p, inexact_p, error,
+            address_p, address_local_p, address_visited_p,
+            color_space_p, color_space, display_space, inline_space,
+            glyph_id_p, glyph_id, glyph_subst_table_p,
+            glyph_subst_table, glyph_subst,
+            time, time_to_string, time_le, time_lt,
+            time_ge, time_gt,
+            language_p, language, style_p,
+            string_equiv_p, label_length, external_procedure,
+            declaration, dtd, epilog, prolog,
+            sgml_declaration, sgml_parse,
+            entity_address, entity_generated_system_id,
+            entity_name_normalize, general_name_normalize, normalize,
+            first_child_gi, tree_root, declare_default_language,
+            read_entity, set_visited,
+            sosofo_contains_node_p, page_number_sosofo, ifollow, with_language,
+            all_element_number, ancestor_child_number, element_number_list,
+            inherited_attribute_string, inherited_element_attribute_string,
+            inherited_start_indent, inherited_end_indent, inherited_line_spacing,
+            inherited_font_family_name, inherited_font_size, inherited_font_weight,
+            inherited_font_posture, inherited_dbhtml_value, inherited_pi_value,
+            node_list, node_list_eq_p,
+            node_list_union_map, node_list_symmetrical_difference, node_list_count,
+            node_list_address, node_list_error, node_list_no_order,
+            origin_to_subnode_rel_forest_addr,
+            named_node, named_node_list_p, named_node_list_names,
+            select_by_class, select_children,
+            process_children_trim, process_element_with_id, process_first_descendant,
+            process_matching_children, next_match,
         };
 
         // Special handling for eq? and eqv? - check pointer equality at Value level
@@ -813,435 +1101,416 @@ impl Evaluator {
 
         // Call arena primitive
         let result_id = match name {
-            // Phase 2: Hot primitives (5)
-            "car" => arena_car(&self.arena, &arena_args),
-            "cdr" => arena_cdr(&self.arena, &arena_args),
-            "cons" => arena_cons(&mut self.arena, &arena_args),
-            "null?" => arena_null(&self.arena, &arena_args),
-            "equal?" => arena_equal(&self.arena, &arena_args),
-            // Phase 3 Batch 1: List operations (9)
-            "cadr" => arena_cadr(&self.arena, &arena_args),
-            "caddr" => arena_caddr(&self.arena, &arena_args),
-            "cadddr" => arena_cadddr(&self.arena, &arena_args),
-            "list" => arena_list(&mut self.arena, &arena_args),
-            "length" => arena_length(&mut self.arena, &arena_args),
-            "reverse" => arena_reverse(&mut self.arena, &arena_args),
-            "append" => arena_append(&mut self.arena, &arena_args),
-            "list?" => arena_list_p(&self.arena, &arena_args),
-            "list-ref" => arena_list_ref(&self.arena, &arena_args),
-            // Phase 3 Batch 2: Type predicates (13)
-            "pair?" => arena_pair_p(&self.arena, &arena_args),
-            "number?" => arena_number_p(&self.arena, &arena_args),
-            "integer?" => arena_integer_p(&self.arena, &arena_args),
-            "real?" => arena_real_p(&self.arena, &arena_args),
-            "string?" => arena_string_p(&self.arena, &arena_args),
-            "symbol?" => arena_symbol_p(&self.arena, &arena_args),
-            "char?" => arena_char_p(&self.arena, &arena_args),
-            "boolean?" => arena_boolean_p(&self.arena, &arena_args),
-            "zero?" => arena_zero_p(&self.arena, &arena_args),
-            "positive?" => arena_positive_p(&self.arena, &arena_args),
-            "negative?" => arena_negative_p(&self.arena, &arena_args),
-            "odd?" => arena_odd_p(&self.arena, &arena_args),
-            "even?" => arena_even_p(&self.arena, &arena_args),
-            // Phase 3 Batch 3: Arithmetic (29)
-            "+" => arena_add(&mut self.arena, &arena_args),
-            "-" => arena_subtract(&mut self.arena, &arena_args),
-            "*" => arena_multiply(&mut self.arena, &arena_args),
-            "/" => arena_divide(&mut self.arena, &arena_args),
-            "quotient" => arena_quotient(&mut self.arena, &arena_args),
-            "remainder" => arena_remainder(&mut self.arena, &arena_args),
-            "modulo" => arena_modulo(&mut self.arena, &arena_args),
-            "=" => arena_num_eq(&self.arena, &arena_args),
-            "<" => arena_num_lt(&self.arena, &arena_args),
-            ">" => arena_num_gt(&self.arena, &arena_args),
-            "<=" => arena_num_le(&self.arena, &arena_args),
-            ">=" => arena_num_ge(&self.arena, &arena_args),
-            "abs" => arena_abs(&mut self.arena, &arena_args),
-            "min" => arena_min(&mut self.arena, &arena_args),
-            "max" => arena_max(&mut self.arena, &arena_args),
-            "floor" => arena_floor(&mut self.arena, &arena_args),
-            "ceiling" => arena_ceiling(&mut self.arena, &arena_args),
-            "truncate" => arena_truncate(&mut self.arena, &arena_args),
-            "round" => arena_round(&mut self.arena, &arena_args),
-            "sqrt" => arena_sqrt(&mut self.arena, &arena_args),
-            "sin" => arena_sin(&mut self.arena, &arena_args),
-            "cos" => arena_cos(&mut self.arena, &arena_args),
-            "tan" => arena_tan(&mut self.arena, &arena_args),
-            "asin" => arena_asin(&mut self.arena, &arena_args),
-            "acos" => arena_acos(&mut self.arena, &arena_args),
-            "atan" => arena_atan(&mut self.arena, &arena_args),
-            "exp" => arena_exp(&mut self.arena, &arena_args),
-            "log" => arena_log(&mut self.arena, &arena_args),
-            "expt" => arena_expt(&mut self.arena, &arena_args),
-            // Phase 3 Batch 4: String operations (14)
-            "string-length" => arena_string_length(&mut self.arena, &arena_args),
-            "string-ref" => arena_string_ref(&mut self.arena, &arena_args),
-            "substring" => arena_substring(&mut self.arena, &arena_args),
-            "string-append" => arena_string_append(&mut self.arena, &arena_args),
-            "string=?" => arena_string_eq(&self.arena, &arena_args),
-            "string<?" => arena_string_lt(&self.arena, &arena_args),
-            "string>?" => arena_string_gt(&self.arena, &arena_args),
-            "string<=?" => arena_string_le(&self.arena, &arena_args),
-            "string>=?" => arena_string_ge(&self.arena, &arena_args),
-            "string-ci=?" => arena_string_ci_eq(&self.arena, &arena_args),
-            "string-ci<?" => arena_string_ci_lt(&self.arena, &arena_args),
-            "string-ci>?" => arena_string_ci_gt(&self.arena, &arena_args),
-            "string-ci<=?" => arena_string_ci_le(&self.arena, &arena_args),
-            "string-ci>=?" => arena_string_ci_ge(&self.arena, &arena_args),
+            "car" => car(&self.arena, &arena_args),
+            "cdr" => cdr(&self.arena, &arena_args),
+            "cons" => cons(&mut self.arena, &arena_args),
+            "null?" => null(&self.arena, &arena_args),
+            "equal?" => equal(&self.arena, &arena_args),
+            "cadr" => cadr(&self.arena, &arena_args),
+            "caddr" => caddr(&self.arena, &arena_args),
+            "cadddr" => cadddr(&self.arena, &arena_args),
+            "list" => list(&mut self.arena, &arena_args),
+            "length" => length(&mut self.arena, &arena_args),
+            "reverse" => reverse(&mut self.arena, &arena_args),
+            "append" => append(&mut self.arena, &arena_args),
+            "list?" => list_p(&self.arena, &arena_args),
+            "list-ref" => list_ref(&self.arena, &arena_args),
+            "pair?" => pair_p(&self.arena, &arena_args),
+            "number?" => number_p(&self.arena, &arena_args),
+            "integer?" => integer_p(&self.arena, &arena_args),
+            "real?" => real_p(&self.arena, &arena_args),
+            "string?" => string_p(&self.arena, &arena_args),
+            "symbol?" => symbol_p(&self.arena, &arena_args),
+            "char?" => char_p(&self.arena, &arena_args),
+            "boolean?" => boolean_p(&self.arena, &arena_args),
+            "zero?" => zero_p(&self.arena, &arena_args),
+            "positive?" => positive_p(&self.arena, &arena_args),
+            "negative?" => negative_p(&self.arena, &arena_args),
+            "odd?" => odd_p(&self.arena, &arena_args),
+            "even?" => even_p(&self.arena, &arena_args),
+            "+" => add(&mut self.arena, &arena_args),
+            "-" => subtract(&mut self.arena, &arena_args),
+            "*" => multiply(&mut self.arena, &arena_args),
+            "/" => divide(&mut self.arena, &arena_args),
+            "quotient" => quotient(&mut self.arena, &arena_args),
+            "remainder" => remainder(&mut self.arena, &arena_args),
+            "modulo" => modulo(&mut self.arena, &arena_args),
+            "=" => num_eq(&self.arena, &arena_args),
+            "<" => num_lt(&self.arena, &arena_args),
+            ">" => num_gt(&self.arena, &arena_args),
+            "<=" => num_le(&self.arena, &arena_args),
+            ">=" => num_ge(&self.arena, &arena_args),
+            "abs" => abs(&mut self.arena, &arena_args),
+            "min" => min(&mut self.arena, &arena_args),
+            "max" => max(&mut self.arena, &arena_args),
+            "floor" => floor(&mut self.arena, &arena_args),
+            "ceiling" => ceiling(&mut self.arena, &arena_args),
+            "truncate" => truncate(&mut self.arena, &arena_args),
+            "round" => round(&mut self.arena, &arena_args),
+            "sqrt" => sqrt(&mut self.arena, &arena_args),
+            "sin" => sin(&mut self.arena, &arena_args),
+            "cos" => cos(&mut self.arena, &arena_args),
+            "tan" => tan(&mut self.arena, &arena_args),
+            "asin" => asin(&mut self.arena, &arena_args),
+            "acos" => acos(&mut self.arena, &arena_args),
+            "atan" => atan(&mut self.arena, &arena_args),
+            "exp" => exp(&mut self.arena, &arena_args),
+            "log" => log(&mut self.arena, &arena_args),
+            "expt" => expt(&mut self.arena, &arena_args),
+            "string-length" => string_length(&mut self.arena, &arena_args),
+            "string-ref" => string_ref(&mut self.arena, &arena_args),
+            "substring" => substring(&mut self.arena, &arena_args),
+            "string-append" => string_append(&mut self.arena, &arena_args),
+            "string=?" => string_eq(&self.arena, &arena_args),
+            "string<?" => string_lt(&self.arena, &arena_args),
+            "string>?" => string_gt(&self.arena, &arena_args),
+            "string<=?" => string_le(&self.arena, &arena_args),
+            "string>=?" => string_ge(&self.arena, &arena_args),
+            "string-ci=?" => string_ci_eq(&self.arena, &arena_args),
+            "string-ci<?" => string_ci_lt(&self.arena, &arena_args),
+            "string-ci>?" => string_ci_gt(&self.arena, &arena_args),
+            "string-ci<=?" => string_ci_le(&self.arena, &arena_args),
+            "string-ci>=?" => string_ci_ge(&self.arena, &arena_args),
 
-            // Phase 3 Batch 5: Character operations (19)
-            "char=?" => arena_char_eq(&self.arena, &arena_args),
-            "char<?" => arena_char_lt(&self.arena, &arena_args),
-            "char>?" => arena_char_gt(&self.arena, &arena_args),
-            "char<=?" => arena_char_le(&self.arena, &arena_args),
-            "char>=?" => arena_char_ge(&self.arena, &arena_args),
-            "char-ci=?" => arena_char_ci_eq(&self.arena, &arena_args),
-            "char-ci<?" => arena_char_ci_lt(&self.arena, &arena_args),
-            "char-ci>?" => arena_char_ci_gt(&self.arena, &arena_args),
-            "char-ci<=?" => arena_char_ci_le(&self.arena, &arena_args),
-            "char-ci>=?" => arena_char_ci_ge(&self.arena, &arena_args),
-            "char-upcase" => arena_char_upcase(&mut self.arena, &arena_args),
-            "char-downcase" => arena_char_downcase(&mut self.arena, &arena_args),
-            "char-alphabetic?" => arena_char_alphabetic_p(&self.arena, &arena_args),
-            "char-numeric?" => arena_char_numeric_p(&self.arena, &arena_args),
-            "char-whitespace?" => arena_char_whitespace_p(&self.arena, &arena_args),
-            "char->integer" => arena_char_to_integer(&mut self.arena, &arena_args),
-            "integer->char" => arena_integer_to_char(&mut self.arena, &arena_args),
-            "char-property" => arena_char_property(&mut self.arena, &arena_args),
-            "char-script-case" => arena_char_script_case(&mut self.arena, &arena_args),
+            "char=?" => char_eq(&self.arena, &arena_args),
+            "char<?" => char_lt(&self.arena, &arena_args),
+            "char>?" => char_gt(&self.arena, &arena_args),
+            "char<=?" => char_le(&self.arena, &arena_args),
+            "char>=?" => char_ge(&self.arena, &arena_args),
+            "char-ci=?" => char_ci_eq(&self.arena, &arena_args),
+            "char-ci<?" => char_ci_lt(&self.arena, &arena_args),
+            "char-ci>?" => char_ci_gt(&self.arena, &arena_args),
+            "char-ci<=?" => char_ci_le(&self.arena, &arena_args),
+            "char-ci>=?" => char_ci_ge(&self.arena, &arena_args),
+            "char-upcase" => char_upcase(&mut self.arena, &arena_args),
+            "char-downcase" => char_downcase(&mut self.arena, &arena_args),
+            "char-alphabetic?" => char_alphabetic_p(&self.arena, &arena_args),
+            "char-numeric?" => char_numeric_p(&self.arena, &arena_args),
+            "char-whitespace?" => char_whitespace_p(&self.arena, &arena_args),
+            "char->integer" => char_to_integer(&mut self.arena, &arena_args),
+            "integer->char" => integer_to_char(&mut self.arena, &arena_args),
+            "char-property" => char_property(&mut self.arena, &arena_args),
+            "char-script-case" => char_script_case(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 6: Symbol/Keyword operations (5)
-            "symbol->string" => arena_symbol_to_string(&mut self.arena, &arena_args),
-            "string->symbol" => arena_string_to_symbol(&mut self.arena, &arena_args),
-            "keyword?" => arena_keyword_p(&self.arena, &arena_args),
-            "keyword->string" => arena_keyword_to_string(&mut self.arena, &arena_args),
-            "string->keyword" => arena_string_to_keyword(&mut self.arena, &arena_args),
+            "symbol->string" => symbol_to_string(&mut self.arena, &arena_args),
+            "string->symbol" => string_to_symbol(&mut self.arena, &arena_args),
+            "keyword?" => keyword_p(&self.arena, &arena_args),
+            "keyword->string" => keyword_to_string(&mut self.arena, &arena_args),
+            "string->keyword" => string_to_keyword(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 7: List utilities (6)
-            "memq" => arena_memq(&self.arena, &arena_args),
-            "memv" => arena_memv(&self.arena, &arena_args),
-            "member" => arena_member(&self.arena, &arena_args),
-            "assq" => arena_assq(&self.arena, &arena_args),
-            "assv" => arena_assv(&self.arena, &arena_args),
-            "assoc" => arena_assoc(&self.arena, &arena_args),
+            "memq" => memq(&self.arena, &arena_args),
+            "memv" => memv(&self.arena, &arena_args),
+            "member" => member(&self.arena, &arena_args),
+            "assq" => assq(&self.arena, &arena_args),
+            "assv" => assv(&self.arena, &arena_args),
+            "assoc" => assoc(&self.arena, &arena_args),
 
-            // Phase 3 Batch 8: Logic and list accessors (6)
-            "not" => arena_not(&self.arena, &arena_args),
-            "eq?" => arena_eq_p(&self.arena, &arena_args),
-            "eqv?" => arena_eqv_p(&self.arena, &arena_args),
-            "caar" => arena_caar(&self.arena, &arena_args),
-            "cdar" => arena_cdar(&self.arena, &arena_args),
-            "cddr" => arena_cddr(&self.arena, &arena_args),
+            "not" => not(&self.arena, &arena_args),
+            "eq?" => eq_p(&self.arena, &arena_args),
+            "eqv?" => eqv_p(&self.arena, &arena_args),
+            "caar" => caar(&self.arena, &arena_args),
+            "cdar" => cdar(&self.arena, &arena_args),
+            "cddr" => cddr(&self.arena, &arena_args),
 
-            // Phase 3 Batch 9: Extended list accessors (6)
-            "caaar" => arena_caaar(&self.arena, &arena_args),
-            "caadr" => arena_caadr(&self.arena, &arena_args),
-            "cadar" => arena_cadar(&self.arena, &arena_args),
-            "cdaar" => arena_cdaar(&self.arena, &arena_args),
-            "cdadr" => arena_cdadr(&self.arena, &arena_args),
-            "cddar" => arena_cddar(&self.arena, &arena_args),
-            "cdddr" => arena_cdddr(&self.arena, &arena_args),
+            "caaar" => caaar(&self.arena, &arena_args),
+            "caadr" => caadr(&self.arena, &arena_args),
+            "cadar" => cadar(&self.arena, &arena_args),
+            "cdaar" => cdaar(&self.arena, &arena_args),
+            "cdadr" => cdadr(&self.arena, &arena_args),
+            "cddar" => cddar(&self.arena, &arena_args),
+            "cdddr" => cdddr(&self.arena, &arena_args),
 
-            // Phase 3 Batch 10: Vector operations (8)
-            "vector" => arena_vector(&mut self.arena, &arena_args),
-            "make-vector" => arena_make_vector(&mut self.arena, &arena_args),
-            "vector-length" => arena_vector_length(&mut self.arena, &arena_args),
-            "vector-ref" => arena_vector_ref(&self.arena, &arena_args),
-            "vector-set!" => arena_vector_set(&mut self.arena, &arena_args),
-            "vector->list" => arena_vector_to_list(&mut self.arena, &arena_args),
-            "list->vector" => arena_list_to_vector(&mut self.arena, &arena_args),
-            "vector-fill!" => arena_vector_fill(&mut self.arena, &arena_args),
+            "vector" => vector(&mut self.arena, &arena_args),
+            "make-vector" => make_vector(&mut self.arena, &arena_args),
+            "vector-length" => vector_length(&mut self.arena, &arena_args),
+            "vector-ref" => vector_ref(&self.arena, &arena_args),
+            "vector-set!" => vector_set(&mut self.arena, &arena_args),
+            "vector->list" => vector_to_list(&mut self.arena, &arena_args),
+            "list->vector" => list_to_vector(&mut self.arena, &arena_args),
+            "vector-fill!" => vector_fill(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 11: Additional type predicates & utilities (5)
-            "vector?" => arena_vector_p(&self.arena, &arena_args),
-            "procedure?" => arena_procedure_p(&self.arena, &arena_args),
-            "set-car!" => arena_set_car(&mut self.arena, &arena_args),
-            "set-cdr!" => arena_set_cdr(&mut self.arena, &arena_args),
-            "list-tail" => arena_list_tail(&self.arena, &arena_args),
+            "vector?" => vector_p(&self.arena, &arena_args),
+            "procedure?" => procedure_p(&self.arena, &arena_args),
+            "set-car!" => set_car(&mut self.arena, &arena_args),
+            "set-cdr!" => set_cdr(&mut self.arena, &arena_args),
+            "list-tail" => list_tail(&self.arena, &arena_args),
 
-            // Phase 3 Batch 12: String utilities (7)
-            "string-upcase" => arena_string_upcase(&mut self.arena, &arena_args),
-            "string-downcase" => arena_string_downcase(&mut self.arena, &arena_args),
-            "case-fold-down" => arena_case_fold_down(&mut self.arena, &arena_args), // DSSSL alias for string-downcase
-            "string-index" => arena_string_index(&mut self.arena, &arena_args),
-            "string->number" => arena_string_to_number_radix(&mut self.arena, &arena_args), // Updated to support radix
-            "number->string" => arena_number_to_string_radix(&mut self.arena, &arena_args), // Updated to support radix
-            "string->list" => arena_string_to_list(&mut self.arena, &arena_args),
-            "list->string" => arena_list_to_string(&mut self.arena, &arena_args),
+            "string-upcase" => string_upcase(&mut self.arena, &arena_args),
+            "string-downcase" => string_downcase(&mut self.arena, &arena_args),
+            "case-fold-down" => case_fold_down(&mut self.arena, &arena_args), // DSSSL alias for string-downcase
+            "string-index" => string_index(&mut self.arena, &arena_args),
+            "string->number" => string_to_number_radix(&mut self.arena, &arena_args), // Updated to support radix
+            "number->string" => number_to_string_radix(&mut self.arena, &arena_args), // Updated to support radix
+            "string->list" => string_to_list(&mut self.arena, &arena_args),
+            "list->string" => list_to_string(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 13: Miscellaneous utilities (7)
-            "gcd" => arena_gcd(&mut self.arena, &arena_args),
-            "lcm" => arena_lcm(&mut self.arena, &arena_args),
-            "exact->inexact" => arena_exact_to_inexact(&mut self.arena, &arena_args),
-            "inexact->exact" => arena_inexact_to_exact(&mut self.arena, &arena_args),
-            "make-string" => arena_make_string(&mut self.arena, &arena_args),
-            "string" => arena_string(&mut self.arena, &arena_args),
-            "reverse!" => arena_reverse_bang(&mut self.arena, &arena_args),
+            "gcd" => gcd(&mut self.arena, &arena_args),
+            "lcm" => lcm(&mut self.arena, &arena_args),
+            "exact->inexact" => exact_to_inexact(&mut self.arena, &arena_args),
+            "inexact->exact" => inexact_to_exact(&mut self.arena, &arena_args),
+            "make-string" => make_string(&mut self.arena, &arena_args),
+            "string" => string(&mut self.arena, &arena_args),
+            "reverse!" => reverse_bang(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 14: Additional string and character operations (5)
-            "string-set!" => arena_string_set(&mut self.arena, &arena_args),
-            "string-copy" => arena_string_copy(&mut self.arena, &arena_args),
-            "string-fill!" => arena_string_fill(&mut self.arena, &arena_args),
-            "char-lower-case?" => arena_char_lower_case_p(&self.arena, &arena_args),
-            "char-upper-case?" => arena_char_upper_case_p(&self.arena, &arena_args),
+            "string-set!" => string_set(&mut self.arena, &arena_args),
+            "string-copy" => string_copy(&mut self.arena, &arena_args),
+            "string-fill!" => string_fill(&mut self.arena, &arena_args),
+            "char-lower-case?" => char_lower_case_p(&self.arena, &arena_args),
+            "char-upper-case?" => char_upper_case_p(&self.arena, &arena_args),
 
-            // Phase 3 Batch 15: List utilities (5)
-            "last" => arena_last(&self.arena, &arena_args),
-            "last-pair" => arena_last_pair(&self.arena, &arena_args),
-            "list-copy" => arena_list_copy(&mut self.arena, &arena_args),
-            "append!" => arena_append_bang(&mut self.arena, &arena_args),
-            "iota" => arena_iota(&mut self.arena, &arena_args),
+            "last" => last(&self.arena, &arena_args),
+            "last-pair" => last_pair(&self.arena, &arena_args),
+            "list-copy" => list_copy(&mut self.arena, &arena_args),
+            "append!" => append_bang(&mut self.arena, &arena_args),
+            "iota" => iota(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 16: Extended list operations (5)
-            "take" => arena_take(&mut self.arena, &arena_args),
-            "drop" => arena_drop(&self.arena, &arena_args),
-            "split-at" => arena_split_at(&mut self.arena, &arena_args),
-            "filter" => arena_filter(&self.arena, &arena_args),
-            "remove" => arena_remove(&self.arena, &arena_args),
+            "take" => take(&mut self.arena, &arena_args),
+            "drop" => drop(&self.arena, &arena_args),
+            "split-at" => split_at(&mut self.arena, &arena_args),
+            "filter" => filter(&self.arena, &arena_args),
+            "remove" => remove(&self.arena, &arena_args),
 
-            // Phase 3 Batch 17: Additional numeric operations (6)
-            "numerator" => arena_numerator(&mut self.arena, &arena_args),
-            "denominator" => arena_denominator(&mut self.arena, &arena_args),
-            "rationalize" => arena_rationalize(&self.arena, &arena_args),
-            "angle" => arena_angle(&mut self.arena, &arena_args),
-            "magnitude" => arena_magnitude(&mut self.arena, &arena_args),
+            "numerator" => numerator(&mut self.arena, &arena_args),
+            "denominator" => denominator(&mut self.arena, &arena_args),
+            "rationalize" => rationalize(&self.arena, &arena_args),
+            "angle" => angle(&mut self.arena, &arena_args),
+            "magnitude" => magnitude(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 18: Conversion and utility operations (4)
-            "null-list?" => arena_null_list_p(&self.arena, &arena_args),
-            "improper-list?" => arena_improper_list_p(&self.arena, &arena_args),
-            "circular-list?" => arena_circular_list_p(&self.arena, &arena_args),
+            "null-list?" => null_list_p(&self.arena, &arena_args),
+            "improper-list?" => improper_list_p(&self.arena, &arena_args),
+            "circular-list?" => circular_list_p(&self.arena, &arena_args),
 
-            // Phase 3 Batch 19: Bitwise operations (8)
-            "bitwise-and" => arena_bitwise_and(&mut self.arena, &arena_args),
-            "bitwise-ior" => arena_bitwise_ior(&mut self.arena, &arena_args),
-            "bitwise-xor" => arena_bitwise_xor(&mut self.arena, &arena_args),
-            "bitwise-not" => arena_bitwise_not(&mut self.arena, &arena_args),
-            "arithmetic-shift" => arena_arithmetic_shift(&mut self.arena, &arena_args),
-            "bit-extract" => arena_bit_extract(&mut self.arena, &arena_args),
-            "bitwise-bit-set?" => arena_bitwise_bit_set_p(&self.arena, &arena_args),
-            "bitwise-bit-count" => arena_bitwise_bit_count(&mut self.arena, &arena_args),
+            "bitwise-and" => bitwise_and(&mut self.arena, &arena_args),
+            "bitwise-ior" => bitwise_ior(&mut self.arena, &arena_args),
+            "bitwise-xor" => bitwise_xor(&mut self.arena, &arena_args),
+            "bitwise-not" => bitwise_not(&mut self.arena, &arena_args),
+            "arithmetic-shift" => arithmetic_shift(&mut self.arena, &arena_args),
+            "bit-extract" => bit_extract(&mut self.arena, &arena_args),
+            "bitwise-bit-set?" => bitwise_bit_set_p(&self.arena, &arena_args),
+            "bitwise-bit-count" => bitwise_bit_count(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 20: I/O and display operations (6)
-            "display" => arena_display(&self.arena, &arena_args),
-            "newline" => arena_newline(&self.arena, &arena_args),
-            "write" => arena_write(&self.arena, &arena_args),
-            "write-char" => arena_write_char(&self.arena, &arena_args),
-            "read-char" => arena_read_char(&self.arena, &arena_args),
-            "eof-object?" => arena_eof_object_p(&self.arena, &arena_args),
+            "display" => display(&self.arena, &arena_args),
+            "newline" => newline(&self.arena, &arena_args),
+            "write" => write(&self.arena, &arena_args),
+            "write-char" => write_char(&self.arena, &arena_args),
+            "read-char" => read_char(&self.arena, &arena_args),
+            "eof-object?" => eof_object_p(&self.arena, &arena_args),
 
-            // Phase 3 Batch 21: Number formatting (2)
-            "format-number" => arena_format_number(&mut self.arena, &arena_args),
-            "format-number-list" => arena_format_number_list(&mut self.arena, &arena_args),
+            "format-number" => format_number(&mut self.arena, &arena_args),
+            "format-number-list" => format_number_list(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 22: Simple constants (1)
-            "empty-sosofo" => arena_empty_sosofo(&mut self.arena, &arena_args),
-            "if-first-page" => arena_if_first_page(&mut self.arena, &arena_args),
-            "if-front-page" => arena_if_front_page(&mut self.arena, &arena_args),
+            "empty-sosofo" => empty_sosofo(&mut self.arena, &arena_args),
+            "sosofo-append" => sosofo_append(&mut self.arena, &arena_args),
+            "if-first-page" => if_first_page(&mut self.arena, &arena_args),
+            "if-front-page" => if_front_page(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 23: Grove operations (1)
-            "current-node" => arena_current_node(&mut self.arena, &arena_args),
+            "current-node" => current_node(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 24: Grove node properties (3)
-            "gi" => arena_gi(&mut self.arena, &arena_args),
-            "data" => arena_data(&mut self.arena, &arena_args),
-            "id" => arena_id(&mut self.arena, &arena_args),
+            "gi" => gi(&mut self.arena, &arena_args),
+            "data" => data(&mut self.arena, &arena_args),
+            "id" => id(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 25: Grove navigation (3)
-            "children" => arena_children(&mut self.arena, &arena_args),
-            "parent" => arena_parent(&mut self.arena, &arena_args),
-            "attributes" => arena_attributes(&mut self.arena, &arena_args),
+            "children" => children(&mut self.arena, &arena_args),
+            "parent" => parent(&mut self.arena, &arena_args),
+            "attributes" => attributes(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 26: Node-list operations (5)
-            "node-list?" => arena_node_list_p(&self.arena, &arena_args),
-            "empty-node-list" => arena_empty_node_list(&mut self.arena, &arena_args),
-            "node-list-empty?" => arena_node_list_empty_p(&self.arena, &arena_args),
-            "node-list-length" => arena_node_list_length(&mut self.arena, &arena_args),
-            "node-list-first" => arena_node_list_first(&mut self.arena, &arena_args),
+            "node-list?" => node_list_p(&self.arena, &arena_args),
+            "empty-node-list" => empty_node_list(&mut self.arena, &arena_args),
+            "node-list-empty?" => node_list_empty_p(&self.arena, &arena_args),
+            "node-list-length" => node_list_length(&mut self.arena, &arena_args),
+            "node-list-first" => node_list_first(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 27: Attribute operations (1)
-            "attribute-string" => arena_attribute_string(&mut self.arena, &arena_args),
+            "attribute-string" => attribute_string(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 28: More node-list operations (3)
-            "node-list-rest" => arena_node_list_rest(&mut self.arena, &arena_args),
-            "node-list-ref" => arena_node_list_ref(&mut self.arena, &arena_args),
-            "node-list-reverse" => arena_node_list_reverse(&mut self.arena, &arena_args),
+            "node-list-rest" => node_list_rest(&mut self.arena, &arena_args),
+            "node-list-ref" => node_list_ref(&mut self.arena, &arena_args),
+            "node-list-reverse" => node_list_reverse(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 29: Type predicates (3)
-            "node?" => arena_node_p(&self.arena, &arena_args),
-            "sosofo?" => arena_sosofo_p(&self.arena, &arena_args),
-            "quantity?" => arena_quantity_p(&self.arena, &arena_args),
+            "node?" => node_p(&self.arena, &arena_args),
+            "sosofo?" => sosofo_p(&self.arena, &arena_args),
+            "quantity?" => quantity_p(&self.arena, &arena_args),
 
-            // Phase 3 Batch 30: Color and spacing stubs (4)
-            "color?" => arena_color_p(&self.arena, &arena_args),
-            "color" => arena_color(&mut self.arena, &arena_args),
-            "display-space?" => arena_display_space_p(&self.arena, &arena_args),
-            "inline-space?" => arena_inline_space_p(&self.arena, &arena_args),
+            "color?" => color_p(&self.arena, &arena_args),
+            "color" => color(&mut self.arena, &arena_args),
+            "display-space?" => display_space_p(&self.arena, &arena_args),
+            "inline-space?" => inline_space_p(&self.arena, &arena_args),
 
-            // Phase 3 Batch 31: Quantity operations (5)
-            "quantity->number" => arena_quantity_to_number(&mut self.arena, &arena_args),
-            "number->quantity" => arena_number_to_quantity(&mut self.arena, &arena_args),
-            "quantity-convert" => arena_quantity_convert(&mut self.arena, &arena_args),
-            "device-length" => arena_device_length(&mut self.arena, &arena_args),
-            "label-distance" => arena_label_distance(&mut self.arena, &arena_args),
+            "quantity->number" => quantity_to_number(&mut self.arena, &arena_args),
+            "number->quantity" => number_to_quantity(&mut self.arena, &arena_args),
+            "quantity-convert" => quantity_convert(&mut self.arena, &arena_args),
+            "device-length" => device_length(&mut self.arena, &arena_args),
+            "label-distance" => label_distance(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 32: Grove navigation operations (5)
-            "ancestor" => arena_ancestor(&mut self.arena, &arena_args),
-            "descendants" => arena_descendants(&mut self.arena, &arena_args),
-            "follow" => arena_follow(&mut self.arena, &arena_args),
-            "preced" => arena_preced(&mut self.arena, &arena_args),
-            "ipreced" => arena_ipreced(&mut self.arena, &arena_args),
+            "ancestor" => ancestor(&mut self.arena, &arena_args),
+            "descendants" => descendants(&mut self.arena, &arena_args),
+            "follow" => follow(&mut self.arena, &arena_args),
+            "preced" => preced(&mut self.arena, &arena_args),
+            "ipreced" => ipreced(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 33: Node-list set operations (5)
-            "node-list-last" => arena_node_list_last(&mut self.arena, &arena_args),
-            "node-list-union" => arena_node_list_union(&mut self.arena, &arena_args),
-            "node-list-intersection" => arena_node_list_intersection(&mut self.arena, &arena_args),
-            "node-list-difference" => arena_node_list_difference(&mut self.arena, &arena_args),
-            "node-list-remove-duplicates" => arena_node_list_remove_duplicates(&mut self.arena, &arena_args),
+            "node-list-last" => node_list_last(&mut self.arena, &arena_args),
+            "node-list-union" => node_list_union(&mut self.arena, &arena_args),
+            "node-list-intersection" => node_list_intersection(&mut self.arena, &arena_args),
+            "node-list-difference" => node_list_difference(&mut self.arena, &arena_args),
+            "node-list-remove-duplicates" => node_list_remove_duplicates(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 34: Element selection and position operations (5)
-            "select-elements" => arena_select_elements(&mut self.arena, &arena_args),
-            "first-sibling?" => arena_first_sibling_p(&mut self.arena, &arena_args),
-            "last-sibling?" => arena_last_sibling_p(&mut self.arena, &arena_args),
-            "child-number" => arena_child_number(&mut self.arena, &arena_args),
-            "element-with-id" => arena_element_with_id(&mut self.arena, &arena_args),
+            "select-elements" => select_elements(&mut self.arena, &arena_args),
+            "first-sibling?" => first_sibling_p(&mut self.arena, &arena_args),
+            "last-sibling?" => last_sibling_p(&mut self.arena, &arena_args),
+            "child-number" => child_number(&mut self.arena, &arena_args),
+            "element-with-id" => element_with_id(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 35: Element numbering operations (3)
-            "element-number" => arena_element_number(&mut self.arena, &arena_args),
-            "hierarchical-number" => arena_hierarchical_number(&mut self.arena, &arena_args),
-            "hierarchical-number-recursive" => arena_hierarchical_number_recursive(&mut self.arena, &arena_args),
+            "element-number" => element_number(&mut self.arena, &arena_args),
+            "hierarchical-number" => hierarchical_number(&mut self.arena, &arena_args),
+            "hierarchical-number-recursive" => hierarchical_number_recursive(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 36: Grove utility operations (5)
-            "ancestors" => arena_ancestors(&mut self.arena, &arena_args),
-            "document-element" => arena_document_element(&mut self.arena, &arena_args),
-            "have-ancestor?" => arena_have_ancestor_p(&mut self.arena, &arena_args),
-            "match-element?" => arena_match_element_p(&mut self.arena, &arena_args),
-            "node-list-map" => arena_node_list_map(&mut self.arena, &arena_args),
+            "ancestors" => ancestors(&mut self.arena, &arena_args),
+            "document-element" => document_element(&mut self.arena, &arena_args),
+            "have-ancestor?" => have_ancestor_p(&mut self.arena, &arena_args),
+            "match-element?" => match_element_p(&mut self.arena, &arena_args),
+            "node-list-map" => node_list_map(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 37: Final DSSSL operations (5)
-            "node-property" => arena_node_property(&mut self.arena, &arena_args),
-            "absolute-first-sibling?" => arena_absolute_first_sibling_p(&mut self.arena, &arena_args),
-            "absolute-last-sibling?" => arena_absolute_last_sibling_p(&mut self.arena, &arena_args),
-            "node-list->list" => arena_node_list_to_list(&mut self.arena, &arena_args),
-            "node-list-contains?" => arena_node_list_contains_p(&mut self.arena, &arena_args),
+            "node-property" => node_property(&mut self.arena, &arena_args),
+            "absolute-first-sibling?" => absolute_first_sibling_p(&mut self.arena, &arena_args),
+            "absolute-last-sibling?" => absolute_last_sibling_p(&mut self.arena, &arena_args),
+            "node-list->list" => node_list_to_list(&mut self.arena, &arena_args),
+            "node-list-contains?" => node_list_contains_p(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 38: Entity and notation operations (5)
-            "entity-system-id" => arena_entity_system_id(&mut self.arena, &arena_args),
-            "entity-public-id" => arena_entity_public_id(&mut self.arena, &arena_args),
-            "entity-type" => arena_entity_type(&mut self.arena, &arena_args),
-            "notation-system-id" => arena_notation_system_id(&mut self.arena, &arena_args),
-            "notation-public-id" => arena_notation_public_id(&mut self.arena, &arena_args),
+            "entity-system-id" => entity_system_id(&mut self.arena, &arena_args),
+            "entity-public-id" => entity_public_id(&mut self.arena, &arena_args),
+            "entity-type" => entity_type(&mut self.arena, &arena_args),
+            "notation-system-id" => notation_system_id(&mut self.arena, &arena_args),
+            "notation-public-id" => notation_public_id(&mut self.arena, &arena_args),
 
-            // Phase 3 Batch 39: Context and debugging primitives (5)
-            "current-language" => arena_current_language(&self.arena, &arena_args),
-            "current-mode" => arena_current_mode(&self.arena, &arena_args),
-            "current-node-address" => arena_current_node_address(&self.arena, &arena_args),
-            "current-node-page-number-sosofo" => arena_current_node_page_number_sosofo(&mut self.arena, &arena_args),
-            "debug" => arena_debug(&self.arena, &arena_args),
+            "current-language" => current_language(&self.arena, &arena_args),
+            "current-mode" => current_mode(&self.arena, &arena_args),
+            "current-node-address" => current_node_address(&self.arena, &arena_args),
+            "current-node-page-number-sosofo" => current_node_page_number_sosofo(&mut self.arena, &arena_args),
+            "debug" => debug(&self.arena, &arena_args),
 
-            // Phase 3 Batch 40: Unwired existing primitives (5)
-            "add" => arena_add(&mut self.arena, &arena_args),
-            "divide" => arena_divide(&mut self.arena, &arena_args),
-            "equal" => arena_equal(&self.arena, &arena_args),
-            "char-eq" => arena_char_eq(&self.arena, &arena_args),
-            "char-lt" => arena_char_lt(&self.arena, &arena_args),
-            // Phase 3 Batch 41: Type predicates and error (3)
-            "exact?" => arena_exact_p(&self.arena, &arena_args),
-            "inexact?" => arena_inexact_p(&self.arena, &arena_args),
-            "error" => arena_error(&mut self.arena, &arena_args),
-            // Phase 3 Batch 42: Address type stubs (3)
-            "address?" => arena_address_p(&self.arena, &arena_args),
-            "address-local?" => arena_address_local_p(&self.arena, &arena_args),
-            "address-visited?" => arena_address_visited_p(&self.arena, &arena_args),
-            // Phase 3 Batch 43: Color/display space stubs (4)
-            "color-space?" => arena_color_space_p(&self.arena, &arena_args),
-            "color-space" => arena_color_space(&self.arena, &arena_args),
-            "display-space" => arena_display_space(&mut self.arena, &arena_args),
-            "inline-space" => arena_inline_space(&mut self.arena, &arena_args),
-            // Phase 3 Batch 44: Glyph type stubs (5)
-            "glyph-id?" => arena_glyph_id_p(&self.arena, &arena_args),
-            "glyph-id" => arena_glyph_id(&self.arena, &arena_args),
-            "glyph-subst-table?" => arena_glyph_subst_table_p(&self.arena, &arena_args),
-            "glyph-subst-table" => arena_glyph_subst_table(&self.arena, &arena_args),
-            "glyph-subst" => arena_glyph_subst(&self.arena, &arena_args),
-            // Phase 3 Batch 45: Time type stubs (6)
-            "time" => arena_time(&self.arena, &arena_args),
-            "time->string" => arena_time_to_string(&mut self.arena, &arena_args),
-            "time<=?" => arena_time_le(&self.arena, &arena_args),
-            "time<?" => arena_time_lt(&self.arena, &arena_args),
-            "time>=?" => arena_time_ge(&self.arena, &arena_args),
-            "time>?" => arena_time_gt(&self.arena, &arena_args),
-            // Phase 3 Batch 46: Language and style type stubs (3)
-            "language?" => arena_language_p(&self.arena, &arena_args),
-            "language" => arena_language(&mut self.arena, &arena_args),
-            "style?" => arena_style_p(&self.arena, &arena_args),
-            // Phase 3 Batch 47: String comparison and simple stubs (3)
-            "string-equiv?" => arena_string_equiv_p(&self.arena, &arena_args),
-            "label-length" => arena_label_length(&mut self.arena, &arena_args),
-            "external-procedure" => arena_external_procedure(&mut self.arena, &arena_args),
-            // Phase 3 Batch 48: DTD/SGML stubs (6)
-            "declaration" => arena_declaration(&self.arena, &arena_args),
-            "dtd" => arena_dtd(&self.arena, &arena_args),
-            "epilog" => arena_epilog(&self.arena, &arena_args),
-            "prolog" => arena_prolog(&self.arena, &arena_args),
-            "sgml-declaration" => arena_sgml_declaration(&self.arena, &arena_args),
-            "sgml-parse" => arena_sgml_parse(&self.arena, &arena_args),
-            // Phase 3 Batch 49: Entity/normalization stubs (4)
-            "entity-address" => arena_entity_address(&self.arena, &arena_args),
-            "entity-generated-system-id" => arena_entity_generated_system_id(&mut self.arena, &arena_args),
-            "entity-name-normalize" => arena_entity_name_normalize(&mut self.arena, &arena_args),
-            "general-name-normalize" => arena_general_name_normalize(&mut self.arena, &arena_args),
-            // Phase 3 Batch 50: Simple navigation and declaration stubs (5)
-            "first-child-gi" => arena_first_child_gi(&mut self.arena, &arena_args),
-            "tree-root" => arena_tree_root(&mut self.arena, &arena_args),
-            "declare-default-language" => arena_declare_default_language(&self.arena, &arena_args),
-            "read-entity" => arena_read_entity(&mut self.arena, &arena_args),
-            "set-visited!" => arena_set_visited(&self.arena, &arena_args),
-            // Phase 3 Batch 51: Sosofo and navigation stubs (4)
-            "sosofo-contains-node?" => arena_sosofo_contains_node_p(&self.arena, &arena_args),
-            "page-number-sosofo" => arena_page_number_sosofo(&mut self.arena, &arena_args),
-            "ifollow" => arena_ifollow(&self.arena, &arena_args),
-            "with-language" => arena_with_language(&self.arena, &arena_args),
-            // Phase 3 Batch 52: Element numbering stubs (3)
-            "all-element-number" => arena_all_element_number(&mut self.arena, &arena_args),
-            "ancestor-child-number" => arena_ancestor_child_number(&mut self.arena, &arena_args),
-            "element-number-list" => arena_element_number_list(&self.arena, &arena_args),
-            // Phase 3 Batch 53: Inherited property stubs - Part 1 (5)
-            "inherited-attribute-string" => arena_inherited_attribute_string(&mut self.arena, &arena_args),
-            "inherited-element-attribute-string" => arena_inherited_element_attribute_string(&mut self.arena, &arena_args),
-            "inherited-start-indent" => arena_inherited_start_indent(&mut self.arena, &arena_args),
-            "inherited-end-indent" => arena_inherited_end_indent(&mut self.arena, &arena_args),
-            "inherited-line-spacing" => arena_inherited_line_spacing(&mut self.arena, &arena_args),
-            // Phase 3 Batch 54: Inherited property stubs - Part 2 (6)
-            "inherited-font-family-name" => arena_inherited_font_family_name(&mut self.arena, &arena_args),
-            "inherited-font-size" => arena_inherited_font_size(&mut self.arena, &arena_args),
-            "inherited-font-weight" => arena_inherited_font_weight(&mut self.arena, &arena_args),
-            "inherited-font-posture" => arena_inherited_font_posture(&mut self.arena, &arena_args),
-            "inherited-dbhtml-value" => arena_inherited_dbhtml_value(&mut self.arena, &arena_args),
-            "inherited-pi-value" => arena_inherited_pi_value(&mut self.arena, &arena_args),
-            // Phase 3 Batch 55: Node-list operation stubs - Part 1 (5)
-            "node-list" => arena_node_list(&mut self.arena, &arena_args),
-            "node-list=?" => arena_node_list_eq_p(&self.arena, &arena_args),
-            // node-list-count is user-defined (delegates to node-list-length + node-list-remove-duplicates)
-            "node-list-union-map" => arena_node_list_union_map(&self.arena, &arena_args),
-            "node-list-symmetrical-difference" => arena_node_list_symmetrical_difference(&self.arena, &arena_args),
-            // Phase 3 Batch 56: Node-list operation stubs - Part 2 (4)
-            "node-list-address" => arena_node_list_address(&self.arena, &arena_args),
-            "node-list-error" => arena_node_list_error(&mut self.arena, &arena_args),
-            "node-list-no-order" => arena_node_list_no_order(&self.arena, &arena_args),
-            "origin-to-subnode-rel-forest-addr" => arena_origin_to_subnode_rel_forest_addr(&self.arena, &arena_args),
-            // Phase 3 Batch 57: Named node list stubs (3)
-            "named-node" => arena_named_node(&self.arena, &arena_args),
-            "named-node-list?" => arena_named_node_list_p(&self.arena, &arena_args),
-            "named-node-list-names" => arena_named_node_list_names(&self.arena, &arena_args),
-            // Phase 3 Batch 58: Selection operation stubs (1) - NOTE: select-children is user-defined
-            "select-by-class" => arena_select_by_class(&self.arena, &arena_args),
-            // Phase 3 Batch 59: Processing operation stubs (5) - FINAL BATCH!
-            "process-children-trim" => arena_process_children_trim(&self.arena, &arena_args),
-            "process-element-with-id" => arena_process_element_with_id(&self.arena, &arena_args),
-            "process-first-descendant" => arena_process_first_descendant(&self.arena, &arena_args),
-            "process-matching-children" => arena_process_matching_children(&self.arena, &arena_args),
-            "next-match" => arena_next_match(&self.arena, &arena_args),
-            _ => unreachable!("apply_arena_primitive called with non-arena primitive: {}", name),
+            "add" => add(&mut self.arena, &arena_args),
+            "divide" => divide(&mut self.arena, &arena_args),
+            "equal" => equal(&self.arena, &arena_args),
+            "char-eq" => char_eq(&self.arena, &arena_args),
+            "char-lt" => char_lt(&self.arena, &arena_args),
+            "exact?" => exact_p(&self.arena, &arena_args),
+            "inexact?" => inexact_p(&self.arena, &arena_args),
+            "error" => error(&mut self.arena, &arena_args),
+            "address?" => address_p(&self.arena, &arena_args),
+            "address-local?" => address_local_p(&self.arena, &arena_args),
+            "address-visited?" => address_visited_p(&self.arena, &arena_args),
+            "color-space?" => color_space_p(&self.arena, &arena_args),
+            "color-space" => color_space(&self.arena, &arena_args),
+            "display-space" => display_space(&mut self.arena, &arena_args),
+            "inline-space" => inline_space(&mut self.arena, &arena_args),
+            "glyph-id?" => glyph_id_p(&self.arena, &arena_args),
+            "glyph-id" => glyph_id(&self.arena, &arena_args),
+            "glyph-subst-table?" => glyph_subst_table_p(&self.arena, &arena_args),
+            "glyph-subst-table" => glyph_subst_table(&self.arena, &arena_args),
+            "glyph-subst" => glyph_subst(&self.arena, &arena_args),
+            "time" => time(&self.arena, &arena_args),
+            "time->string" => time_to_string(&mut self.arena, &arena_args),
+            "time<=?" => time_le(&self.arena, &arena_args),
+            "time<?" => time_lt(&self.arena, &arena_args),
+            "time>=?" => time_ge(&self.arena, &arena_args),
+            "time>?" => time_gt(&self.arena, &arena_args),
+            "language?" => language_p(&self.arena, &arena_args),
+            "language" => language(&mut self.arena, &arena_args),
+            "style?" => style_p(&self.arena, &arena_args),
+            "string-equiv?" => string_equiv_p(&self.arena, &arena_args),
+            "label-length" => label_length(&mut self.arena, &arena_args),
+            "external-procedure" => external_procedure(&mut self.arena, &arena_args),
+            "declaration" => declaration(&self.arena, &arena_args),
+            "dtd" => dtd(&self.arena, &arena_args),
+            "epilog" => epilog(&self.arena, &arena_args),
+            "prolog" => prolog(&self.arena, &arena_args),
+            "sgml-declaration" => sgml_declaration(&self.arena, &arena_args),
+            "sgml-parse" => sgml_parse(&self.arena, &arena_args),
+            "entity-address" => entity_address(&self.arena, &arena_args),
+            "entity-generated-system-id" => entity_generated_system_id(&mut self.arena, &arena_args),
+            "entity-name-normalize" => entity_name_normalize(&mut self.arena, &arena_args),
+            "general-name-normalize" => general_name_normalize(&mut self.arena, &arena_args),
+            "normalize" => normalize(&mut self.arena, &arena_args),
+            "first-child-gi" => first_child_gi(&mut self.arena, &arena_args),
+            "tree-root" => tree_root(&mut self.arena, &arena_args),
+            "declare-default-language" => declare_default_language(&self.arena, &arena_args),
+            "read-entity" => read_entity(&mut self.arena, &arena_args),
+            "set-visited!" => set_visited(&self.arena, &arena_args),
+            "sosofo-contains-node?" => sosofo_contains_node_p(&self.arena, &arena_args),
+            "page-number-sosofo" => page_number_sosofo(&mut self.arena, &arena_args),
+            "ifollow" => ifollow(&self.arena, &arena_args),
+            "with-language" => with_language(&self.arena, &arena_args),
+            "all-element-number" => all_element_number(&mut self.arena, &arena_args),
+            "ancestor-child-number" => ancestor_child_number(&mut self.arena, &arena_args),
+            "element-number-list" => element_number_list(&self.arena, &arena_args),
+            "inherited-attribute-string" => inherited_attribute_string(&mut self.arena, &arena_args),
+            "inherited-element-attribute-string" => inherited_element_attribute_string(&mut self.arena, &arena_args),
+            "inherited-start-indent" => inherited_start_indent(&mut self.arena, &arena_args),
+            "inherited-end-indent" => inherited_end_indent(&mut self.arena, &arena_args),
+            "inherited-line-spacing" => inherited_line_spacing(&mut self.arena, &arena_args),
+            "inherited-font-family-name" => inherited_font_family_name(&mut self.arena, &arena_args),
+            "inherited-font-size" => inherited_font_size(&mut self.arena, &arena_args),
+            "inherited-font-weight" => inherited_font_weight(&mut self.arena, &arena_args),
+            "inherited-font-posture" => inherited_font_posture(&mut self.arena, &arena_args),
+            "inherited-dbhtml-value" => inherited_dbhtml_value(&mut self.arena, &arena_args),
+            "inherited-pi-value" => inherited_pi_value(&mut self.arena, &arena_args),
+            "node-list" => node_list(&mut self.arena, &arena_args),
+            "node-list=?" => node_list_eq_p(&self.arena, &arena_args),
+            "node-list-count" => node_list_count(&mut self.arena, &arena_args),
+            "node-list-union-map" => node_list_union_map(&self.arena, &arena_args),
+            "node-list-symmetrical-difference" => node_list_symmetrical_difference(&self.arena, &arena_args),
+            "node-list-address" => node_list_address(&self.arena, &arena_args),
+            "node-list-error" => node_list_error(&mut self.arena, &arena_args),
+            "node-list-no-order" => node_list_no_order(&self.arena, &arena_args),
+            "origin-to-subnode-rel-forest-addr" => origin_to_subnode_rel_forest_addr(&self.arena, &arena_args),
+            "named-node" => named_node(&self.arena, &arena_args),
+            "named-node-list?" => named_node_list_p(&self.arena, &arena_args),
+            "named-node-list-names" => named_node_list_names(&self.arena, &arena_args),
+            "select-by-class" => select_by_class(&self.arena, &arena_args),
+            "select-children" => select_children(&self.arena, &arena_args),
+            "process-children-trim" => process_children_trim(&self.arena, &arena_args),
+            "process-element-with-id" => process_element_with_id(&self.arena, &arena_args),
+            "process-first-descendant" => process_first_descendant(&self.arena, &arena_args),
+            "process-matching-children" => process_matching_children(&self.arena, &arena_args),
+            "next-match" => next_match(&self.arena, &arena_args),
+
+            // Special handling for literal - it's not an arena primitive
+            "literal" => {
+                // literal can take 1 or 2 arguments:
+                // (literal "text") or (literal data: "text")
+                // For now, we just extract the text from the first string argument
+                if args.is_empty() {
+                    return Err(self.error_with_stack("literal: expected at least 1 argument".to_string()));
+                }
+
+                // Find the text argument - could be first arg or after a keyword
+                let text = if args.len() == 1 {
+                    // (literal "text")
+                    match &args[0] {
+                        Value::String(s) => s.to_string(),
+                        _ => return Err(self.error_with_stack("literal: argument must be a string".to_string())),
+                    }
+                } else if args.len() == 2 {
+                    // (literal data: "text") - second arg is the text
+                    match &args[1] {
+                        Value::String(s) => s.to_string(),
+                        _ => return Err(self.error_with_stack("literal: text argument must be a string".to_string())),
+                    }
+                } else {
+                    return Err(self.error_with_stack(format!(
+                        "literal: expected 1 or 2 arguments, got {}",
+                        args.len()
+                    )));
+                };
+
+                if let Some(ref backend) = self.backend {
+                    backend.borrow_mut().formatting_instruction(&text)
+                        .map_err(|e| self.error_with_stack(format!("Backend error: {}", e)))?;
+                }
+
+                return Ok(Value::Unspecified);
+            }
+
+            _ => unreachable!("apply_primitive called with non-arena primitive: {}", name),
         }
         .map_err(|e| self.error_with_stack(e))?;
 
@@ -1425,9 +1694,23 @@ impl Evaluator {
             Value::Sosofo => Ok(expr),
 
             // Symbols: variable lookup
-            Value::Symbol(ref name) => env
-                .lookup(name)
-                .ok_or_else(|| self.error_with_stack(format!("Undefined variable: {}", name))),
+            Value::Symbol(ref name) => {
+                // First try environment lookup
+                if let Some(val) = env.lookup(name) {
+                    return Ok(val);
+                }
+
+                // Fallback: check if this is a known primitive name
+                if let Some(static_name) = self.get_primitive_static_name(name) {
+                    // Return a marker procedure that will be recognized during application
+                    // Use a dummy function - the real dispatch happens in apply_primitive
+                    return Ok(Value::primitive(static_name, |_args| {
+                        Err("Primitive should be dispatched through apply_primitive".to_string())
+                    }));
+                }
+
+                Err(self.error_with_stack(format!("Undefined variable: {}", name)))
+            },
 
             // Keywords are self-evaluating
             Value::Keyword(_) => Ok(expr),
@@ -3485,180 +3768,127 @@ impl Evaluator {
         if let Value::Procedure(ref p) = proc {
             match &**p {
                 Procedure::Primitive { name, func } => {
-                    // Phase 2+3: Route arena primitives for 6-7x speedup
                     match *name {
-                        // Phase 2: Hot primitives (5)
                         "car" | "cdr" | "cons" | "null?" | "equal?" |
-                        // Phase 3 Batch 1: List operations (9)
                         "cadr" | "caddr" | "cadddr" | "list" | "length" |
                         "reverse" | "append" | "list?" | "list-ref" |
-                        // Phase 3 Batch 2: Type predicates (13)
                         "pair?" | "number?" | "integer?" | "real?" | "string?" |
                         "symbol?" | "char?" | "boolean?" | "zero?" | "positive?" |
                         "negative?" | "odd?" | "even?" |
-                        // Phase 3 Batch 3: Arithmetic (29)
                         "+" | "-" | "*" | "/" | "quotient" | "remainder" | "modulo" |
                         "=" | "<" | ">" | "<=" | ">=" |
                         "abs" | "min" | "max" |
                         "floor" | "ceiling" | "truncate" | "round" |
                         "sqrt" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" |
                         "exp" | "log" | "expt" |
-                        // Phase 3 Batch 4: String operations (14)
                         "string-length" | "string-ref" | "substring" | "string-append" |
                         "string=?" | "string<?" | "string>?" | "string<=?" | "string>=?" |
                         "string-ci=?" | "string-ci<?" | "string-ci>?" | "string-ci<=?" | "string-ci>=?" |
-                        // Phase 3 Batch 5: Character operations (19)
                         "char=?" | "char<?" | "char>?" | "char<=?" | "char>=?" |
                         "char-ci=?" | "char-ci<?" | "char-ci>?" | "char-ci<=?" | "char-ci>=?" |
                         "char-upcase" | "char-downcase" |
                         "char-alphabetic?" | "char-numeric?" | "char-whitespace?" |
                         "char->integer" | "integer->char" |
                         "char-property" | "char-script-case" |
-                        // Phase 3 Batch 6: Symbol/Keyword operations (5)
                         "symbol->string" | "string->symbol" |
                         "keyword?" | "keyword->string" | "string->keyword" |
-                        // Phase 3 Batch 7: List utilities (6)
                         "memq" | "memv" | "member" |
                         "assq" | "assv" | "assoc" |
-                        // Phase 3 Batch 8: Logic and list accessors (6)
                         "not" | "eq?" | "eqv?" |
                         "caar" | "cdar" | "cddr" |
-                        // Phase 3 Batch 9: Extended list accessors (6)
                         "caaar" | "caadr" | "cadar" |
                         "cdaar" | "cdadr" | "cddar" | "cdddr" |
-                        // Phase 3 Batch 10: Vector operations (8)
                         "vector" | "make-vector" | "vector-length" |
                         "vector-ref" | "vector-set!" |
                         "vector->list" | "list->vector" | "vector-fill!" |
-                        // Phase 3 Batch 11: Additional type predicates & utilities (5)
                         "vector?" | "procedure?" |
                         "set-car!" | "set-cdr!" | "list-tail" |
-                        // Phase 3 Batch 12: String utilities (8)
                         "string-upcase" | "string-downcase" | "case-fold-down" |
                         "string-index" |
                         "string->number" | "number->string" |
                         "string->list" | "list->string" |
-                        // Phase 3 Batch 13: Miscellaneous utilities (7)
                         "gcd" | "lcm" |
                         "exact->inexact" | "inexact->exact" |
                         "make-string" | "string" | "reverse!" |
-                        // Phase 3 Batch 14: Additional string and character operations (5)
                         "string-set!" | "string-copy" | "string-fill!" |
                         "char-lower-case?" | "char-upper-case?" |
-                        // Phase 3 Batch 15: List utilities (5)
                         "last" | "last-pair" | "list-copy" |
                         "append!" | "iota" |
-                        // Phase 3 Batch 16: Extended list operations (5)
                         "take" | "drop" | "split-at" |
                         "filter" | "remove" |
-                        // Phase 3 Batch 17: Additional numeric operations (6)
                         "numerator" | "denominator" | "rationalize" |
                         "angle" | "magnitude" |
-                        // Phase 3 Batch 18: Conversion and utility operations (4)
                         "null-list?" | "improper-list?" | "circular-list?" |
-                        // Phase 3 Batch 19: Bitwise operations (8)
                         "bitwise-and" | "bitwise-ior" | "bitwise-xor" | "bitwise-not" |
                         "arithmetic-shift" | "bit-extract" |
                         "bitwise-bit-set?" | "bitwise-bit-count" |
-                        // Phase 3 Batch 21: Number formatting (2)
                         "format-number" | "format-number-list" |
-                        // Phase 3 Batch 22: Simple constants (3)
-                        "empty-sosofo" | "if-first-page" | "if-front-page" |
-                        // Phase 3 Batch 23: Grove operations (1)
+                        "empty-sosofo" | "sosofo-append" | "if-first-page" | "if-front-page" |
                         "current-node" |
-                        // Phase 3 Batch 24: Grove node properties (3)
                         "gi" | "data" | "id" |
-                        // Phase 3 Batch 25: Grove navigation (3)
                         "children" | "parent" | "attributes" |
-                        // Phase 3 Batch 26: Node-list operations (5)
                         "node-list?" | "empty-node-list" | "node-list-empty?" |
                         "node-list-length" | "node-list-first" |
-                        // Phase 3 Batch 27: Attribute operations (1)
                         "attribute-string" |
-                        // Phase 3 Batch 28: More node-list operations (3)
                         "node-list-rest" | "node-list-ref" | "node-list-reverse" |
-                        // Phase 3 Batch 29: Type predicates (3)
                         "node?" | "sosofo?" | "quantity?" |
-                        // Phase 3 Batch 30: Color and spacing stubs (4)
                         "color?" | "color" | "display-space?" | "inline-space?" |
-                        // Phase 3 Batch 31: Quantity operations (5)
                         "quantity->number" | "number->quantity" | "quantity-convert" |
                         "device-length" | "label-distance" |
-                        // Phase 3 Batch 32: Grove navigation operations (5)
                         "ancestor" | "descendants" | "follow" | "preced" | "ipreced" |
-                        // Phase 3 Batch 33: Node-list set operations (5)
                         "node-list-last" | "node-list-union" | "node-list-intersection" |
                         "node-list-difference" | "node-list-remove-duplicates" |
-                        // Phase 3 Batch 34: Element selection and position operations (5)
                         "select-elements" | "first-sibling?" | "last-sibling?" |
                         "child-number" | "element-with-id" |
-                        // Phase 3 Batch 35: Element numbering operations (3)
                         "element-number" | "hierarchical-number" | "hierarchical-number-recursive" |
-                        // Phase 3 Batch 36: Grove utility operations (5)
                         "ancestors" | "document-element" | "have-ancestor?" |
                         "match-element?" | "node-list-map" |
-                        // Phase 3 Batch 37: Final DSSSL operations (5)
                         "node-property" | "absolute-first-sibling?" | "absolute-last-sibling?" |
                         "node-list->list" | "node-list-contains?" |
-                        // Phase 3 Batch 38: Entity and notation operations (5)
                         "entity-system-id" | "entity-public-id" | "entity-type" |
                         "notation-system-id" | "notation-public-id" |
-                        // Phase 3 Batch 39: Context and debugging primitives (5)
                         "current-language" | "current-mode" | "current-node-address" |
                         "current-node-page-number-sosofo" | "debug" |
-                        // Phase 3 Batch 40: Unwired existing primitives (5)
                         "add" | "divide" | "equal" | "char-eq" | "char-lt" |
-                        // Phase 3 Batch 41: Type predicates and error (3)
                         "exact?" | "inexact?" | "error" |
-                        // Phase 3 Batch 42: Address type stubs (3)
                         "address?" | "address-local?" | "address-visited?" |
-                        // Phase 3 Batch 43: Color/display space stubs (4)
                         "color-space?" | "color-space" | "display-space" | "inline-space" |
-                        // Phase 3 Batch 44: Glyph type stubs (5)
                         "glyph-id?" | "glyph-id" | "glyph-subst-table?" | "glyph-subst-table" | "glyph-subst" |
-                        // Phase 3 Batch 45: Time type stubs (6)
                         "time" | "time->string" | "time<=?" | "time<?" | "time>=?" | "time>?" |
-                        // Phase 3 Batch 46: Language and style type stubs (3)
                         "language?" | "language" | "style?" |
-                        // Phase 3 Batch 47: String comparison and simple stubs (3)
                         "string-equiv?" | "label-length" | "external-procedure" |
-                        // Phase 3 Batch 48: DTD/SGML stubs (6)
                         "declaration" | "dtd" | "epilog" | "prolog" | "sgml-declaration" | "sgml-parse" |
-                        // Phase 3 Batch 49: Entity/normalization stubs (4)
-                        "entity-address" | "entity-generated-system-id" | "entity-name-normalize" | "general-name-normalize" |
-                        // Phase 3 Batch 50: Simple navigation and declaration stubs (5)
+                        "entity-address" | "entity-generated-system-id" | "entity-name-normalize" | "general-name-normalize" | "normalize" |
                         "first-child-gi" | "tree-root" | "declare-default-language" | "read-entity" | "set-visited!" |
-                        // Phase 3 Batch 51: Sosofo and navigation stubs (4)
                         "sosofo-contains-node?" | "page-number-sosofo" | "ifollow" | "with-language" |
-                        // Phase 3 Batch 52: Element numbering stubs (3)
                         "all-element-number" | "ancestor-child-number" | "element-number-list" |
-                        // Phase 3 Batch 53: Inherited property stubs - Part 1 (5)
                         "inherited-attribute-string" | "inherited-element-attribute-string" |
                         "inherited-start-indent" | "inherited-end-indent" | "inherited-line-spacing" |
-                        // Phase 3 Batch 54: Inherited property stubs - Part 2 (6)
                         "inherited-font-family-name" | "inherited-font-size" | "inherited-font-weight" |
                         "inherited-font-posture" | "inherited-dbhtml-value" | "inherited-pi-value" |
-                        // Phase 3 Batch 55: Node-list operation stubs - Part 1 (4, node-list-count is user-defined)
-                        "node-list" | "node-list=?" | "node-list-union-map" |
+                        "node-list" | "node-list=?" | "node-list-count" | "node-list-union-map" |
                         "node-list-symmetrical-difference" |
-                        // Phase 3 Batch 56: Node-list operation stubs - Part 2 (4)
                         "node-list-address" | "node-list-error" | "node-list-no-order" |
                         "origin-to-subnode-rel-forest-addr" |
-                        // Phase 3 Batch 57: Named node list stubs (3)
                         "named-node" | "named-node-list?" | "named-node-list-names" |
-                        // Phase 3 Batch 58: Selection operation stubs (1) - NOTE: select-children is user-defined, not a primitive
-                        "select-by-class" |
-                        // Phase 3 Batch 59: Processing operation stubs (5) - FINAL BATCH!
+                        "select-by-class" | "select-children" |
                         "process-children-trim" | "process-element-with-id" | "process-first-descendant" |
                         "process-matching-children" | "next-match" => {
-                            self.apply_arena_primitive(name, &args)
+                            self.apply_primitive(name, &args)
                         }
                         // Note: I/O operations (display, write, newline, etc.) stay in non-arena path
                         // because they need actual side effects (stdout/stdin interaction)
                         _ => {
-                            // Don't push call frames for primitives - only for user lambdas
-                            // This matches OpenJade's behavior
-                            func(&args).map_err(|e| self.error_with_stack(e))
+                            // Check if this is a known primitive that should be dispatched to apply_primitive
+                            // This handles marker primitives created during symbol lookup
+                            if self.get_primitive_static_name(name).is_some() {
+                                self.apply_primitive(name, &args)
+                            } else {
+                                // Call the function directly for non-arena primitives (I/O, etc.)
+                                // Don't push call frames for primitives - only for user lambdas
+                                // This matches OpenJade's behavior
+                                func(&args).map_err(|e| self.error_with_stack(e))
+                            }
                         }
                     }
                 }
@@ -3765,7 +3995,7 @@ impl Evaluator {
             let sym_str = sym.as_ref();
 
             // Dispatch directly to the arena primitive by name
-            self.apply_arena_primitive(sym_str, &args)
+            self.apply_primitive(sym_str, &args)
         } else {
             Err(self.error_with_stack(format!(
                 "Not a procedure: {:?}",

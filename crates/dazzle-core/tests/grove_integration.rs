@@ -7,7 +7,6 @@ use dazzle_core::grove::Grove;
 use dazzle_core::scheme::environment::Environment;
 use dazzle_core::scheme::evaluator::Evaluator;
 use dazzle_core::scheme::parser::Parser;
-use dazzle_core::scheme::primitives;
 use dazzle_core::scheme::value::Value;
 use dazzle_grove_libxml2::LibXml2Grove;
 use std::rc::Rc;
@@ -27,7 +26,6 @@ fn setup_evaluator_with_xml(xml: &str) -> (Evaluator, gc::Gc<Environment>) {
 
     // Create environment with all primitives
     let env = Environment::new_global();
-    primitives::register_all_primitives(&env);
 
     (evaluator, env)
 }

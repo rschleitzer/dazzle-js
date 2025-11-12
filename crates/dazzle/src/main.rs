@@ -12,7 +12,6 @@ use dazzle_core::grove::Grove;
 use dazzle_core::scheme::environment::Environment;
 use dazzle_core::scheme::evaluator::{Evaluator, LineMapping};
 use dazzle_core::scheme::parser::Parser as SchemeParser;
-use dazzle_core::scheme::primitives;
 use dazzle_core::sgml_preprocess;
 use dazzle_grove_libxml2::LibXml2Grove;
 use regex::Regex;
@@ -96,8 +95,6 @@ fn run_sgml_backend(args: Args, grove_rc: Rc<LibXml2Grove>, output_dir: PathBuf)
 
     // 5. Create environment and register all primitives
     let env = Environment::new_global();
-    primitives::register_all_primitives(&env);
-    debug!("Primitives registered");
 
     // 6. Add simple get-variable helper function
     // This returns a variable value or a default if not defined
@@ -235,8 +232,6 @@ fn run_rtf_backend(args: Args, grove_rc: Rc<LibXml2Grove>) -> Result<()> {
 
     // Create environment and register all primitives
     let env = Environment::new_global();
-    primitives::register_all_primitives(&env);
-    debug!("Primitives registered");
 
     // Add simple get-variable helper function
     let get_var_code = r#"

@@ -3,14 +3,12 @@
 use dazzle_core::scheme::environment::Environment;
 use dazzle_core::scheme::evaluator::Evaluator;
 use dazzle_core::scheme::parser::Parser;
-use dazzle_core::scheme::primitives;
 use dazzle_core::scheme::value::Value;
 
 #[test]
 fn test_named_let_simple_loop() {
     let mut evaluator = Evaluator::new();
     let env = Environment::new_global();
-    primitives::register_all_primitives(&env);
 
     let code = r#"
 (let loop ((i 0) (sum 0))
@@ -31,7 +29,6 @@ fn test_named_let_simple_loop() {
 fn test_named_let_factorial() {
     let mut evaluator = Evaluator::new();
     let env = Environment::new_global();
-    primitives::register_all_primitives(&env);
 
     let code = r#"
 (let fact ((n 5) (acc 1))
@@ -52,7 +49,6 @@ fn test_named_let_factorial() {
 fn test_named_let_countdown() {
     let mut evaluator = Evaluator::new();
     let env = Environment::new_global();
-    primitives::register_all_primitives(&env);
 
     let code = r#"
 (let countdown ((n 5))
