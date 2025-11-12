@@ -14,8 +14,9 @@ import {
   FrameRefInsn,
   StackRefInsn,
   ClosureRefInsn,
+  ReturnInsn,
 } from './insn';
-import { makeNumber, makeBoolean, makeSymbol, theTrueObj, theFalseObj } from './elobj';
+import { makeNumber, makeBoolean, makeSymbol, theTrueObj, theFalseObj, theNilObj } from './elobj';
 
 describe('VM', () => {
   it('should execute a constant instruction', () => {
@@ -187,5 +188,124 @@ describe('VM', () => {
     const result = vm.eval(closureRef);
 
     expect(result.asNumber()?.value).toBe(200);
+  });
+
+  it('should push and pop control frames', () => {
+    const vm = new VM();
+
+    // Push some arguments on the stack
+    vm.push(makeNumber(10));
+    vm.push(makeNumber(20));
+    vm.push(makeNumber(30));
+
+    // Save current state
+    const savedFrameIndex = vm.frameIndex;
+    const savedClosure = vm.closure;
+
+    // Create a return address
+    const returnInsn = new ConstantInsn(makeNumber(999), null);
+
+    // Push a frame (simulating function call with 3 args)
+    vm.pushFrame(returnInsn, 3);
+
+    // Change closure to simulate entering a function
+    vm.closure = [makeNumber(100)];
+    vm.frameIndex = vm.stackSize() - 3; // Frame points to the 3 args
+
+    // Now pop the frame
+    const next = vm.popFrame();
+
+    // Verify state was restored
+    expect(next).toBe(returnInsn);
+    expect(vm.closure).toBe(savedClosure);
+  });
+
+  it('should execute ReturnInsn to return from function call', () => {
+    const vm = new VM();
+
+    // Setup: simulate a function call
+    // 1. Push arguments (simulating caller pushed these)
+    vm.push(makeNumber(10));
+    vm.push(makeNumber(20));
+
+    // 2. Push return address and frame
+    const afterCall = new ConstantInsn(makeNumber(999), null);
+    vm.pushFrame(afterCall, 2);
+
+    // 3. Set up function's frame
+    vm.frameIndex = vm.stackSize() - 2;
+
+    // 4. Function computes result and pushes it
+    vm.push(makeNumber(100)); // This is the return value
+
+    // 5. Execute ReturnInsn (2 args to clean up)
+    const returnInsn = new ReturnInsn(2);
+    let current: Insn | null = returnInsn;
+    while (current) {
+      current = current.execute(vm);
+    }
+
+    // Stack should now have: [100, 999]
+    // The 999 is from the afterCall instruction
+    expect(vm.stackSize()).toBe(2);
+    const finalValue = vm.pop();
+    expect(finalValue.asNumber()?.value).toBe(999);
+    const returnValue = vm.pop();
+    expect(returnValue.asNumber()?.value).toBe(100);
+  });
+
+  it('should handle nested function calls with control stack', () => {
+    const vm = new VM();
+
+    // Simulate: main calls outer(), outer calls inner()
+
+    // Main pushes args for outer: [1, 2]
+    vm.push(makeNumber(1));
+    vm.push(makeNumber(2));
+    const mainContinue = new ConstantInsn(makeNumber(999), null);
+    vm.pushFrame(mainContinue, 2);
+    vm.frameIndex = vm.stackSize() - 2;
+
+    // Outer function executes, pushes args for inner: [10, 20]
+    vm.push(makeNumber(10));
+    vm.push(makeNumber(20));
+    const outerContinue = new ConstantInsn(makeNumber(777), null);
+    vm.pushFrame(outerContinue, 2);
+    vm.frameIndex = vm.stackSize() - 2;
+
+    // Inner function computes and returns 100
+    vm.push(makeNumber(100));
+    const innerReturn = new ReturnInsn(2);
+
+    // Execute inner return
+    let current: Insn | null = innerReturn;
+    current = current.execute(vm);
+
+    // After inner return, we should be at outerContinue
+    expect(current).toBe(outerContinue);
+
+    // Stack should have: [1, 2, 100] (inner removed its 2 args: 10, 20)
+    expect(vm.stackSize()).toBe(3);
+
+    // Now simulate outer function computing its result directly
+    // In a real scenario, outer would use the 100 value somehow
+    // For this test, just verify we can return from outer too
+
+    // Pop the inner result (simulating outer used it)
+    vm.pop(); // 100
+
+    // Outer computes its own result
+    vm.push(makeNumber(200));
+
+    // Outer returns
+    const outerReturn = new ReturnInsn(2);
+    current = outerReturn.execute(vm);
+
+    // After outer return, we should be at mainContinue
+    expect(current).toBe(mainContinue);
+
+    // Stack should have just [200] (outer removed its 2 args: 1, 2)
+    expect(vm.stackSize()).toBe(1);
+    expect(vm.pop().asNumber()?.value).toBe(200);
   });
 });

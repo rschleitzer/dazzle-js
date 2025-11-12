@@ -12,6 +12,16 @@ import type { Insn } from './insn';
 import { makePair as makeELObjPair } from './elobj';
 
 /**
+ * Control stack entry - manages function call frames
+ * Port from: VM.h struct ControlStackEntry
+ */
+interface ControlStackEntry {
+  frameSize: number;           // Stack frame size before pushing args
+  closure: ELObj[] | null;     // Captured closure from outer scope
+  next: Insn | null;           // Instruction to return to
+}
+
+/**
  * VM class - Virtual machine for executing bytecode
  * Port from: VM.h class VM
  */
@@ -42,6 +52,13 @@ export class VM {
    * Port from: VM.h int nActualArgs
    */
   public nActualArgs: number = 0;
+
+  /**
+   * Control stack - manages function call frames
+   * Port from: VM.h ControlStackEntry *csp, *csbase, *cslim
+   */
+  private controlStack: ControlStackEntry[] = [];
+  private controlStackLimit: number = 1000;
 
   constructor() {
     this.initStack();
@@ -175,6 +192,51 @@ export class VM {
       throw new Error(`Stack index ${offset} out of bounds`);
     }
     return this.stack[index];
+  }
+
+  /**
+   * Push a new call frame onto the control stack
+   * Port from: Insn.cxx VM::pushFrame()
+   *
+   * @param next The instruction to return to after the call
+   * @param argsPushed Number of arguments already pushed on stack
+   */
+  pushFrame(next: Insn | null, argsPushed: number): void {
+    if (this.controlStack.length >= this.controlStackLimit) {
+      throw new Error('Control stack overflow');
+    }
+
+    // Calculate frame size (stack size before arguments were pushed)
+    const frameSize = this.sp - this.frameIndex - argsPushed;
+
+    // Push control stack entry
+    this.controlStack.push({
+      frameSize,
+      closure: this.closure,
+      next,
+    });
+  }
+
+  /**
+   * Pop a call frame from the control stack
+   * Port from: Insn.cxx VM::popFrame()
+   *
+   * @returns The instruction to continue execution with
+   */
+  popFrame(): Insn | null {
+    if (this.controlStack.length === 0) {
+      throw new Error('Control stack underflow');
+    }
+
+    const entry = this.controlStack.pop()!;
+
+    // Restore closure from saved frame
+    this.closure = entry.closure;
+
+    // Restore frame pointer
+    this.frameIndex = this.sp - entry.frameSize;
+
+    return entry.next;
   }
 
   /**

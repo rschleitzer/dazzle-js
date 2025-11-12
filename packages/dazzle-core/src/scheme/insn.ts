@@ -289,10 +289,44 @@ export class TestNullInsn extends Insn {
   }
 }
 
+/**
+ * Return instruction - Return from function call
+ * Port from: Insn.h ReturnInsn
+ *
+ * Pops result from stack, removes function arguments, restores caller frame,
+ * and pushes result back on stack.
+ */
+export class ReturnInsn extends Insn {
+  constructor(private totalArgs: number) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Pop the return value
+    const result = vm.pop();
+
+    // Remove function arguments from stack
+    for (let i = 0; i < this.totalArgs; i++) {
+      vm.pop();
+    }
+
+    // Pop the call frame and get the return address
+    const next = vm.popFrame();
+
+    // Push result back on stack for caller
+    vm.push(result);
+
+    return next;
+  }
+
+  isReturn(): { isReturn: false } | { isReturn: true; nArgs: number } {
+    return { isReturn: true, nArgs: this.totalArgs };
+  }
+}
+
 // More instruction types will be added as we implement the compiler:
-// - ReturnInsn (needs control stack implementation)
 // - AppendInsn (list append - more complex, will add when needed)
-// - CallInsn (function calls - needs control stack)
+// - CallInsn (function calls - needs primitive infrastructure)
 // - LetInsn (let bindings)
 // - DefineInsn (define)
 // - LambdaInsn (lambda)
