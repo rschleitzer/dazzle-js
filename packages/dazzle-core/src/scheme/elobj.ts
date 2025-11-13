@@ -23,6 +23,7 @@ export abstract class ELObj {
   asPair(): PairObj | null { return null; }
   asVector(): VectorObj | null { return null; }
   asFunction(): FunctionObj | null { return null; }
+  asNode(): NodeObj | null { return null; }
   asNodeList(): NodeListObj | null { return null; }
   asSosofo(): SosofoObj | null { return null; }
 
@@ -232,6 +233,18 @@ export class FunctionObj extends ELObj {
 }
 
 /**
+ * Node (DSSSL grove node)
+ * Port from: ELObj.h NodeObj
+ */
+export class NodeObj extends ELObj {
+  constructor(public node: Node) {
+    super();
+  }
+
+  asNode(): NodeObj { return this; }
+}
+
+/**
  * NodeList (DSSSL node list)
  * Port from: ELObj.h NodeListObj
  */
@@ -291,4 +304,12 @@ export function makePair(car: ELObj, cdr: ELObj): PairObj {
 
 export function makeVector(elements: ELObj[]): VectorObj {
   return new VectorObj(elements);
+}
+
+export function makeNode(node: Node): NodeObj {
+  return new NodeObj(node);
+}
+
+export function makeNodeList(nodes: NodeList): NodeListObj {
+  return new NodeListObj(nodes);
 }

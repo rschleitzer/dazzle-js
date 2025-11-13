@@ -17,10 +17,14 @@ import {
   makeSymbol,
   makeVector,
   makeChar,
+  makeNode,
+  makeNodeList,
   theNilObj,
   theTrueObj,
   theFalseObj,
 } from './elobj';
+
+import { EMPTY_NODE_LIST } from '../grove';
 
 /**
  * Arithmetic primitive: +
@@ -5602,6 +5606,270 @@ const loadPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   return theNilObj;
 };
 
+// ============ Grove Primitives (DSSSL §9) ============
+// Port from: OpenJade primitive.h/primitive.cxx
+//
+// Architecture: Primitives are thin wrappers around Node interface methods.
+// The real work happens in the Node implementation (e.g., LibxmljsNode).
+
+/**
+ * Grove: gi (generic identifier - element name)
+ * Port from: primitive.h PRIMITIVE(Gi, "gi", 0, 1, 0)
+ */
+const giPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('gi requires exactly 1 argument');
+  }
+
+  const node = args[0].asNode();
+  if (!node) {
+    throw new Error('gi requires a node argument');
+  }
+
+  const gi = node.node.gi();
+  return gi ? makeSymbol(gi) : theFalseObj;
+};
+
+/**
+ * Grove: id (ID attribute value)
+ * Port from: primitive.h PRIMITIVE(Id, "id", 0, 1, 0)
+ */
+const idPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('id requires exactly 1 argument');
+  }
+
+  const node = args[0].asNode();
+  if (!node) {
+    throw new Error('id requires a node argument');
+  }
+
+  const id = node.node.id();
+  return id ? makeString(id) : theFalseObj;
+};
+
+/**
+ * Grove: data (character data content)
+ * Port from: primitive.h PRIMITIVE(Data, "data", 0, 1, 0)
+ */
+const dataPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('data requires exactly 1 argument');
+  }
+
+  const node = args[0].asNode();
+  if (!node) {
+    throw new Error('data requires a node argument');
+  }
+
+  const data = node.node.data();
+  return data ? makeString(data) : theFalseObj;
+};
+
+/**
+ * Grove: parent
+ * Port from: primitive.h PRIMITIVE(Parent, "parent", 0, 1, 0)
+ */
+const parentPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('parent requires exactly 1 argument');
+  }
+
+  const node = args[0].asNode();
+  if (!node) {
+    throw new Error('parent requires a node argument');
+  }
+
+  const parent = node.node.parent();
+  return parent ? makeNode(parent) : theFalseObj;
+};
+
+/**
+ * Grove: children
+ * Port from: primitive.h PRIMITIVE(Children, "children", 0, 1, 0)
+ */
+const childrenPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('children requires exactly 1 argument');
+  }
+
+  const node = args[0].asNode();
+  if (!node) {
+    throw new Error('children requires a node argument');
+  }
+
+  return makeNodeList(node.node.children());
+};
+
+/**
+ * Grove: node-list? predicate
+ * Port from: primitive.h PRIMITIVE(NodeListP, "node-list?", 0, 1, 0)
+ */
+const nodeListPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('node-list? requires exactly 1 argument');
+  }
+
+  return args[0].asNodeList() ? theTrueObj : theFalseObj;
+};
+
+/**
+ * Grove: node-list-length
+ * Port from: primitive.h PRIMITIVE(NodeListLength, "node-list-length", 0, 1, 0)
+ */
+const nodeListLengthPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('node-list-length requires exactly 1 argument');
+  }
+
+  const nl = args[0].asNodeList();
+  if (!nl) {
+    throw new Error('node-list-length requires a node-list argument');
+  }
+
+  return makeNumber(nl.nodes.length());
+};
+
+/**
+ * Grove: empty-node-list
+ * Port from: primitive.h PRIMITIVE(EmptyNodeList, "empty-node-list", 0, 0, 0)
+ */
+const emptyNodeListPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 0) {
+    throw new Error('empty-node-list requires no arguments');
+  }
+
+  return makeNodeList(EMPTY_NODE_LIST);
+};
+
+/**
+ * Grove: node-list-first
+ * Port from: primitive.h PRIMITIVE(NodeListFirst, "node-list-first", 0, 1, 0)
+ */
+const nodeListFirstPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('node-list-first requires exactly 1 argument');
+  }
+
+  const nl = args[0].asNodeList();
+  if (!nl) {
+    throw new Error('node-list-first requires a node-list argument');
+  }
+
+  const first = nl.nodes.first();
+  return first ? makeNode(first) : theFalseObj;
+};
+
+/**
+ * Grove: node-list-rest
+ * Port from: primitive.h PRIMITIVE(NodeListRest, "node-list-rest", 0, 1, 0)
+ */
+const nodeListRestPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('node-list-rest requires exactly 1 argument');
+  }
+
+  const nl = args[0].asNodeList();
+  if (!nl) {
+    throw new Error('node-list-rest requires a node-list argument');
+  }
+
+  const rest = nl.nodes.rest();
+  return rest ? makeNodeList(rest) : makeNodeList(EMPTY_NODE_LIST);
+};
+
+/**
+ * Grove: attributes
+ * Port from: primitive.h PRIMITIVE(Attributes, "attributes", 0, 1, 0)
+ */
+const attributesPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('attributes requires exactly 1 argument');
+  }
+
+  const node = args[0].asNode();
+  if (!node) {
+    throw new Error('attributes requires a node argument');
+  }
+
+  return makeNodeList(node.node.attributes());
+};
+
+/**
+ * Grove: attribute-string
+ * Port from: primitive.h PRIMITIVE(AttributeString, "attribute-string", 2, 0, 0)
+ */
+const attributeStringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 2) {
+    throw new Error('attribute-string requires exactly 2 arguments');
+  }
+
+  const name = args[0].asString() || args[0].asSymbol();
+  if (!name) {
+    throw new Error('attribute-string requires string or symbol as first argument');
+  }
+
+  const node = args[1].asNode();
+  if (!node) {
+    throw new Error('attribute-string requires a node as second argument');
+  }
+
+  const attrName = args[0].asString()?.value || args[0].asSymbol()?.name || '';
+  const value = node.node.attributeString(attrName);
+  return value ? makeString(value) : theFalseObj;
+};
+
+/**
+ * Grove: ancestors
+ * Port from: primitive.h PRIMITIVE(Ancestors, "ancestors", 0, 1, 0)
+ */
+const ancestorsPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('ancestors requires exactly 1 argument');
+  }
+
+  const node = args[0].asNode();
+  if (!node) {
+    throw new Error('ancestors requires a node argument');
+  }
+
+  return makeNodeList(node.node.ancestors());
+};
+
+/**
+ * Grove: descendants
+ * Port from: primitive.h PRIMITIVE(Descendants, "descendants", 0, 1, 0)
+ */
+const descendantsPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('descendants requires exactly 1 argument');
+  }
+
+  const node = args[0].asNode();
+  if (!node) {
+    throw new Error('descendants requires a node argument');
+  }
+
+  return makeNodeList(node.node.descendants());
+};
+
+/**
+ * Grove: child-number
+ * Port from: primitive.h PRIMITIVE(ChildNumber, "child-number", 0, 1, 0)
+ */
+const childNumberPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('child-number requires exactly 1 argument');
+  }
+
+  const node = args[0].asNode();
+  if (!node) {
+    throw new Error('child-number requires a node argument');
+  }
+
+  return makeNumber(node.node.childNumber());
+};
+
 // ============ Common List Accessors ============
 
 /**
@@ -7015,6 +7283,23 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   'call-with-input-file': new FunctionObj('call-with-input-file', callWithInputFilePrimitive),
   'call-with-output-file': new FunctionObj('call-with-output-file', callWithOutputFilePrimitive),
   'load': new FunctionObj('load', loadPrimitive),
+
+  // Grove primitives (DSSSL §9)
+  'gi': new FunctionObj('gi', giPrimitive),
+  'id': new FunctionObj('id', idPrimitive),
+  'data': new FunctionObj('data', dataPrimitive),
+  'parent': new FunctionObj('parent', parentPrimitive),
+  'children': new FunctionObj('children', childrenPrimitive),
+  'node-list?': new FunctionObj('node-list?', nodeListPredicate),
+  'node-list-length': new FunctionObj('node-list-length', nodeListLengthPrimitive),
+  'empty-node-list': new FunctionObj('empty-node-list', emptyNodeListPrimitive),
+  'node-list-first': new FunctionObj('node-list-first', nodeListFirstPrimitive),
+  'node-list-rest': new FunctionObj('node-list-rest', nodeListRestPrimitive),
+  'attributes': new FunctionObj('attributes', attributesPrimitive),
+  'attribute-string': new FunctionObj('attribute-string', attributeStringPrimitive),
+  'ancestors': new FunctionObj('ancestors', ancestorsPrimitive),
+  'descendants': new FunctionObj('descendants', descendantsPrimitive),
+  'child-number': new FunctionObj('child-number', childNumberPrimitive),
 };
 
 /**
