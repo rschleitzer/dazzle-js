@@ -5,7 +5,7 @@
  * We port this to TypeScript using classes.
  */
 
-import type { Node, NodeList } from '../grove';
+import type { Node, NodeList } from '../grove/index.js';
 
 /**
  * Base class for all Scheme values

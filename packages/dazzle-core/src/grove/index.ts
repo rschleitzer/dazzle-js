@@ -14,13 +14,13 @@ export {
   type Grove,
   NodeType,
   nodeListFromArray,
-} from './grove';
+} from './grove.js';
 
 // Re-export EMPTY_NODE_LIST from grove.ts
-import { EMPTY_NODE_LIST as _EMPTY_NODE_LIST } from './grove';
+import { EMPTY_NODE_LIST as _EMPTY_NODE_LIST } from './grove.js';
 export const EMPTY_NODE_LIST = _EMPTY_NODE_LIST;
 
 export {
   LibxmljsGrove,
   parseXmlGrove,
-} from './libxmljs2-grove';
+} from './libxmljs2-grove.js';

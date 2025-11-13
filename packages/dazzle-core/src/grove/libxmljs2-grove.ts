@@ -17,7 +17,7 @@
  * Based on: OpenJade spgrove/ (7K lines)
  */
 
-import type * as libxmljs2 from 'libxmljs2';
+import * as libxmljs2 from 'libxmljs2';
 import {
   type Node,
   type NodeList,
@@ -25,7 +25,7 @@ import {
   NodeType,
   EMPTY_NODE_LIST,
   nodeListFromArray,
-} from './grove';
+} from './grove.js';
 
 /**
  * Wrapper cache - Reuse Node wrappers for same native node
@@ -593,12 +593,10 @@ export function parseXmlGrove(
     nocdata?: boolean;
   }
 ): Grove {
-  const libxml = require('libxmljs2') as typeof libxmljs2;
-
   // Convert Buffer to string if needed
   const xmlString = typeof xml === 'string' ? xml : xml.toString('utf-8');
 
-  const doc = libxml.parseXml(xmlString, {
+  const doc = libxmljs2.parseXml(xmlString, {
     baseUrl: options?.baseUrl,
     dtdload: options?.dtdload ?? false,
     dtdvalid: options?.dtdvalid ?? false,

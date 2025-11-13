@@ -9,5 +9,5 @@
  * - Primitives (260 language features)
  */
 
-export * from './grove/index';
-export * from './fot';
+export * from './grove/index.js';
+export * from './fot.js';

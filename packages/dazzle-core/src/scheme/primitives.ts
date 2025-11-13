@@ -23,9 +23,9 @@ import {
   theNilObj,
   theTrueObj,
   theFalseObj,
-} from './elobj';
+} from './elobj.js';
 
-import { EMPTY_NODE_LIST } from '../grove/index';
+import { EMPTY_NODE_LIST } from '../grove/index.js';
 
 /**
  * Arithmetic primitive: +

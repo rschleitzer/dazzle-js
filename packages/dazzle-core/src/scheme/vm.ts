@@ -7,9 +7,9 @@
  * - A closure for lexical variable access
  */
 
-import type { ELObj } from './elobj';
-import type { Insn } from './insn';
-import { makePair as makeELObjPair } from './elobj';
+import type { ELObj } from './elobj.js';
+import type { Insn } from './insn.js';
+import { makePair as makeELObjPair } from './elobj.js';
 
 /**
  * Control stack entry - manages function call frames

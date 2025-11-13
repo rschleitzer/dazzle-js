@@ -19,7 +19,7 @@ import {
   theNilObj,
   theTrueObj,
   theFalseObj,
-} from './elobj';
+} from './elobj.js';
 
 /**
  * Token types

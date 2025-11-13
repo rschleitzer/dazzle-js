@@ -13,7 +13,7 @@ import {
   theNilObj,
   theTrueObj,
   theFalseObj,
-} from './elobj';
+} from './elobj.js';
 
 import {
   type Insn,
@@ -30,9 +30,9 @@ import {
   ReturnInsn,
   PrimitiveCallInsn,
   ClosureInsn,
-} from './insn';
+} from './insn.js';
 
-import { standardPrimitives } from './primitives';
+import { standardPrimitives } from './primitives.js';
 
 /**
  * Variable binding in environment

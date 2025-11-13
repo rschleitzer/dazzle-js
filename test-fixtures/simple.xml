@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document>
+  <title>Hello Dazzle</title>
+  <content>
+    <paragraph>This is a simple test document.</paragraph>
+    <paragraph>It demonstrates XML parsing with libxmljs2.</paragraph>
+  </content>
+</document>

@@ -6,9 +6,9 @@
  * to execute, forming a linked chain.
  */
 
-import type { ELObj } from './elobj';
-import type { VM } from './vm';
-import { FunctionObj, type Signature } from './elobj';
+import type { ELObj } from './elobj.js';
+import type { VM } from './vm.js';
+import { FunctionObj, type Signature } from './elobj.js';
 
 /**
  * Base class for all instructions
