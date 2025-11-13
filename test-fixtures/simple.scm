@@ -1,5 +1,8 @@
-; Simple Dazzle template
-; This is a placeholder template for testing
+; Simple Dazzle template - Basic Scheme test
+; Calculate some values to prove the interpreter works
 
-(define (process-root root)
-  (process-children root))
+(+ 1 2 3)
+
+(string-append "Hello" " " "Dazzle")
+
+(map (lambda (x) (* x x)) (list 1 2 3 4 5))

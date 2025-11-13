@@ -8,12 +8,10 @@
  * - DSSSL processing model
  * - Primitives (260 language features)
  */
-
 export * from './grove/index.js';
 export * from './fot.js';
-
 // Scheme interpreter
 export { parse, parseOne } from './scheme/parser.js';
 export { Compiler, GlobalEnvironment, Environment } from './scheme/compiler.js';
 export { VM } from './scheme/vm.js';
-export type { ELObj } from './scheme/elobj.js';
+//# sourceMappingURL=index.js.map

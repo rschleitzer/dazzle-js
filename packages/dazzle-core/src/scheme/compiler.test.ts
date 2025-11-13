@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { parseOne } from './parser';
 import { Compiler, Environment, GlobalEnvironment } from './compiler';
 import { VM } from './vm';
-import { makeVector, makeNumber } from './elobj';
+import { makeVector, makeNumber, type ELObj } from './elobj';
 
 describe('Compiler - Constants', () => {
   it('should compile number', () => {

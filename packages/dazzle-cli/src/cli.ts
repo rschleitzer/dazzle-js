@@ -8,8 +8,9 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseXmlGrove } from 'dazzle-core';
-import { createTransformBackend } from 'dazzle-backend-sgml';
+import { parseXmlGrove, parse, Compiler, GlobalEnvironment, Environment, VM } from 'dazzle-core';
+// TODO: Import backend when DSSSL processing is integrated
+// import { createTransformBackend } from 'dazzle-backend-sgml';
 
 const program = new Command();
 
@@ -49,8 +50,7 @@ program
 
       // Read template
       const templatePath = path.resolve(options.template);
-      // TODO: Parse template content when interpreter is ready
-      // const templateContent = fs.readFileSync(templatePath, 'utf-8');
+      const templateContent = fs.readFileSync(templatePath, 'utf-8');
 
       // Read input XML
       const inputPath = path.resolve(inputFile);
@@ -61,22 +61,40 @@ program
 
       // Create backend
       const outputDir = path.resolve(options.output);
-      const backend = createTransformBackend(outputDir);
+      // TODO: Wire backend into DSSSL processing context
+      // const backend = createTransformBackend(outputDir);
 
-      // TODO: Parse template, create interpreter, execute
-      console.log('Template:', templatePath);
-      console.log('Input:', inputPath);
-      console.log('Backend:', options.backend);
-      console.log('Output dir:', outputDir);
-      console.log('Grove root:', grove.root().gi());
-      console.log('Backend ready:', backend !== null);
+      // Parse template into S-expressions
+      const exprs = parse(templateContent);
 
-      console.log('\nNote: Full interpreter integration coming soon!');
-      console.log('Currently demonstrating:');
-      console.log('  ✓ Command-line argument parsing');
-      console.log('  ✓ XML parsing with libxmljs2');
-      console.log('  ✓ Grove creation');
-      console.log('  ✓ Backend instantiation');
+      // Create global environment and compiler
+      const globals = new GlobalEnvironment();
+      const compiler = new Compiler(globals);
+      const env = new Environment();
+
+      // Create VM
+      const vm = new VM();
+
+      console.log(`Template: ${templatePath}`);
+      console.log(`Input: ${inputPath}`);
+      console.log(`Backend: ${options.backend}`);
+      console.log(`Output dir: ${outputDir}`);
+      console.log(`Grove root: ${grove.root().gi()}`);
+      console.log(`Parsed ${exprs.length} expression(s) from template\n`);
+
+      // Execute each expression
+      for (let i = 0; i < exprs.length; i++) {
+        const expr = exprs[i];
+        console.log(`Executing expression ${i + 1}...`);
+
+        // Compile expression to bytecode
+        const bytecode = compiler.compile(expr, env, 0, null);
+
+        // Execute bytecode
+        const result = vm.eval(bytecode);
+
+        console.log(`Result: ${result.asString()?.value || result.asNumber()?.value || result.asBoolean()?.value || '(value)'}`);
+      }
 
     } catch (error) {
       if (error instanceof Error) {

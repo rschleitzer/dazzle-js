@@ -18,7 +18,6 @@
   "license": "MIT",
   "dependencies": {
     "dazzle-core": "*",
-    "dazzle-grove-libxmljs2": "*",
     "dazzle-backend-sgml": "*",
     "commander": "^11.0.0"
   },
