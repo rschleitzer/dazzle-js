@@ -23,12 +23,13 @@ import {
   AndInsn,
   PopInsn,
   PopBindingsInsn,
-    ConsInsn,
+  ConsInsn,
   FrameRefInsn,
   StackRefInsn,
   ClosureRefInsn,
   ReturnInsn,
   PrimitiveCallInsn,
+  CallInsn,
   ClosureInsn,
 } from './insn.js';
 
@@ -479,8 +480,21 @@ export class Compiler {
       }
     }
 
-    // Generic function call (not yet implemented)
-    throw new Error('Generic function calls not yet implemented');
+    // Generic function call
+    // Stack layout: [arg1, arg2, ..., argN, function]
+    // CallInsn will pop function, execute it with args, push result
+
+    let result: Insn = new CallInsn(args.length, next);
+
+    // Compile function expression - will be on top of stack after args
+    result = this.compile(fn, env, stackPos + args.length, result);
+
+    // Compile arguments right-to-left so they evaluate left-to-right
+    for (let i = args.length - 1; i >= 0; i--) {
+      result = this.compile(args[i], env, stackPos + i, result);
+    }
+
+    return result;
   }
 
   // ============ Helpers ============

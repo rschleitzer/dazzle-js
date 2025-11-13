@@ -370,6 +370,85 @@ export class PrimitiveCallInsn extends Insn {
 }
 
 /**
+ * Generic call instruction - Call any function (primitive or closure)
+ * Port from: Insn.h CallInsn
+ *
+ * Stack layout on entry:
+ * [arg1, arg2, ..., argN, function]
+ *
+ * This instruction:
+ * 1. Pops function from stack
+ * 2. If primitive: calls it directly
+ * 3. If closure: sets up frame and executes body
+ */
+export class CallInsn extends Insn {
+  constructor(
+    private nArgs: number,
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Pop function from top of stack
+    const funcObj = vm.pop();
+    const func = funcObj.asFunction();
+
+    if (!func) {
+      throw new Error('Cannot call non-function');
+    }
+
+    // Gather arguments from stack (they're at sp - nArgs .. sp - 1)
+    const args: ELObj[] = [];
+    for (let i = this.nArgs - 1; i >= 0; i--) {
+      args.unshift(vm.getStackValue(vm.stackSize() - this.nArgs + i));
+    }
+
+    // Handle primitive functions
+    if (func.isPrimitive()) {
+      // Pop arguments
+      for (let i = 0; i < this.nArgs; i++) {
+        vm.pop();
+      }
+
+      // Call primitive
+      const result = func.callPrimitive(args);
+
+      // Push result
+      vm.push(result);
+
+      return this.next;
+    }
+
+    // Handle closures
+    if (func.isClosure()) {
+      // Validate argument count
+      const sig = func.signature!;
+      if (this.nArgs !== sig.nRequiredArgs + sig.nOptionalArgs && !sig.restArg) {
+        throw new Error(`Function expects ${sig.nRequiredArgs} arguments, got ${this.nArgs}`);
+      }
+
+      // Set up frame for closure call
+      // Arguments are already on the stack in the right order
+      vm.frameIndex = vm.stackSize() - this.nArgs;
+      vm.nActualArgs = this.nArgs;
+
+      // Set closure display
+      vm.closure = func.display || null;
+
+      // Push call frame
+      vm.pushFrame(this.next, this.nArgs);
+
+      // Execute closure body
+      // The closure's code will end with a ReturnInsn that pops the frame
+      return func.code;
+    }
+
+    throw new Error('Function is neither primitive nor closure');
+  }
+}
+
+/**
  * Closure instruction - Create a closure (lambda function)
  * Port from: Insn.h ClosureInsn
  *

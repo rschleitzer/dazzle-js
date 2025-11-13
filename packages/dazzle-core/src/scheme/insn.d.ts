@@ -192,6 +192,24 @@ export declare class PrimitiveCallInsn extends Insn {
     execute(vm: VM): Insn | null;
 }
 /**
+ * Generic call instruction - Call any function (primitive or closure)
+ * Port from: Insn.h CallInsn
+ *
+ * Stack layout on entry:
+ * [arg1, arg2, ..., argN, function]
+ *
+ * This instruction:
+ * 1. Pops function from stack
+ * 2. If primitive: calls it directly
+ * 3. If closure: sets up frame and executes body
+ */
+export declare class CallInsn extends Insn {
+    private nArgs;
+    private next;
+    constructor(nArgs: number, next: Insn | null);
+    execute(vm: VM): Insn | null;
+}
+/**
  * Closure instruction - Create a closure (lambda function)
  * Port from: Insn.h ClosureInsn
  *
