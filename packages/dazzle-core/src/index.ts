@@ -11,6 +11,7 @@
 
 export * from './grove/index.js';
 export * from './fot.js';
+export * from './dsssl/index.js';
 
 // Scheme interpreter
 export { parse, parseOne } from './scheme/parser.js';

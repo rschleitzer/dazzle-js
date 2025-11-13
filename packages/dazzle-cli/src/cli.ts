@@ -8,9 +8,8 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseXmlGrove, parse, Compiler, GlobalEnvironment, Environment, VM, type ELObj } from 'dazzle-core';
-// TODO: Import backend when DSSSL processing is integrated
-// import { createTransformBackend } from 'dazzle-backend-sgml';
+import { parseXmlGrove, parse, Compiler, GlobalEnvironment, Environment, VM, type ELObj, ProcessContext } from 'dazzle-core';
+import { createTransformBackend } from 'dazzle-backend-sgml';
 
 /**
  * Format a Scheme value for display
@@ -54,6 +53,10 @@ function formatValue(value: ELObj): string {
   // Symbol
   const sym = value.asSymbol();
   if (sym) return sym.name;
+
+  // Sosofo
+  const sosofo = value.asSosofo();
+  if (sosofo) return `<sosofo:${sosofo.type}>`;
 
   // Other
   return '<value>';
@@ -108,8 +111,7 @@ program
 
       // Create backend
       const outputDir = path.resolve(options.output);
-      // TODO: Wire backend into DSSSL processing context
-      // const backend = createTransformBackend(outputDir);
+      const backend = createTransformBackend(outputDir);
 
       // Parse template into S-expressions
       const exprs = parse(templateContent);
@@ -119,8 +121,13 @@ program
       const compiler = new Compiler(globals);
       const env = new Environment();
 
-      // Create VM
+      // Create VM and set up DSSSL context
       const vm = new VM();
+      vm.grove = grove;
+      vm.currentNode = grove.root();
+
+      // Create ProcessContext for sosofo execution
+      const processContext = new ProcessContext(backend, vm);
 
       console.log(`Template: ${templatePath}`);
       console.log(`Input: ${inputPath}`);
@@ -141,7 +148,16 @@ program
         const result = vm.eval(bytecode);
 
         console.log(`Result: ${formatValue(result)}`);
+
+        // If result is a sosofo, process it through the backend
+        const sosofo = result.asSosofo();
+        if (sosofo) {
+          processContext.process(sosofo);
+        }
       }
+
+      // Finish backend processing
+      backend.end();
 
     } catch (error) {
       if (error instanceof Error) {

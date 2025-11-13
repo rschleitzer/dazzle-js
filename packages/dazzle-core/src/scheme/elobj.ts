@@ -268,7 +268,7 @@ export class NodeListObj extends ELObj {
  */
 export class SosofoObj extends ELObj {
   constructor(
-    public type: 'empty' | 'append' | 'entity' | 'formatting-instruction',
+    public type: 'empty' | 'append' | 'entity' | 'formatting-instruction' | 'literal',
     public data?: unknown
   ) {
     super();
@@ -291,6 +291,16 @@ export class SosofoObj extends ELObj {
       return this.data as SosofoObj[];
     }
     return [];
+  }
+
+  /**
+   * Get literal text content
+   */
+  literalText(): string | null {
+    if (this.type === 'literal' && typeof this.data === 'string') {
+      return this.data;
+    }
+    return null;
   }
 }
 
@@ -344,6 +354,6 @@ export function makeNodeList(nodes: NodeList): NodeListObj {
   return new NodeListObj(nodes);
 }
 
-export function makeSosofo(type: 'empty' | 'append' | 'entity' | 'formatting-instruction', data?: unknown): SosofoObj {
+export function makeSosofo(type: 'empty' | 'append' | 'entity' | 'formatting-instruction' | 'literal', data?: unknown): SosofoObj {
   return new SosofoObj(type, data);
 }

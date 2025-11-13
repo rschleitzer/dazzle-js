@@ -5660,6 +5660,9 @@ const loadPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
 /**
  * Grove: gi (generic identifier - element name)
  * Port from: primitive.h PRIMITIVE(Gi, "gi", 0, 1, 0)
+ *
+ * Returns a string (not a symbol) containing the element name.
+ * OpenJade returns a string for gi.
  */
 const giPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
@@ -5672,7 +5675,7 @@ const giPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   }
 
   const gi = node.node.gi();
-  return gi ? makeSymbol(gi) : theFalseObj;
+  return gi ? makeString(gi) : theFalseObj;
 };
 
 /**
@@ -7019,6 +7022,32 @@ const emptySosofoPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj 
 };
 
 /**
+ * literal - Creates a literal text sosofo
+ * Port from: primitive.cxx Literal::primitiveCall
+ *
+ * Takes 0+ string arguments and concatenates them into literal text.
+ * With 0 args: returns empty sosofo
+ * With 1+ args: concatenates strings and returns literal sosofo
+ */
+const literalPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length === 0) {
+    return makeSosofo('empty');
+  }
+
+  // Concatenate all string arguments
+  let text = '';
+  for (let i = 0; i < args.length; i++) {
+    const str = args[i].asString();
+    if (!str) {
+      throw new Error(`literal: argument ${i + 1} must be a string`);
+    }
+    text += str.value;
+  }
+
+  return makeSosofo('literal', text);
+};
+
+/**
  * sosofo-append - Appends sosofos into a sequence
  * Port from: primitive.cxx SosofoAppend::primitiveCall
  */
@@ -7526,6 +7555,7 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   'process-children': new FunctionObj('process-children', processChildrenPrimitive),
   'process-node-list': new FunctionObj('process-node-list', processNodeListPrimitive),
   'empty-sosofo': new FunctionObj('empty-sosofo', emptySosofoPrimitive),
+  'literal': new FunctionObj('literal', literalPrimitive),
   'sosofo-append': new FunctionObj('sosofo-append', sosofoAppendPrimitive),
   'make-flow-object': new FunctionObj('make-flow-object', makeFlowObjectPrimitive),
 };

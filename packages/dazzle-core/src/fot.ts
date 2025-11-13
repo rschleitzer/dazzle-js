@@ -61,4 +61,22 @@ export interface FotBuilder {
    * Port from: FOTBuilder.h:803
    */
   endNode(): void;
+
+  /**
+   * Start an entity flow object (file output for code generation)
+   * Port from: TransformFOTBuilder::startEntity()
+   */
+  startEntity(systemId: string): void;
+
+  /**
+   * End an entity flow object
+   * Port from: TransformFOTBuilder::endEntity()
+   */
+  endEntity(): void;
+
+  /**
+   * Finish output and cleanup
+   * Port from: FOTBuilder destructor
+   */
+  end(): void;
 }
