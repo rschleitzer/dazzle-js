@@ -25,13 +25,40 @@ import {
   theFalseObj,
 } from './elobj.js';
 
+import type { VM } from './vm.js';
 import { EMPTY_NODE_LIST } from '../grove/index.js';
+import { CallInsn } from './insn.js';
+
+/**
+ * Helper: Call a closure from within a primitive
+ * Creates necessary bytecode to invoke the closure with arguments
+ */
+function callClosure(func: FunctionObj, args: ELObj[], vm: VM): ELObj {
+  if (!func.isClosure()) {
+    throw new Error('callClosure requires a closure');
+  }
+
+  // Push arguments onto stack
+  for (const arg of args) {
+    vm.push(arg);
+  }
+
+  // Push function onto stack
+  vm.push(func);
+
+  // Create and execute CallInsn
+  const callInsn = new CallInsn(args.length, null);
+  callInsn.execute(vm);
+
+  // Result is now on top of stack
+  return vm.pop();
+}
 
 /**
  * Arithmetic primitive: +
  * Port from: primitive.cxx Plus::primitiveCall
  */
-const plusPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const plusPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   let sum = 0;
   let exact = true;
 
@@ -53,7 +80,7 @@ const plusPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: -
  * Port from: primitive.cxx Minus::primitiveCall
  */
-const minusPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const minusPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     throw new Error('- requires at least 1 argument');
   }
@@ -90,7 +117,7 @@ const minusPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: *
  * Port from: primitive.cxx Times::primitiveCall
  */
-const timesPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const timesPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   let product = 1;
   let exact = true;
 
@@ -112,7 +139,7 @@ const timesPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: /
  * Port from: primitive.cxx Divide::primitiveCall
  */
-const dividePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const dividePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     throw new Error('/ requires at least 1 argument');
   }
@@ -151,7 +178,7 @@ const dividePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Comparison primitive: <
  * Port from: primitive.cxx LessThan::primitiveCall
  */
-const lessThanPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const lessThanPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('< requires at least 2 arguments');
   }
@@ -174,7 +201,7 @@ const lessThanPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Comparison primitive: >
  * Port from: primitive.cxx GreaterThan::primitiveCall
  */
-const greaterThanPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const greaterThanPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('> requires at least 2 arguments');
   }
@@ -197,7 +224,7 @@ const greaterThanPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Comparison primitive: =
  * Port from: primitive.cxx NumericEqual::primitiveCall
  */
-const numericEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const numericEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('= requires at least 2 arguments');
   }
@@ -224,7 +251,7 @@ const numericEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List primitive: cons
  * Port from: primitive.cxx Cons::primitiveCall
  */
-const consPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const consPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('cons requires exactly 2 arguments');
   }
@@ -235,7 +262,7 @@ const consPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List primitive: car
  * Port from: primitive.cxx Car::primitiveCall
  */
-const carPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const carPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('car requires exactly 1 argument');
   }
@@ -252,7 +279,7 @@ const carPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List primitive: cdr
  * Port from: primitive.cxx Cdr::primitiveCall
  */
-const cdrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cdrPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cdr requires exactly 1 argument');
   }
@@ -269,7 +296,7 @@ const cdrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List primitive: null?
  * Port from: primitive.cxx Null::primitiveCall
  */
-const nullPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const nullPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('null? requires exactly 1 argument');
   }
@@ -281,7 +308,7 @@ const nullPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Type predicate: pair?
  * Port from: primitive.cxx Pair::primitiveCall
  */
-const pairPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const pairPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('pair? requires exactly 1 argument');
   }
@@ -293,7 +320,7 @@ const pairPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Type predicate: number?
  * Port from: primitive.cxx Number::primitiveCall
  */
-const numberPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const numberPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('number? requires exactly 1 argument');
   }
@@ -305,7 +332,7 @@ const numberPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Logic primitive: not
  * Port from: primitive.cxx Not::primitiveCall
  */
-const notPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const notPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('not requires exactly 1 argument');
   }
@@ -317,7 +344,7 @@ const notPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Comparison primitive: <=
  * Port from: primitive.cxx LessThanOrEqual::primitiveCall
  */
-const lessThanOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const lessThanOrEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('<= requires at least 2 arguments');
   }
@@ -340,7 +367,7 @@ const lessThanOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Comparison primitive: >=
  * Port from: primitive.cxx GreaterThanOrEqual::primitiveCall
  */
-const greaterThanOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const greaterThanOrEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('>= requires at least 2 arguments');
   }
@@ -363,7 +390,7 @@ const greaterThanOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj =>
  * List primitive: length
  * Port from: primitive.cxx Length::primitiveCall
  */
-const lengthPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const lengthPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('length requires exactly 1 argument');
   }
@@ -387,7 +414,7 @@ const lengthPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List primitive: list
  * Port from: primitive.cxx List::primitiveCall
  */
-const listPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const listPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   let result: ELObj = theNilObj;
 
   // Build list from right to left
@@ -402,7 +429,7 @@ const listPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List primitive: append
  * Port from: primitive.cxx Append::primitiveCall
  */
-const appendPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const appendPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     return theNilObj;
   }
@@ -463,7 +490,7 @@ const appendPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List primitive: reverse
  * Port from: primitive.cxx Reverse::primitiveCall
  */
-const reversePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const reversePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('reverse requires exactly 1 argument');
   }
@@ -487,7 +514,7 @@ const reversePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Type predicate: list?
  * Port from: primitive.cxx List::primitiveCall
  */
-const listPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const listPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('list? requires exactly 1 argument');
   }
@@ -499,7 +526,7 @@ const listPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Type predicate: string?
  * Port from: primitive.cxx String::primitiveCall
  */
-const stringPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('string? requires exactly 1 argument');
   }
@@ -511,7 +538,7 @@ const stringPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Type predicate: symbol?
  * Port from: primitive.cxx Symbol::primitiveCall
  */
-const symbolPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const symbolPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('symbol? requires exactly 1 argument');
   }
@@ -523,7 +550,7 @@ const symbolPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Type predicate: boolean?
  * Port from: primitive.cxx Boolean::primitiveCall
  */
-const booleanPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const booleanPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('boolean? requires exactly 1 argument');
   }
@@ -535,7 +562,7 @@ const booleanPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Type predicate: procedure?
  * Port from: primitive.cxx Procedure::primitiveCall
  */
-const procedurePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const procedurePredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('procedure? requires exactly 1 argument');
   }
@@ -547,7 +574,7 @@ const procedurePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Type predicate: real?
  * Port from: primitive.cxx RealP::primitiveCall
  */
-const realPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const realPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('real? requires exactly 1 argument');
   }
@@ -564,7 +591,7 @@ const realPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Type predicate: rational?
  * Port from: primitive.cxx RationalP::primitiveCall
  */
-const rationalPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const rationalPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('rational? requires exactly 1 argument');
   }
@@ -581,7 +608,7 @@ const rationalPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Type predicate: complex?
  * Port from: primitive.cxx ComplexP::primitiveCall
  */
-const complexPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const complexPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('complex? requires exactly 1 argument');
   }
@@ -594,7 +621,7 @@ const complexPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Equality primitive: eq?
  * Port from: primitive.cxx Eq::primitiveCall
  */
-const eqPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const eqPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('eq? requires exactly 2 arguments');
   }
@@ -607,7 +634,7 @@ const eqPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Equality primitive: eqv?
  * Port from: primitive.cxx Eqv::primitiveCall
  */
-const eqvPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const eqvPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('eqv? requires exactly 2 arguments');
   }
@@ -655,7 +682,7 @@ const eqvPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Equality primitive: equal?
  * Port from: primitive.cxx Equal::primitiveCall
  */
-const equalPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const equalPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('equal? requires exactly 2 arguments');
   }
@@ -710,7 +737,7 @@ const equalPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String primitive: string-length
  * Port from: primitive.cxx StringLength::primitiveCall
  */
-const stringLengthPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringLengthPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('string-length requires exactly 1 argument');
   }
@@ -727,7 +754,7 @@ const stringLengthPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String primitive: string-append
  * Port from: primitive.cxx StringAppend::primitiveCall
  */
-const stringAppendPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringAppendPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   let result = '';
 
   for (const arg of args) {
@@ -747,7 +774,7 @@ const stringAppendPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: abs
  * Port from: primitive.cxx Abs::primitiveCall
  */
-const absPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const absPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('abs requires exactly 1 argument');
   }
@@ -764,7 +791,7 @@ const absPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: quotient
  * Port from: primitive.cxx Quotient::primitiveCall
  */
-const quotientPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const quotientPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('quotient requires exactly 2 arguments');
   }
@@ -786,7 +813,7 @@ const quotientPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: remainder
  * Port from: primitive.cxx Remainder::primitiveCall
  */
-const remainderPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const remainderPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('remainder requires exactly 2 arguments');
   }
@@ -808,7 +835,7 @@ const remainderPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: modulo
  * Port from: primitive.cxx Modulo::primitiveCall
  */
-const moduloPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const moduloPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('modulo requires exactly 2 arguments');
   }
@@ -835,7 +862,7 @@ const moduloPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: floor
  * Port from: primitive.cxx Floor::primitiveCall
  */
-const floorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const floorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('floor requires exactly 1 argument');
   }
@@ -852,7 +879,7 @@ const floorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: ceiling
  * Port from: primitive.cxx Ceiling::primitiveCall
  */
-const ceilingPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const ceilingPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('ceiling requires exactly 1 argument');
   }
@@ -869,7 +896,7 @@ const ceilingPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: truncate
  * Port from: primitive.cxx Truncate::primitiveCall
  */
-const truncatePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const truncatePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('truncate requires exactly 1 argument');
   }
@@ -886,7 +913,7 @@ const truncatePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: round
  * Port from: primitive.cxx Round::primitiveCall
  */
-const roundPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const roundPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('round requires exactly 1 argument');
   }
@@ -903,7 +930,7 @@ const roundPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: sqrt
  * Port from: primitive.cxx Sqrt::primitiveCall
  */
-const sqrtPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const sqrtPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('sqrt requires exactly 1 argument');
   }
@@ -920,7 +947,7 @@ const sqrtPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: expt
  * Port from: primitive.cxx Expt::primitiveCall
  */
-const exptPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const exptPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('expt requires exactly 2 arguments');
   }
@@ -940,7 +967,7 @@ const exptPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: min
  * Port from: primitive.cxx Min::primitiveCall
  */
-const minPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const minPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     throw new Error('min requires at least 1 argument');
   }
@@ -968,7 +995,7 @@ const minPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: max
  * Port from: primitive.cxx Max::primitiveCall
  */
-const maxPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const maxPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     throw new Error('max requires at least 1 argument');
   }
@@ -998,7 +1025,7 @@ const maxPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric predicate: integer?
  * Port from: primitive.cxx IntegerP::primitiveCall
  */
-const integerPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const integerPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('integer? requires exactly 1 argument');
   }
@@ -1015,7 +1042,7 @@ const integerPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric predicate: exact?
  * Port from: primitive.cxx ExactP::primitiveCall
  */
-const exactPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const exactPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('exact? requires exactly 1 argument');
   }
@@ -1032,7 +1059,7 @@ const exactPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric predicate: inexact?
  * Port from: primitive.cxx InexactP::primitiveCall
  */
-const inexactPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const inexactPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('inexact? requires exactly 1 argument');
   }
@@ -1049,7 +1076,7 @@ const inexactPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric predicate: zero?
  * Port from: primitive.cxx ZeroP::primitiveCall
  */
-const zeroPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const zeroPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('zero? requires exactly 1 argument');
   }
@@ -1066,7 +1093,7 @@ const zeroPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric predicate: positive?
  * Port from: primitive.cxx PositiveP::primitiveCall
  */
-const positivePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const positivePredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('positive? requires exactly 1 argument');
   }
@@ -1083,7 +1110,7 @@ const positivePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric predicate: negative?
  * Port from: primitive.cxx NegativeP::primitiveCall
  */
-const negativePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const negativePredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('negative? requires exactly 1 argument');
   }
@@ -1100,7 +1127,7 @@ const negativePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric predicate: odd?
  * Port from: primitive.cxx OddP::primitiveCall
  */
-const oddPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const oddPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('odd? requires exactly 1 argument');
   }
@@ -1121,7 +1148,7 @@ const oddPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric predicate: even?
  * Port from: primitive.cxx EvenP::primitiveCall
  */
-const evenPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const evenPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('even? requires exactly 1 argument');
   }
@@ -1144,7 +1171,7 @@ const evenPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric conversion: exact->inexact
  * Port from: primitive.cxx ExactToInexact::primitiveCall
  */
-const exactToInexactPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const exactToInexactPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('exact->inexact requires exactly 1 argument');
   }
@@ -1161,7 +1188,7 @@ const exactToInexactPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric conversion: inexact->exact
  * Port from: primitive.cxx InexactToExact::primitiveCall
  */
-const inexactToExactPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const inexactToExactPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('inexact->exact requires exactly 1 argument');
   }
@@ -1184,7 +1211,7 @@ const inexactToExactPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: gcd
  * Port from: primitive.cxx Gcd::primitiveCall
  */
-const gcdPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const gcdPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     return makeNumber(0, true);
   }
@@ -1219,7 +1246,7 @@ const gcdPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Arithmetic primitive: lcm
  * Port from: primitive.cxx Lcm::primitiveCall
  */
-const lcmPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const lcmPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     return makeNumber(1, true);
   }
@@ -1263,7 +1290,7 @@ const lcmPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * numerator returns the number itself for integers, or an approximation
  * for floating-point numbers.
  */
-const numeratorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const numeratorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('numerator requires exactly 1 argument');
   }
@@ -1308,7 +1335,7 @@ const numeratorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * denominator returns 1 for integers, or an approximation for
  * floating-point numbers.
  */
-const denominatorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const denominatorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('denominator requires exactly 1 argument');
   }
@@ -1350,7 +1377,7 @@ const denominatorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns the simplest rational number within the given tolerance of x.
  */
-const rationalizePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const rationalizePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('rationalize requires exactly 2 arguments');
   }
@@ -1400,7 +1427,7 @@ const rationalizePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Math function: exp
  * Port from: primitive.cxx Exp::primitiveCall
  */
-const expPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const expPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('exp requires exactly 1 argument');
   }
@@ -1417,7 +1444,7 @@ const expPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Math function: log
  * Port from: primitive.cxx Log::primitiveCall
  */
-const logPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const logPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('log requires exactly 1 argument');
   }
@@ -1434,7 +1461,7 @@ const logPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Math function: sin
  * Port from: primitive.cxx Sin::primitiveCall
  */
-const sinPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const sinPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('sin requires exactly 1 argument');
   }
@@ -1451,7 +1478,7 @@ const sinPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Math function: cos
  * Port from: primitive.cxx Cos::primitiveCall
  */
-const cosPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cosPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cos requires exactly 1 argument');
   }
@@ -1468,7 +1495,7 @@ const cosPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Math function: tan
  * Port from: primitive.cxx Tan::primitiveCall
  */
-const tanPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const tanPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('tan requires exactly 1 argument');
   }
@@ -1485,7 +1512,7 @@ const tanPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Math function: asin
  * Port from: primitive.cxx Asin::primitiveCall
  */
-const asinPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const asinPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('asin requires exactly 1 argument');
   }
@@ -1502,7 +1529,7 @@ const asinPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Math function: acos
  * Port from: primitive.cxx Acos::primitiveCall
  */
-const acosPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const acosPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('acos requires exactly 1 argument');
   }
@@ -1519,7 +1546,7 @@ const acosPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Math function: atan
  * Port from: primitive.cxx Atan::primitiveCall
  */
-const atanPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const atanPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 1 || args.length > 2) {
     throw new Error('atan requires 1 or 2 arguments');
   }
@@ -1547,7 +1574,7 @@ const atanPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String primitive: string-ref
  * Port from: primitive.cxx StringRef::primitiveCall
  */
-const stringRefPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringRefPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('string-ref requires exactly 2 arguments');
   }
@@ -1570,7 +1597,7 @@ const stringRefPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String primitive: substring
  * Port from: primitive.cxx Substring::primitiveCall
  */
-const substringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const substringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 3) {
     throw new Error('substring requires exactly 3 arguments');
   }
@@ -1599,7 +1626,7 @@ const substringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String primitive: string=?
  * Port from: primitive.cxx StringEqual::primitiveCall
  */
-const stringEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('string=? requires at least 2 arguments');
   }
@@ -1626,7 +1653,7 @@ const stringEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String primitive: string<?
  * Port from: primitive.cxx StringLess::primitiveCall
  */
-const stringLessPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringLessPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('string<? requires at least 2 arguments');
   }
@@ -1651,7 +1678,7 @@ const stringLessPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Conversion primitive: number->string
  * Port from: primitive.cxx NumberToString::primitiveCall
  */
-const numberToStringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const numberToStringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('number->string requires exactly 1 argument');
   }
@@ -1668,7 +1695,7 @@ const numberToStringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Conversion primitive: string->number
  * Port from: primitive.cxx StringToNumber::primitiveCall
  */
-const stringToNumberPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringToNumberPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('string->number requires exactly 1 argument');
   }
@@ -1691,7 +1718,7 @@ const stringToNumberPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Conversion primitive: symbol->string
  * Port from: primitive.cxx SymbolToString::primitiveCall
  */
-const symbolToStringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const symbolToStringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('symbol->string requires exactly 1 argument');
   }
@@ -1708,7 +1735,7 @@ const symbolToStringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Conversion primitive: string->symbol
  * Port from: primitive.cxx StringToSymbol::primitiveCall
  */
-const stringToSymbolPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringToSymbolPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('string->symbol requires exactly 1 argument');
   }
@@ -1727,7 +1754,7 @@ const stringToSymbolPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List search: member
  * Port from: primitive.cxx Member::primitiveCall
  */
-const memberPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const memberPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('member requires exactly 2 arguments');
   }
@@ -1782,7 +1809,7 @@ const memberPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List search: memq
  * Port from: primitive.cxx Memq::primitiveCall
  */
-const memqPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const memqPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('memq requires exactly 2 arguments');
   }
@@ -1813,7 +1840,7 @@ const memqPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List search: memv
  * Port from: primitive.cxx Memv::primitiveCall
  */
-const memvPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const memvPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('memv requires exactly 2 arguments');
   }
@@ -1862,7 +1889,7 @@ const memvPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List search: assoc
  * Port from: primitive.cxx Assoc::primitiveCall
  */
-const assocPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const assocPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('assoc requires exactly 2 arguments');
   }
@@ -1921,7 +1948,7 @@ const assocPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List search: assq
  * Port from: primitive.cxx Assq::primitiveCall
  */
-const assqPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const assqPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('assq requires exactly 2 arguments');
   }
@@ -1956,7 +1983,7 @@ const assqPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List search: assv
  * Port from: primitive.cxx Assv::primitiveCall
  */
-const assvPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const assvPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('assv requires exactly 2 arguments');
   }
@@ -2011,7 +2038,7 @@ const assvPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Vector constructor: make-vector
  * Port from: primitive.cxx MakeVector::primitiveCall
  */
-const makeVectorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const makeVectorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 1 || args.length > 2) {
     throw new Error('make-vector requires 1 or 2 arguments');
   }
@@ -2035,7 +2062,7 @@ const makeVectorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Vector constructor: vector
  * Port from: primitive.cxx Vector::primitiveCall
  */
-const vectorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const vectorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   return makeVector(args);
 };
 
@@ -2043,7 +2070,7 @@ const vectorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Vector accessor: vector-ref
  * Port from: primitive.cxx VectorRef::primitiveCall
  */
-const vectorRefPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const vectorRefPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('vector-ref requires exactly 2 arguments');
   }
@@ -2065,7 +2092,7 @@ const vectorRefPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Vector mutator: vector-set!
  * Port from: primitive.cxx VectorSet::primitiveCall
  */
-const vectorSetPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const vectorSetPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 3) {
     throw new Error('vector-set! requires exactly 3 arguments');
   }
@@ -2089,7 +2116,7 @@ const vectorSetPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Vector length: vector-length
  * Port from: primitive.cxx VectorLength::primitiveCall
  */
-const vectorLengthPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const vectorLengthPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('vector-length requires exactly 1 argument');
   }
@@ -2106,7 +2133,7 @@ const vectorLengthPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Vector predicate: vector?
  * Port from: primitive.cxx VectorP::primitiveCall
  */
-const vectorPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const vectorPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('vector? requires exactly 1 argument');
   }
@@ -2118,7 +2145,7 @@ const vectorPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Vector mutator: vector-fill!
  * Port from: primitive.cxx VectorFill::primitiveCall
  */
-const vectorFillPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const vectorFillPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('vector-fill! requires exactly 2 arguments');
   }
@@ -2142,7 +2169,7 @@ const vectorFillPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character predicate: char?
  * Port from: primitive.cxx CharP::primitiveCall
  */
-const charPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('char? requires exactly 1 argument');
   }
@@ -2154,7 +2181,7 @@ const charPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character comparison: char=?
  * Port from: primitive.cxx CharEqual::primitiveCall
  */
-const charEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('char=? requires at least 2 arguments');
   }
@@ -2181,7 +2208,7 @@ const charEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character comparison: char<?
  * Port from: primitive.cxx CharLess::primitiveCall
  */
-const charLessPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charLessPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('char<? requires at least 2 arguments');
   }
@@ -2204,7 +2231,7 @@ const charLessPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character conversion: char-upcase
  * Port from: primitive.cxx CharUpcase::primitiveCall
  */
-const charUpcasePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charUpcasePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('char-upcase requires exactly 1 argument');
   }
@@ -2221,7 +2248,7 @@ const charUpcasePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character conversion: char-downcase
  * Port from: primitive.cxx CharDowncase::primitiveCall
  */
-const charDowncasePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charDowncasePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('char-downcase requires exactly 1 argument');
   }
@@ -2238,7 +2265,7 @@ const charDowncasePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character conversion: char->integer
  * Port from: primitive.cxx CharToInteger::primitiveCall
  */
-const charToIntegerPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charToIntegerPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('char->integer requires exactly 1 argument');
   }
@@ -2255,7 +2282,7 @@ const charToIntegerPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character conversion: integer->char
  * Port from: primitive.cxx IntegerToChar::primitiveCall
  */
-const integerToCharPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const integerToCharPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('integer->char requires exactly 1 argument');
   }
@@ -2278,7 +2305,7 @@ const integerToCharPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: list-ref
  * Port from: primitive.cxx ListRef::primitiveCall
  */
-const listRefPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const listRefPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('list-ref requires exactly 2 arguments');
   }
@@ -2314,7 +2341,7 @@ const listRefPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: list-tail
  * Port from: primitive.cxx ListTail::primitiveCall
  */
-const listTailPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const listTailPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('list-tail requires exactly 2 arguments');
   }
@@ -2345,7 +2372,7 @@ const listTailPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Higher-order: map
  * Port from: primitive.cxx Map::primitiveCall
  */
-const mapPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const mapPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('map requires at least 2 arguments');
   }
@@ -2395,8 +2422,10 @@ const mapPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
       lists[i] = pair.cdr;
     }
 
-    // Apply procedure
-    const value = proc.callPrimitive(elements);
+    // Apply procedure (works for both primitives and closures)
+    const value = proc.isPrimitive()
+      ? proc.callPrimitive(elements, vm)
+      : callClosure(proc, elements, vm);
     result.push(value);
   }
 };
@@ -2405,7 +2434,7 @@ const mapPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Higher-order: for-each
  * Port from: primitive.cxx ForEach::primitiveCall
  */
-const forEachPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const forEachPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('for-each requires at least 2 arguments');
   }
@@ -2450,7 +2479,11 @@ const forEachPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
     }
 
     // Apply procedure (ignore result)
-    proc.callPrimitive(elements);
+    if (proc.isPrimitive()) {
+      proc.callPrimitive(elements, vm);
+    } else {
+      callClosure(proc, elements, vm);
+    }
   }
 };
 
@@ -2458,7 +2491,7 @@ const forEachPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Higher-order: apply
  * Port from: primitive.cxx Apply::primitiveCall
  */
-const applyPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const applyPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('apply requires at least 2 arguments');
   }
@@ -2487,7 +2520,9 @@ const applyPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
     list = pair.cdr;
   }
 
-  return proc.callPrimitive(argsList);
+  return proc.isPrimitive()
+    ? proc.callPrimitive(argsList, vm)
+    : callClosure(proc, argsList, vm);
 };
 
 // ============ More List Utilities ============
@@ -2496,7 +2531,7 @@ const applyPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List utility: last
  * Port from: Common Lisp/Scheme extension
  */
-const lastPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const lastPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('last requires exactly 1 argument');
   }
@@ -2523,7 +2558,7 @@ const lastPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List utility: butlast
  * Port from: Common Lisp extension
  */
-const butlastPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const butlastPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('butlast requires exactly 1 argument');
   }
@@ -2567,7 +2602,7 @@ const butlastPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List utility: nthcdr
  * Port from: Common Lisp
  */
-const nthcdrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const nthcdrPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('nthcdr requires exactly 2 arguments');
   }
@@ -2606,7 +2641,7 @@ const nthcdrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Note: In OpenJade this writes to output port.
  * For now, this is a stub that returns unspecified.
  */
-const displayPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const displayPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 1 || args.length > 2) {
     throw new Error('display requires 1 or 2 arguments');
   }
@@ -2623,7 +2658,7 @@ const displayPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Note: In OpenJade this writes to output port with quotes.
  * For now, this is a stub that returns unspecified.
  */
-const writePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const writePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 1 || args.length > 2) {
     throw new Error('write requires 1 or 2 arguments');
   }
@@ -2640,7 +2675,7 @@ const writePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Note: In OpenJade this writes a newline to output port.
  * For now, this is a stub that returns unspecified.
  */
-const newlinePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const newlinePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length > 1) {
     throw new Error('newline requires 0 or 1 arguments');
   }
@@ -2658,7 +2693,7 @@ const newlinePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns #f for now since we don't have port objects yet
  */
-const inputPortPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const inputPortPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('input-port? requires exactly 1 argument');
   }
@@ -2672,7 +2707,7 @@ const inputPortPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns #f for now since we don't have port objects yet
  */
-const outputPortPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const outputPortPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('output-port? requires exactly 1 argument');
   }
@@ -2686,7 +2721,7 @@ const outputPortPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String case conversion: string-upcase
  * Port from: primitive.cxx StringUpcase::primitiveCall
  */
-const stringUpcasePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringUpcasePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('string-upcase requires exactly 1 argument');
   }
@@ -2703,7 +2738,7 @@ const stringUpcasePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String case conversion: string-downcase
  * Port from: primitive.cxx StringDowncase::primitiveCall
  */
-const stringDowncasePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringDowncasePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('string-downcase requires exactly 1 argument');
   }
@@ -2725,7 +2760,7 @@ const stringDowncasePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Destructively reverses a list. In our implementation, we return a new list
  * since JavaScript doesn't have true mutable pairs in the same way.
  */
-const reverseInPlacePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const reverseInPlacePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('reverse! requires exactly 1 argument');
   }
@@ -2753,7 +2788,7 @@ const reverseInPlacePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Creates a shallow copy of a list
  */
-const listCopyPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const listCopyPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('list-copy requires exactly 1 argument');
   }
@@ -2793,7 +2828,7 @@ const listCopyPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Stub for now - we don't have EOF objects yet
  */
-const eofObjectPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const eofObjectPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('eof-object? requires exactly 1 argument');
   }
@@ -2809,7 +2844,7 @@ const eofObjectPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Creates a list of N elements, optionally filled with a value
  */
-const makeListPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const makeListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 1 || args.length > 2) {
     throw new Error('make-list requires 1 or 2 arguments');
   }
@@ -2840,7 +2875,7 @@ const makeListPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Creates a list of integers from 0 to n-1
  */
-const iotaPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const iotaPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 1 || args.length > 3) {
     throw new Error('iota requires 1, 2, or 3 arguments');
   }
@@ -2873,7 +2908,7 @@ const iotaPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Creates a copy of a vector
  */
-const vectorCopyPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const vectorCopyPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('vector-copy requires exactly 1 argument');
   }
@@ -2894,7 +2929,7 @@ const vectorCopyPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Math operation: square
  * Port from: OpenJade extensions
  */
-const squarePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const squarePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('square requires exactly 1 argument');
   }
@@ -2913,7 +2948,7 @@ const squarePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Boolean operation: boolean=?
  * Port from: OpenJade extensions
  */
-const booleanEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const booleanEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('boolean=? requires at least 2 arguments');
   }
@@ -2937,7 +2972,7 @@ const booleanEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Boolean operation: symbol=?
  * Port from: OpenJade extensions
  */
-const symbolEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const symbolEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('symbol=? requires at least 2 arguments');
   }
@@ -2963,7 +2998,7 @@ const symbolEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Number operation: number->string with radix
  * Extended version supporting radix (base) argument
  */
-const numberToStringRadixPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const numberToStringRadixPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 1 || args.length > 2) {
     throw new Error('number->string requires 1 or 2 arguments');
   }
@@ -3004,7 +3039,7 @@ const numberToStringRadixPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj =
  *
  * Returns a list containing only elements that satisfy the predicate
  */
-const filterPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const filterPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('filter requires exactly 2 arguments');
   }
@@ -3025,7 +3060,7 @@ const filterPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Call predicate
     const testResult = pred.isPrimitive()
-      ? pred.callPrimitive([pair.car])
+      ? pred.callPrimitive([pair.car], vm)
       : pair.car; // Simplified for non-primitive functions
 
     if (testResult.isTrue()) {
@@ -3050,7 +3085,7 @@ const filterPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns a list with elements that don't satisfy the predicate
  */
-const removePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const removePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('remove requires exactly 2 arguments');
   }
@@ -3071,7 +3106,7 @@ const removePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Call predicate
     const testResult = pred.isPrimitive()
-      ? pred.callPrimitive([pair.car])
+      ? pred.callPrimitive([pair.car], vm)
       : pair.car;
 
     if (!testResult.isTrue()) {
@@ -3098,7 +3133,7 @@ const removePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Folds a list from the left
  */
-const foldLeftPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const foldLeftPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 3) {
     throw new Error('fold-left requires exactly 3 arguments');
   }
@@ -3119,7 +3154,7 @@ const foldLeftPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Call function with accumulator and current element
     if (func.isPrimitive()) {
-      accumulator = func.callPrimitive([accumulator, pair.car]);
+      accumulator = func.callPrimitive([accumulator, pair.car], vm);
     }
 
     list = pair.cdr;
@@ -3134,7 +3169,7 @@ const foldLeftPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Folds a list from the right
  */
-const foldRightPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const foldRightPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 3) {
     throw new Error('fold-right requires exactly 3 arguments');
   }
@@ -3162,7 +3197,7 @@ const foldRightPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   let result = accumulator;
   for (let i = elements.length - 1; i >= 0; i--) {
     if (func.isPrimitive()) {
-      result = func.callPrimitive([elements[i], result]);
+      result = func.callPrimitive([elements[i], result], vm);
     }
   }
 
@@ -3177,7 +3212,7 @@ const foldRightPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns the first n elements of a list
  */
-const takePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const takePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('take requires exactly 2 arguments');
   }
@@ -3225,7 +3260,7 @@ const takePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns the list without the first n elements
  */
-const dropPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const dropPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('drop requires exactly 2 arguments');
   }
@@ -3265,7 +3300,7 @@ const dropPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Splits a list at position n, returning both parts as a pair
  */
-const splitAtPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const splitAtPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('split-at requires exactly 2 arguments');
   }
@@ -3314,7 +3349,7 @@ const splitAtPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns the longest initial prefix whose elements all satisfy predicate
  */
-const takeWhilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const takeWhilePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('take-while requires exactly 2 arguments');
   }
@@ -3335,7 +3370,7 @@ const takeWhilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Call predicate
     const testResult = pred.isPrimitive()
-      ? pred.callPrimitive([pair.car])
+      ? pred.callPrimitive([pair.car], vm)
       : pair.car;
 
     if (!testResult.isTrue()) {
@@ -3361,7 +3396,7 @@ const takeWhilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Drops the longest initial prefix whose elements all satisfy predicate
  */
-const dropWhilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const dropWhilePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('drop-while requires exactly 2 arguments');
   }
@@ -3381,7 +3416,7 @@ const dropWhilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Call predicate
     const testResult = pred.isPrimitive()
-      ? pred.callPrimitive([pair.car])
+      ? pred.callPrimitive([pair.car], vm)
       : pair.car;
 
     if (!testResult.isTrue()) {
@@ -3402,7 +3437,7 @@ const dropWhilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Tests if any element satisfies the predicate
  */
-const anyPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const anyPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('any? requires exactly 2 arguments');
   }
@@ -3422,7 +3457,7 @@ const anyPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Call predicate
     const testResult = pred.isPrimitive()
-      ? pred.callPrimitive([pair.car])
+      ? pred.callPrimitive([pair.car], vm)
       : pair.car;
 
     if (testResult.isTrue()) {
@@ -3441,7 +3476,7 @@ const anyPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Tests if all elements satisfy the predicate
  */
-const everyPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const everyPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('every? requires exactly 2 arguments');
   }
@@ -3462,7 +3497,7 @@ const everyPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Call predicate
     const testResult = pred.isPrimitive()
-      ? pred.callPrimitive([pair.car])
+      ? pred.callPrimitive([pair.car], vm)
       : pair.car;
 
     if (!testResult.isTrue()) {
@@ -3482,7 +3517,7 @@ const everyPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns the first element that satisfies the predicate, or #f
  */
-const findPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const findPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('find requires exactly 2 arguments');
   }
@@ -3502,7 +3537,7 @@ const findPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Call predicate
     const testResult = pred.isPrimitive()
-      ? pred.callPrimitive([pair.car])
+      ? pred.callPrimitive([pair.car], vm)
       : pair.car;
 
     if (testResult.isTrue()) {
@@ -3521,7 +3556,7 @@ const findPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Counts elements that satisfy the predicate
  */
-const countPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const countPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('count requires exactly 2 arguments');
   }
@@ -3542,7 +3577,7 @@ const countPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Call predicate
     const testResult = pred.isPrimitive()
-      ? pred.callPrimitive([pair.car])
+      ? pred.callPrimitive([pair.car], vm)
       : pair.car;
 
     if (testResult.isTrue()) {
@@ -3562,7 +3597,7 @@ const countPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Splits a list into two lists based on a predicate
  * Returns (values satisfied unsatisfied)
  */
-const partitionPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const partitionPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('partition requires exactly 2 arguments');
   }
@@ -3584,7 +3619,7 @@ const partitionPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Call predicate
     const testResult = pred.isPrimitive()
-      ? pred.callPrimitive([pair.car])
+      ? pred.callPrimitive([pair.car], vm)
       : pair.car;
 
     if (testResult.isTrue()) {
@@ -3617,7 +3652,7 @@ const partitionPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns the last pair in a list (not the last element)
  */
-const lastPairPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const lastPairPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('last-pair requires exactly 1 argument');
   }
@@ -3651,7 +3686,7 @@ const lastPairPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Combines multiple lists into a list of lists
  * (zip '(1 2) '(a b)) => ((1 a) (2 b))
  */
-const zipPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const zipPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     return theNilObj;
   }
@@ -3702,7 +3737,7 @@ const zipPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Maps a function over a list and appends the results
  */
-const appendMapPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const appendMapPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('append-map requires exactly 2 arguments');
   }
@@ -3723,7 +3758,7 @@ const appendMapPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Call function
     const result = func.isPrimitive()
-      ? func.callPrimitive([pair.car])
+      ? func.callPrimitive([pair.car], vm)
       : pair.car;
 
     results.push(result);
@@ -3763,7 +3798,7 @@ const appendMapPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Tests if a number is finite (not NaN or infinite)
  */
-const finitePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const finitePredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('finite? requires exactly 1 argument');
   }
@@ -3782,7 +3817,7 @@ const finitePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Tests if a number is infinite
  */
-const infinitePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const infinitePredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('infinite? requires exactly 1 argument');
   }
@@ -3801,7 +3836,7 @@ const infinitePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Tests if a number is NaN (Not a Number)
  */
-const nanPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const nanPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('nan? requires exactly 1 argument');
   }
@@ -3822,7 +3857,7 @@ const nanPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Mutates the car of a pair
  */
-const setCarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const setCarPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('set-car! requires exactly 2 arguments');
   }
@@ -3844,7 +3879,7 @@ const setCarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Mutates the cdr of a pair
  */
-const setCdrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const setCdrPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('set-cdr! requires exactly 2 arguments');
   }
@@ -3866,7 +3901,7 @@ const setCdrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Sets the element at index in a list
  */
-const listSetPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const listSetPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 3) {
     throw new Error('list-set! requires exactly 3 arguments');
   }
@@ -3913,7 +3948,7 @@ const listSetPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Removes all elements equal? to x from the list
  */
-const deletePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const deletePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2 || args.length > 3) {
     throw new Error('delete requires 2 or 3 arguments');
   }
@@ -3953,7 +3988,7 @@ const deletePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Removes duplicate elements from the list
  */
-const deleteDuplicatesPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const deleteDuplicatesPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('delete-duplicates requires exactly 1 argument');
   }
@@ -4000,7 +4035,7 @@ const deleteDuplicatesPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Concatenates a list of lists into a single list
  */
-const concatenatePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const concatenatePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('concatenate requires exactly 1 argument');
   }
@@ -4042,7 +4077,7 @@ const concatenatePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List operation: flatten
  * Flattens a nested list structure into a single list
  */
-const flattenPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const flattenPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('flatten requires exactly 1 argument');
   }
@@ -4079,7 +4114,7 @@ const flattenPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Conversion: string->vector
  * Converts a string to a vector of characters
  */
-const stringToVectorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringToVectorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('string->vector requires exactly 1 argument');
   }
@@ -4101,7 +4136,7 @@ const stringToVectorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Conversion: vector->string
  * Converts a vector of characters to a string
  */
-const vectorToStringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const vectorToStringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('vector->string requires exactly 1 argument');
   }
@@ -4200,7 +4235,7 @@ function areEqual(obj1: ELObj, obj2: ELObj): boolean {
  *
  * Returns #t if argument is an empty list
  */
-const nullListPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const nullListPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('null-list? requires exactly 1 argument');
   }
@@ -4214,7 +4249,7 @@ const nullListPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns #t if argument is a proper list (finite, nil-terminated)
  */
-const properListPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const properListPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('proper-list? requires exactly 1 argument');
   }
@@ -4248,7 +4283,7 @@ const properListPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns #t if argument is a circular list
  */
-const circularListPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const circularListPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('circular-list? requires exactly 1 argument');
   }
@@ -4282,7 +4317,7 @@ const circularListPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns #t if argument is a finite, non-nil-terminated (dotted) list
  */
-const dottedListPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const dottedListPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('dotted-list? requires exactly 1 argument');
   }
@@ -4314,7 +4349,7 @@ const dottedListPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List predicate: not-pair?
  * Opposite of pair?
  */
-const notPairPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const notPairPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('not-pair? requires exactly 1 argument');
   }
@@ -4328,7 +4363,7 @@ const notPairPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns the index of the first element that satisfies predicate
  */
-const listIndexPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const listIndexPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('list-index requires exactly 2 arguments');
   }
@@ -4349,7 +4384,7 @@ const listIndexPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Call predicate
     const testResult = pred.isPrimitive()
-      ? pred.callPrimitive([pair.car])
+      ? pred.callPrimitive([pair.car], vm)
       : pair.car;
 
     if (testResult.isTrue()) {
@@ -4369,7 +4404,7 @@ const listIndexPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns the last n elements of the list
  */
-const takeRightPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const takeRightPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('take-right requires exactly 2 arguments');
   }
@@ -4417,7 +4452,7 @@ const takeRightPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Returns all but the last n elements of the list
  */
-const dropRightPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const dropRightPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('drop-right requires exactly 2 arguments');
   }
@@ -4465,7 +4500,7 @@ const dropRightPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Bitwise operation: bitwise-and
  * Port from: R6RS bitwise-and
  */
-const bitwiseAndPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const bitwiseAndPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     return makeNumber(-1, true); // All bits set
   }
@@ -4489,7 +4524,7 @@ const bitwiseAndPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Bitwise operation: bitwise-ior (inclusive or)
  * Port from: R6RS bitwise-ior
  */
-const bitwiseIorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const bitwiseIorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     return makeNumber(0, true);
   }
@@ -4513,7 +4548,7 @@ const bitwiseIorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Bitwise operation: bitwise-xor
  * Port from: R6RS bitwise-xor
  */
-const bitwiseXorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const bitwiseXorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     return makeNumber(0, true);
   }
@@ -4537,7 +4572,7 @@ const bitwiseXorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Bitwise operation: bitwise-not
  * Port from: R6RS bitwise-not
  */
-const bitwiseNotPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const bitwiseNotPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('bitwise-not requires exactly 1 argument');
   }
@@ -4559,7 +4594,7 @@ const bitwiseNotPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Shifts n left by count bits (or right if count is negative)
  */
-const arithmeticShiftPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const arithmeticShiftPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('arithmetic-shift requires exactly 2 arguments');
   }
@@ -4593,7 +4628,7 @@ const arithmeticShiftPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Math operation: quotient+remainder
  * Returns both quotient and remainder as a list
  */
-const quotientRemainderPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const quotientRemainderPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('quotient+remainder requires exactly 2 arguments');
   }
@@ -4628,7 +4663,7 @@ const quotientRemainderPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => 
  * String operation: string-null?
  * Tests if a string is empty
  */
-const stringNullPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringNullPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('string-null? requires exactly 1 argument');
   }
@@ -4645,7 +4680,7 @@ const stringNullPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String operation: string-contains?
  * Tests if string contains substring
  */
-const stringContainsPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringContainsPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('string-contains? requires exactly 2 arguments');
   }
@@ -4664,7 +4699,7 @@ const stringContainsPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String operation: string-prefix?
  * Tests if string starts with prefix
  */
-const stringPrefixPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringPrefixPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('string-prefix? requires exactly 2 arguments');
   }
@@ -4683,7 +4718,7 @@ const stringPrefixPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String operation: string-suffix?
  * Tests if string ends with suffix
  */
-const stringSuffixPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringSuffixPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('string-suffix? requires exactly 2 arguments');
   }
@@ -4702,7 +4737,7 @@ const stringSuffixPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String operation: string-index
  * Returns the index of the first occurrence of char in string
  */
-const stringIndexPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringIndexPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('string-index requires exactly 2 arguments');
   }
@@ -4722,7 +4757,7 @@ const stringIndexPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String operation: string-reverse
  * Returns a reversed copy of the string
  */
-const stringReversePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringReversePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('string-reverse requires exactly 1 argument');
   }
@@ -4739,7 +4774,7 @@ const stringReversePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String operation: string-trim
  * Removes whitespace from both ends of string
  */
-const stringTrimPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringTrimPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('string-trim requires exactly 1 argument');
   }
@@ -4758,7 +4793,7 @@ const stringTrimPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric operation: clamp
  * Clamps a value between min and max
  */
-const clampPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const clampPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 3) {
     throw new Error('clamp requires exactly 3 arguments');
   }
@@ -4787,7 +4822,7 @@ const clampPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric operation: sgn (sign)
  * Returns -1, 0, or 1 depending on sign of number
  */
-const sgnPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const sgnPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('sgn requires exactly 1 argument');
   }
@@ -4806,7 +4841,7 @@ const sgnPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric operation: exact-integer?
  * Tests if argument is an exact integer
  */
-const exactIntegerPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const exactIntegerPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('exact-integer? requires exactly 1 argument');
   }
@@ -4823,7 +4858,7 @@ const exactIntegerPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric operation: make-rectangular
  * Creates a complex number (stub - returns first arg)
  */
-const makeRectangularPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const makeRectangularPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('make-rectangular requires exactly 2 arguments');
   }
@@ -4843,7 +4878,7 @@ const makeRectangularPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric operation: make-polar
  * Creates a complex number from polar coordinates (stub)
  */
-const makePolarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const makePolarPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('make-polar requires exactly 2 arguments');
   }
@@ -4863,7 +4898,7 @@ const makePolarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric operation: real-part
  * Returns real part of number (stub - returns number itself)
  */
-const realPartPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const realPartPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('real-part requires exactly 1 argument');
   }
@@ -4880,7 +4915,7 @@ const realPartPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric operation: imag-part
  * Returns imaginary part of number (stub - returns 0)
  */
-const imagPartPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const imagPartPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('imag-part requires exactly 1 argument');
   }
@@ -4898,7 +4933,7 @@ const imagPartPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric operation: magnitude
  * Returns magnitude of number (stub - returns abs)
  */
-const magnitudePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const magnitudePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('magnitude requires exactly 1 argument');
   }
@@ -4915,7 +4950,7 @@ const magnitudePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Numeric operation: angle
  * Returns angle of number (stub - returns 0 or pi)
  */
-const anglePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const anglePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('angle requires exactly 1 argument');
   }
@@ -4935,7 +4970,7 @@ const anglePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List operation: circular-list
  * Creates a circular list (simplified - creates proper list)
  */
-const circularListPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const circularListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     return theNilObj;
   }
@@ -4954,7 +4989,7 @@ const circularListPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List operation: append!
  * Destructive append (mutates last cdr of first list)
  */
-const appendInPlacePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const appendInPlacePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     return theNilObj;
   }
@@ -4967,7 +5002,7 @@ const appendInPlacePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   let first = args[0];
   if (first.asNil()) {
     // If first is nil, return append of remaining lists
-    return appendInPlacePrimitive(args.slice(1));
+    return appendInPlacePrimitive(args.slice(1), vm);
   }
 
   let current = first;
@@ -4984,7 +5019,7 @@ const appendInPlacePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
   if (lastPair) {
     // Mutate the cdr of the last pair
-    lastPair.cdr = appendInPlacePrimitive(args.slice(1));
+    lastPair.cdr = appendInPlacePrimitive(args.slice(1), vm);
   }
 
   return first;
@@ -5000,7 +5035,7 @@ const appendInPlacePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List operation: lset-union
  * Union of lists (treating them as sets)
  */
-const lsetUnionPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const lsetUnionPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     return theNilObj;
   }
@@ -5047,7 +5082,7 @@ const lsetUnionPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List operation: lset-intersection
  * Intersection of two lists (treating them as sets)
  */
-const lsetIntersectionPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const lsetIntersectionPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     return theNilObj;
   }
@@ -5108,7 +5143,7 @@ const lsetIntersectionPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Utility: identity
  * Returns its argument unchanged
  */
-const identityPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const identityPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('identity requires exactly 1 argument');
   }
@@ -5122,7 +5157,7 @@ const identityPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Note: Full implementation would support multiple return values.
  * For now, single value implementation.
  */
-const valuesPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const valuesPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length === 0) {
     return theNilObj;
   }
@@ -5143,7 +5178,7 @@ const valuesPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Note: Simplified implementation for single values.
  */
-const callWithValuesPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const callWithValuesPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('call-with-values requires exactly 2 arguments');
   }
@@ -5155,7 +5190,7 @@ const callWithValuesPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   }
 
   // Call producer with no arguments
-  const values = producer.callPrimitive([]);
+  const values = producer.callPrimitive([], vm);
 
   // If values is a list, unpack it
   const valuesList: ELObj[] = [];
@@ -5168,11 +5203,11 @@ const callWithValuesPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
   // If we didn't unpack anything, it's a single value
   if (valuesList.length === 0) {
-    return consumer.callPrimitive([values]);
+    return consumer.callPrimitive([values], vm);
   }
 
   // Call consumer with the values
-  return consumer.callPrimitive(valuesList);
+  return consumer.callPrimitive(valuesList, vm);
 };
 
 // ============ Error Handling ============
@@ -5181,7 +5216,7 @@ const callWithValuesPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Error handling: error
  * Port from: primitive.cxx Error::primitiveCall
  */
-const errorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const errorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 1) {
     throw new Error('error requires at least 1 argument');
   }
@@ -5218,7 +5253,7 @@ const errorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Constructs a list by repeatedly applying a function
  * (unfold stop? mapper successor seed [tail-gen])
  */
-const unfoldPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const unfoldPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 4 || args.length > 5) {
     throw new Error('unfold requires 4 or 5 arguments');
   }
@@ -5240,7 +5275,7 @@ const unfoldPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   while (true) {
     // Check stop condition
     const shouldStop = stopPred.isPrimitive()
-      ? stopPred.callPrimitive([seed])
+      ? stopPred.callPrimitive([seed], vm)
       : seed;
 
     if (shouldStop.isTrue()) {
@@ -5249,20 +5284,20 @@ const unfoldPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Map the seed to an element
     const element = mapper.isPrimitive()
-      ? mapper.callPrimitive([seed])
+      ? mapper.callPrimitive([seed], vm)
       : seed;
 
     elements.push(element);
 
     // Get next seed
     seed = successor.isPrimitive()
-      ? successor.callPrimitive([seed])
+      ? successor.callPrimitive([seed], vm)
       : seed;
   }
 
   // Build result list
   let result: ELObj = tailGen && tailGen.isPrimitive()
-    ? tailGen.callPrimitive([seed])
+    ? tailGen.callPrimitive([seed], vm)
     : theNilObj;
 
   for (let i = elements.length - 1; i >= 0; i--) {
@@ -5278,7 +5313,7 @@ const unfoldPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * (fold kons knil list)
  */
-const foldPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const foldPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 3) {
     throw new Error('fold requires exactly 3 arguments');
   }
@@ -5298,7 +5333,7 @@ const foldPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
     }
 
     accumulator = kons.isPrimitive()
-      ? kons.callPrimitive([pair.car, accumulator])
+      ? kons.callPrimitive([pair.car, accumulator], vm)
       : accumulator;
 
     list = pair.cdr;
@@ -5313,7 +5348,7 @@ const foldPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Like unfold but builds list from right to left
  */
-const unfoldRightPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const unfoldRightPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 4 || args.length > 5) {
     throw new Error('unfold-right requires 4 or 5 arguments');
   }
@@ -5333,7 +5368,7 @@ const unfoldRightPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   while (true) {
     // Check stop condition
     const shouldStop = stopPred.isPrimitive()
-      ? stopPred.callPrimitive([seed])
+      ? stopPred.callPrimitive([seed], vm)
       : seed;
 
     if (shouldStop.isTrue()) {
@@ -5342,7 +5377,7 @@ const unfoldRightPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Map the seed to an element
     const element = mapper.isPrimitive()
-      ? mapper.callPrimitive([seed])
+      ? mapper.callPrimitive([seed], vm)
       : seed;
 
     // Cons onto result
@@ -5350,7 +5385,7 @@ const unfoldRightPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
 
     // Get next seed
     seed = successor.isPrimitive()
-      ? successor.callPrimitive([seed])
+      ? successor.callPrimitive([seed], vm)
       : seed;
   }
 
@@ -5365,7 +5400,7 @@ const unfoldRightPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Stub implementation (no real file I/O yet)
  */
-const openInputFilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const openInputFilePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('open-input-file requires exactly 1 argument');
   }
@@ -5385,7 +5420,7 @@ const openInputFilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Stub implementation (no real file I/O yet)
  */
-const openOutputFilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const openOutputFilePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('open-output-file requires exactly 1 argument');
   }
@@ -5405,7 +5440,7 @@ const openOutputFilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Stub implementation
  */
-const closeInputPortPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const closeInputPortPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('close-input-port requires exactly 1 argument');
   }
@@ -5420,7 +5455,7 @@ const closeInputPortPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Stub implementation
  */
-const closeOutputPortPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const closeOutputPortPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('close-output-port requires exactly 1 argument');
   }
@@ -5435,7 +5470,7 @@ const closeOutputPortPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Stub implementation (no real reading yet)
  */
-const readPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const readPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length > 1) {
     throw new Error('read requires 0 or 1 arguments');
   }
@@ -5450,7 +5485,7 @@ const readPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Stub implementation
  */
-const readCharPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const readCharPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length > 1) {
     throw new Error('read-char requires 0 or 1 arguments');
   }
@@ -5465,7 +5500,7 @@ const readCharPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Stub implementation
  */
-const peekCharPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const peekCharPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length > 1) {
     throw new Error('peek-char requires 0 or 1 arguments');
   }
@@ -5480,7 +5515,7 @@ const peekCharPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Stub implementation
  */
-const writeCharPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const writeCharPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 1 || args.length > 2) {
     throw new Error('write-char requires 1 or 2 arguments');
   }
@@ -5519,7 +5554,7 @@ const writeCharPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  */
 let gensymCounter = 0;
 
-const gensymPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const gensymPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length > 1) {
     throw new Error('gensym requires 0 or 1 arguments');
   }
@@ -5540,7 +5575,7 @@ const gensymPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  *
  * Stub implementation (no real file I/O yet)
  */
-const callWithInputFilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const callWithInputFilePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('call-with-input-file requires exactly 2 arguments');
   }
@@ -5566,7 +5601,7 @@ const callWithInputFilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => 
  *
  * Stub implementation (no real file I/O yet)
  */
-const callWithOutputFilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const callWithOutputFilePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('call-with-output-file requires exactly 2 arguments');
   }
@@ -5592,7 +5627,7 @@ const callWithOutputFilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj =>
  *
  * Stub implementation (no real file I/O yet)
  */
-const loadPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const loadPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('load requires exactly 1 argument');
   }
@@ -5617,7 +5652,7 @@ const loadPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: gi (generic identifier - element name)
  * Port from: primitive.h PRIMITIVE(Gi, "gi", 0, 1, 0)
  */
-const giPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const giPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('gi requires exactly 1 argument');
   }
@@ -5635,7 +5670,7 @@ const giPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: id (ID attribute value)
  * Port from: primitive.h PRIMITIVE(Id, "id", 0, 1, 0)
  */
-const idPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const idPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('id requires exactly 1 argument');
   }
@@ -5653,7 +5688,7 @@ const idPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: data (character data content)
  * Port from: primitive.h PRIMITIVE(Data, "data", 0, 1, 0)
  */
-const dataPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const dataPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('data requires exactly 1 argument');
   }
@@ -5671,7 +5706,7 @@ const dataPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: parent
  * Port from: primitive.h PRIMITIVE(Parent, "parent", 0, 1, 0)
  */
-const parentPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const parentPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('parent requires exactly 1 argument');
   }
@@ -5689,7 +5724,7 @@ const parentPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: children
  * Port from: primitive.h PRIMITIVE(Children, "children", 0, 1, 0)
  */
-const childrenPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const childrenPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('children requires exactly 1 argument');
   }
@@ -5706,7 +5741,7 @@ const childrenPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: node-list? predicate
  * Port from: primitive.h PRIMITIVE(NodeListP, "node-list?", 0, 1, 0)
  */
-const nodeListPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const nodeListPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('node-list? requires exactly 1 argument');
   }
@@ -5718,7 +5753,7 @@ const nodeListPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: node-list-length
  * Port from: primitive.h PRIMITIVE(NodeListLength, "node-list-length", 0, 1, 0)
  */
-const nodeListLengthPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const nodeListLengthPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('node-list-length requires exactly 1 argument');
   }
@@ -5735,7 +5770,7 @@ const nodeListLengthPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: empty-node-list
  * Port from: primitive.h PRIMITIVE(EmptyNodeList, "empty-node-list", 0, 0, 0)
  */
-const emptyNodeListPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const emptyNodeListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 0) {
     throw new Error('empty-node-list requires no arguments');
   }
@@ -5747,7 +5782,7 @@ const emptyNodeListPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: node-list-first
  * Port from: primitive.h PRIMITIVE(NodeListFirst, "node-list-first", 0, 1, 0)
  */
-const nodeListFirstPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const nodeListFirstPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('node-list-first requires exactly 1 argument');
   }
@@ -5765,7 +5800,7 @@ const nodeListFirstPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: node-list-rest
  * Port from: primitive.h PRIMITIVE(NodeListRest, "node-list-rest", 0, 1, 0)
  */
-const nodeListRestPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const nodeListRestPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('node-list-rest requires exactly 1 argument');
   }
@@ -5783,7 +5818,7 @@ const nodeListRestPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: attributes
  * Port from: primitive.h PRIMITIVE(Attributes, "attributes", 0, 1, 0)
  */
-const attributesPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const attributesPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('attributes requires exactly 1 argument');
   }
@@ -5800,7 +5835,7 @@ const attributesPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: attribute-string
  * Port from: primitive.h PRIMITIVE(AttributeString, "attribute-string", 2, 0, 0)
  */
-const attributeStringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const attributeStringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('attribute-string requires exactly 2 arguments');
   }
@@ -5824,7 +5859,7 @@ const attributeStringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: ancestors
  * Port from: primitive.h PRIMITIVE(Ancestors, "ancestors", 0, 1, 0)
  */
-const ancestorsPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const ancestorsPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('ancestors requires exactly 1 argument');
   }
@@ -5841,7 +5876,7 @@ const ancestorsPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: descendants
  * Port from: primitive.h PRIMITIVE(Descendants, "descendants", 0, 1, 0)
  */
-const descendantsPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const descendantsPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('descendants requires exactly 1 argument');
   }
@@ -5858,7 +5893,7 @@ const descendantsPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Grove: child-number
  * Port from: primitive.h PRIMITIVE(ChildNumber, "child-number", 0, 1, 0)
  */
-const childNumberPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const childNumberPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('child-number requires exactly 1 argument');
   }
@@ -5877,7 +5912,7 @@ const childNumberPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: caar
  * Port from: primitive.cxx Caar::primitiveCall
  */
-const caarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const caarPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('caar requires exactly 1 argument');
   }
@@ -5899,7 +5934,7 @@ const caarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: cadr
  * Port from: primitive.cxx Cadr::primitiveCall
  */
-const cadrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cadrPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cadr requires exactly 1 argument');
   }
@@ -5921,7 +5956,7 @@ const cadrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: cdar
  * Port from: primitive.cxx Cdar::primitiveCall
  */
-const cdarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cdarPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cdar requires exactly 1 argument');
   }
@@ -5943,7 +5978,7 @@ const cdarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: cddr
  * Port from: primitive.cxx Cddr::primitiveCall
  */
-const cddrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cddrPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cddr requires exactly 1 argument');
   }
@@ -5967,7 +6002,7 @@ const cddrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: caaar
  * Port from: primitive.cxx Caaar::primitiveCall
  */
-const caaarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const caaarPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('caaar requires exactly 1 argument');
   }
@@ -5985,7 +6020,7 @@ const caaarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: caadr
  * Port from: primitive.cxx Caadr::primitiveCall
  */
-const caadrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const caadrPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('caadr requires exactly 1 argument');
   }
@@ -6003,7 +6038,7 @@ const caadrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: cadar
  * Port from: primitive.cxx Cadar::primitiveCall
  */
-const cadarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cadarPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cadar requires exactly 1 argument');
   }
@@ -6021,7 +6056,7 @@ const cadarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: caddr
  * Port from: primitive.cxx Caddr::primitiveCall
  */
-const caddrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const caddrPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('caddr requires exactly 1 argument');
   }
@@ -6039,7 +6074,7 @@ const caddrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: cdaar
  * Port from: primitive.cxx Cdaar::primitiveCall
  */
-const cdaarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cdaarPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cdaar requires exactly 1 argument');
   }
@@ -6057,7 +6092,7 @@ const cdaarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: cdadr
  * Port from: primitive.cxx Cdadr::primitiveCall
  */
-const cdadrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cdadrPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cdadr requires exactly 1 argument');
   }
@@ -6075,7 +6110,7 @@ const cdadrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: cddar
  * Port from: primitive.cxx Cddar::primitiveCall
  */
-const cddarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cddarPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cddar requires exactly 1 argument');
   }
@@ -6093,7 +6128,7 @@ const cddarPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: cdddr
  * Port from: primitive.cxx Cdddr::primitiveCall
  */
-const cdddrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cdddrPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cdddr requires exactly 1 argument');
   }
@@ -6113,7 +6148,7 @@ const cdddrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: caaaar
  * Port from: primitive.cxx Caaaar::primitiveCall
  */
-const caaaaRPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const caaaaRPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('caaaar requires exactly 1 argument');
   }
@@ -6133,7 +6168,7 @@ const caaaaRPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: caaadr
  * Port from: primitive.cxx Caaadr::primitiveCall
  */
-const caaaDrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const caaaDrPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('caaadr requires exactly 1 argument');
   }
@@ -6153,7 +6188,7 @@ const caaaDrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: caaddr
  * Port from: primitive.cxx Caaddr::primitiveCall
  */
-const caadDrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const caadDrPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('caaddr requires exactly 1 argument');
   }
@@ -6173,7 +6208,7 @@ const caadDrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: cadddr
  * Port from: primitive.cxx Cadddr::primitiveCall
  */
-const caddDrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const caddDrPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cadddr requires exactly 1 argument');
   }
@@ -6193,7 +6228,7 @@ const caddDrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: cdaaar
  * Port from: primitive.cxx Cdaaar::primitiveCall
  */
-const cdaaArPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cdaaArPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cdaaar requires exactly 1 argument');
   }
@@ -6213,7 +6248,7 @@ const cdaaArPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: cdaadr
  * Port from: primitive.cxx Cdaadr::primitiveCall
  */
-const cdaaDrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cdaaDrPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cdaadr requires exactly 1 argument');
   }
@@ -6233,7 +6268,7 @@ const cdaaDrPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: cddaar
  * Port from: primitive.cxx Cddaar::primitiveCall
  */
-const cddaArPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cddaArPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cddaar requires exactly 1 argument');
   }
@@ -6253,7 +6288,7 @@ const cddaArPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List accessor: cddddr
  * Port from: primitive.cxx Cddddr::primitiveCall
  */
-const cddddRPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const cddddRPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('cddddr requires exactly 1 argument');
   }
@@ -6275,7 +6310,7 @@ const cddddRPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String to list conversion: string->list
  * Port from: primitive.cxx StringToList::primitiveCall
  */
-const stringToListPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringToListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('string->list requires exactly 1 argument');
   }
@@ -6298,7 +6333,7 @@ const stringToListPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * List to string conversion: list->string
  * Port from: primitive.cxx ListToString::primitiveCall
  */
-const listToStringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const listToStringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('list->string requires exactly 1 argument');
   }
@@ -6330,7 +6365,7 @@ const listToStringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String constructor: string
  * Port from: primitive.cxx String::primitiveCall
  */
-const stringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   let result = '';
   for (const arg of args) {
     const ch = arg.asChar();
@@ -6346,7 +6381,7 @@ const stringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String constructor: make-string
  * Port from: primitive.cxx MakeString::primitiveCall
  */
-const makeStringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const makeStringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 1 || args.length > 2) {
     throw new Error('make-string requires 1 or 2 arguments');
   }
@@ -6373,7 +6408,7 @@ const makeStringPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String mutator: string-set!
  * Port from: primitive.cxx StringSet::primitiveCall
  */
-const stringSetPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringSetPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 3) {
     throw new Error('string-set! requires exactly 3 arguments');
   }
@@ -6399,7 +6434,7 @@ const stringSetPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String mutator: string-fill!
  * Port from: primitive.cxx StringFill::primitiveCall
  */
-const stringFillPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringFillPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 2) {
     throw new Error('string-fill! requires exactly 2 arguments');
   }
@@ -6418,7 +6453,7 @@ const stringFillPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String utility: string-copy
  * Port from: primitive.cxx StringCopy::primitiveCall
  */
-const stringCopyPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringCopyPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('string-copy requires exactly 1 argument');
   }
@@ -6437,7 +6472,7 @@ const stringCopyPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String comparison: string>?
  * Port from: primitive.cxx StringGreater::primitiveCall
  */
-const stringGreaterPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringGreaterPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('string>? requires at least 2 arguments');
   }
@@ -6460,7 +6495,7 @@ const stringGreaterPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String comparison: string<=?
  * Port from: primitive.cxx StringLessOrEqual::primitiveCall
  */
-const stringLessOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringLessOrEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('string<=? requires at least 2 arguments');
   }
@@ -6483,7 +6518,7 @@ const stringLessOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => 
  * String comparison: string>=?
  * Port from: primitive.cxx StringGreaterOrEqual::primitiveCall
  */
-const stringGreaterOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringGreaterOrEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('string>=? requires at least 2 arguments');
   }
@@ -6506,7 +6541,7 @@ const stringGreaterOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj 
  * String comparison: string-ci=? (case-insensitive)
  * Port from: primitive.cxx StringCiEqual::primitiveCall
  */
-const stringCiEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringCiEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('string-ci=? requires at least 2 arguments');
   }
@@ -6534,7 +6569,7 @@ const stringCiEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String comparison: string-ci<? (case-insensitive)
  * Port from: primitive.cxx StringCiLess::primitiveCall
  */
-const stringCiLessPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringCiLessPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('string-ci<? requires at least 2 arguments');
   }
@@ -6557,7 +6592,7 @@ const stringCiLessPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String comparison: string-ci>? (case-insensitive)
  * Port from: primitive.cxx StringCiGreater::primitiveCall
  */
-const stringCiGreaterPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringCiGreaterPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('string-ci>? requires at least 2 arguments');
   }
@@ -6580,7 +6615,7 @@ const stringCiGreaterPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * String comparison: string-ci<=? (case-insensitive)
  * Port from: primitive.cxx StringCiLessOrEqual::primitiveCall
  */
-const stringCiLessOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringCiLessOrEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('string-ci<=? requires at least 2 arguments');
   }
@@ -6603,7 +6638,7 @@ const stringCiLessOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj =
  * String comparison: string-ci>=? (case-insensitive)
  * Port from: primitive.cxx StringCiGreaterOrEqual::primitiveCall
  */
-const stringCiGreaterOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const stringCiGreaterOrEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('string-ci>=? requires at least 2 arguments');
   }
@@ -6628,7 +6663,7 @@ const stringCiGreaterOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELOb
  * Character comparison: char>?
  * Port from: primitive.cxx CharGreater::primitiveCall
  */
-const charGreaterPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charGreaterPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('char>? requires at least 2 arguments');
   }
@@ -6651,7 +6686,7 @@ const charGreaterPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character comparison: char<=?
  * Port from: primitive.cxx CharLessOrEqual::primitiveCall
  */
-const charLessOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charLessOrEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('char<=? requires at least 2 arguments');
   }
@@ -6674,7 +6709,7 @@ const charLessOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character comparison: char>=?
  * Port from: primitive.cxx CharGreaterOrEqual::primitiveCall
  */
-const charGreaterOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charGreaterOrEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('char>=? requires at least 2 arguments');
   }
@@ -6697,7 +6732,7 @@ const charGreaterOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj =>
  * Character comparison: char-ci=? (case-insensitive)
  * Port from: primitive.cxx CharCiEqual::primitiveCall
  */
-const charCiEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charCiEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('char-ci=? requires at least 2 arguments');
   }
@@ -6725,7 +6760,7 @@ const charCiEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character comparison: char-ci<? (case-insensitive)
  * Port from: primitive.cxx CharCiLess::primitiveCall
  */
-const charCiLessPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charCiLessPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('char-ci<? requires at least 2 arguments');
   }
@@ -6748,7 +6783,7 @@ const charCiLessPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character comparison: char-ci>? (case-insensitive)
  * Port from: primitive.cxx CharCiGreater::primitiveCall
  */
-const charCiGreaterPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charCiGreaterPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('char-ci>? requires at least 2 arguments');
   }
@@ -6771,7 +6806,7 @@ const charCiGreaterPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character comparison: char-ci<=? (case-insensitive)
  * Port from: primitive.cxx CharCiLessOrEqual::primitiveCall
  */
-const charCiLessOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charCiLessOrEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('char-ci<=? requires at least 2 arguments');
   }
@@ -6794,7 +6829,7 @@ const charCiLessOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => 
  * Character comparison: char-ci>=? (case-insensitive)
  * Port from: primitive.cxx CharCiGreaterOrEqual::primitiveCall
  */
-const charCiGreaterOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charCiGreaterOrEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length < 2) {
     throw new Error('char-ci>=? requires at least 2 arguments');
   }
@@ -6819,7 +6854,7 @@ const charCiGreaterOrEqualPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj 
  * Character predicate: char-alphabetic?
  * Port from: primitive.cxx CharAlphabetic::primitiveCall
  */
-const charAlphabeticPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charAlphabeticPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('char-alphabetic? requires exactly 1 argument');
   }
@@ -6836,7 +6871,7 @@ const charAlphabeticPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character predicate: char-numeric?
  * Port from: primitive.cxx CharNumeric::primitiveCall
  */
-const charNumericPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charNumericPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('char-numeric? requires exactly 1 argument');
   }
@@ -6853,7 +6888,7 @@ const charNumericPredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character predicate: char-whitespace?
  * Port from: primitive.cxx CharWhitespace::primitiveCall
  */
-const charWhitespacePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charWhitespacePredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('char-whitespace? requires exactly 1 argument');
   }
@@ -6870,7 +6905,7 @@ const charWhitespacePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character predicate: char-upper-case?
  * Port from: primitive.cxx CharUpperCase::primitiveCall
  */
-const charUpperCasePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charUpperCasePredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('char-upper-case? requires exactly 1 argument');
   }
@@ -6887,7 +6922,7 @@ const charUpperCasePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Character predicate: char-lower-case?
  * Port from: primitive.cxx CharLowerCase::primitiveCall
  */
-const charLowerCasePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const charLowerCasePredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('char-lower-case? requires exactly 1 argument');
   }
@@ -6906,7 +6941,7 @@ const charLowerCasePredicate: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Conversion: vector->list
  * Port from: primitive.cxx VectorToList::primitiveCall
  */
-const vectorToListPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const vectorToListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('vector->list requires exactly 1 argument');
   }
@@ -6928,7 +6963,7 @@ const vectorToListPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Conversion: list->vector
  * Port from: primitive.cxx ListToVector::primitiveCall
  */
-const listToVectorPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
+const listToVectorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('list->vector requires exactly 1 argument');
   }

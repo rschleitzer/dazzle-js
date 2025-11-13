@@ -172,11 +172,14 @@ export class VectorObj extends ELObj {
   asVector(): VectorObj { return this; }
 }
 
+// Forward declaration for VM (avoid circular dependency)
+import type { VM } from './vm.js';
+
 /**
  * Primitive function callback type
- * Port from: ELObj.h PrimitiveObj::primitiveCall()
+ * Port from: ELObj.h PrimitiveObj::primitiveCall(int nArgs, ELObj **args, EvalContext &context)
  */
-export type PrimitiveFunction = (args: ELObj[]) => ELObj;
+export type PrimitiveFunction = (args: ELObj[], vm: VM) => ELObj;
 
 /**
  * Function signature - describes expected arguments
@@ -224,11 +227,11 @@ export class FunctionObj extends ELObj {
    * Call the primitive function
    * Port from: ELObj.h PrimitiveObj::primitiveCall()
    */
-  callPrimitive(args: ELObj[]): ELObj {
+  callPrimitive(args: ELObj[], vm: VM): ELObj {
     if (!this.primitive) {
       throw new Error('Not a primitive function');
     }
-    return this.primitive(args);
+    return this.primitive(args, vm);
   }
 }
 

@@ -354,8 +354,8 @@ export class PrimitiveCallInsn extends Insn {
       args.unshift(vm.getStackValue(vm.stackSize() - this.nArgs + i));
     }
 
-    // Call the primitive
-    const result = func.callPrimitive(args);
+    // Call the primitive with VM context
+    const result = func.callPrimitive(args, vm);
 
     // Pop all arguments
     for (let i = 0; i < this.nArgs; i++) {
@@ -411,8 +411,8 @@ export class CallInsn extends Insn {
         vm.pop();
       }
 
-      // Call primitive
-      const result = func.callPrimitive(args);
+      // Call primitive with VM context
+      const result = func.callPrimitive(args, vm);
 
       // Push result
       vm.push(result);
