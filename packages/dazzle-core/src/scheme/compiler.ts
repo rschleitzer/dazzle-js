@@ -157,7 +157,7 @@ export class Compiler {
    */
   compile(expr: ELObj, env: Environment, stackPos: number = 0, next: Insn | null = null): Insn {
     // Self-evaluating constants
-    if (expr.asNumber() || expr.asString() || expr.asBoolean() || expr.asChar()) {
+    if (expr.asNumber() || expr.asString() || expr.asBoolean() || expr.asChar() || expr.asKeyword()) {
       return new ConstantInsn(expr, next);
     }
 
@@ -199,6 +199,8 @@ export class Compiler {
             return this.compileAnd(pair.cdr, env, stackPos, next);
           case 'or':
             return this.compileOr(pair.cdr, env, stackPos, next);
+          case 'make':
+            return this.compileMake(pair.cdr, env, stackPos, next);
         }
       }
 
@@ -291,8 +293,19 @@ export class Compiler {
       ? bodyExprs[0]
       : this.makeBegin(bodyExprs);
 
-    // TODO: Analyze which variables from outer scope are captured
+    // Analyze which variables from outer scope are captured
+    const freeVars = this.findFreeVariables(body, new Set(paramNames));
     const capturedVars: string[] = [];
+
+    // Capture all free variables that are in the outer environment
+    // (frame, stack, or closure variables - anything that's not global)
+    for (const varName of freeVars) {
+      const binding = env.lookup(varName);
+      if (binding) {
+        capturedVars.push(varName);
+      }
+    }
+
     const lambdaEnv = env.enterLambda(paramNames, capturedVars);
 
     const bodyInsn = this.compile(body, lambdaEnv, 0, new ReturnInsn(paramNames.length));
@@ -304,7 +317,35 @@ export class Compiler {
       nKeyArgs: 0,
     };
 
-    return new ClosureInsn(signature, bodyInsn, capturedVars.length, next);
+    // Build instruction chain:
+    // 1. Push captured variables onto stack (right-to-left)
+    // 2. Create closure with those values
+    let result: Insn = new ClosureInsn(signature, bodyInsn, capturedVars.length, next);
+
+    // Push captured variables onto stack (right-to-left so they're in order)
+    for (let i = capturedVars.length - 1; i >= 0; i--) {
+      const varName = capturedVars[i];
+      const binding = env.lookup(varName);
+      if (!binding) {
+        throw new Error(`Variable ${varName} not found in environment`);
+      }
+
+      // Compile a reference to this variable
+      switch (binding.kind) {
+        case 'frame':
+          result = new FrameRefInsn(binding.index, result);
+          break;
+        case 'stack':
+          const offset = binding.index - (stackPos + (capturedVars.length - 1 - i));
+          result = new StackRefInsn(offset, binding.index, result);
+          break;
+        case 'closure':
+          result = new ClosureRefInsn(binding.index, result);
+          break;
+      }
+    }
+
+    return result;
   }
 
   /**
@@ -456,6 +497,47 @@ export class Compiler {
   }
 
   /**
+   * Compile make special form (DSSSL flow object construction)
+   * Port from: OpenJade Interpreter.cxx compileMake()
+   *
+   * Syntax: (make flow-object-type keyword: value ... content)
+   *
+   * The flow object type is not evaluated (like a symbol in quote).
+   * Keywords and their values are compiled as normal arguments.
+   */
+  private compileMake(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
+    const argsArray = this.listToArray(args);
+
+    if (argsArray.length === 0) {
+      throw new Error('make requires at least a flow object type');
+    }
+
+    // Get the make-flow-object primitive
+    const primitive = this.globals.lookup('make-flow-object');
+    if (!primitive || !primitive.asFunction()?.isPrimitive()) {
+      throw new Error('make-flow-object primitive not found');
+    }
+
+    // Build instruction chain from back to front:
+    // 1. PrimitiveCallInsn (calls make-flow-object)
+    // 2. Push all arguments (right-to-left)
+    // 3. Return first instruction in chain
+
+    // Start with the call instruction
+    let insn: Insn | null = new PrimitiveCallInsn(argsArray.length, primitive, next);
+
+    // Compile arguments in reverse order (right-to-left for stack)
+    for (let i = argsArray.length - 1; i >= 1; i--) {
+      insn = this.compile(argsArray[i], env, stackPos + i, insn);
+    }
+
+    // First argument (flow object type) is a quoted symbol
+    insn = new ConstantInsn(argsArray[0], insn);
+
+    return insn;
+  }
+
+  /**
    * Compile function call
    */
   private compileCall(fn: ELObj, args: ELObj[], env: Environment, stackPos: number, next: Insn | null): Insn {
@@ -498,6 +580,109 @@ export class Compiler {
   }
 
   // ============ Helpers ============
+
+  /**
+   * Find free variables in an expression
+   * Port from: OpenJade style/Expression.cxx freeVariables analysis
+   *
+   * @param expr Expression to analyze
+   * @param bound Set of bound variables (parameters, let bindings)
+   * @returns Set of free variable names
+   */
+  private findFreeVariables(expr: ELObj, bound: Set<string>): Set<string> {
+    const free = new Set<string>();
+
+    const analyze = (e: ELObj, b: Set<string>) => {
+      // Symbol - check if it's free
+      const sym = e.asSymbol();
+      if (sym) {
+        if (!b.has(sym.name) && !this.globals.lookup(sym.name)) {
+          free.add(sym.name);
+        }
+        return;
+      }
+
+      // Not a list - no variables
+      const pair = e.asPair();
+      if (!pair) {
+        return;
+      }
+
+      const car = pair.car;
+      const carSym = car.asSymbol();
+
+      // Special forms that introduce bindings
+      if (carSym) {
+        switch (carSym.name) {
+          case 'lambda': {
+            const args = this.listToArray(pair.cdr);
+            if (args.length < 2) return;
+
+            const params = this.listToArray(args[0]);
+            const newBound = new Set(b);
+            for (const p of params) {
+              const pSym = p.asSymbol();
+              if (pSym) newBound.add(pSym.name);
+            }
+
+            // Analyze body with extended bindings
+            for (let i = 1; i < args.length; i++) {
+              analyze(args[i], newBound);
+            }
+            return;
+          }
+
+          case 'let': {
+            const args = this.listToArray(pair.cdr);
+            if (args.length < 2) return;
+
+            const bindings = this.listToArray(args[0]);
+            const newBound = new Set(b);
+
+            // Analyze init expressions with current bindings
+            for (const binding of bindings) {
+              const bindingList = this.listToArray(binding);
+              if (bindingList.length === 2) {
+                analyze(bindingList[1], b);
+                const nameSym = bindingList[0].asSymbol();
+                if (nameSym) newBound.add(nameSym.name);
+              }
+            }
+
+            // Analyze body with extended bindings
+            for (let i = 1; i < args.length; i++) {
+              analyze(args[i], newBound);
+            }
+            return;
+          }
+
+          case 'quote':
+            // Don't analyze quoted expressions
+            return;
+
+          case 'define':
+          case 'set!':
+            // Analyze the value but not the name
+            const args = this.listToArray(pair.cdr);
+            if (args.length === 2) {
+              analyze(args[1], b);
+            }
+            return;
+        }
+      }
+
+      // Default: analyze all elements of the list
+      let current = e;
+      while (current.asPair()) {
+        const p = current.asPair()!;
+        analyze(p.car, b);
+        current = p.cdr;
+      }
+    };
+
+    analyze(expr, bound);
+    return free;
+  }
 
   /**
    * Convert list to array

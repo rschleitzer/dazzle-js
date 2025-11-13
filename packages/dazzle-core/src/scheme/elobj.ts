@@ -262,9 +262,36 @@ export class NodeListObj extends ELObj {
 /**
  * Sosofo (Specification of a Sequence of Flow Objects)
  * Port from: ELObj.h SosofoObj
+ *
+ * A sosofo represents the result of DSSSL processing - a specification
+ * of formatting objects that can be passed to a backend for output.
  */
 export class SosofoObj extends ELObj {
+  constructor(
+    public type: 'empty' | 'append' | 'entity' | 'formatting-instruction',
+    public data?: unknown
+  ) {
+    super();
+  }
+
   asSosofo(): SosofoObj { return this; }
+
+  /**
+   * Check if this is an empty sosofo
+   */
+  isEmpty(): boolean {
+    return this.type === 'empty';
+  }
+
+  /**
+   * Get children for append sosofo
+   */
+  children(): SosofoObj[] {
+    if (this.type === 'append' && Array.isArray(this.data)) {
+      return this.data as SosofoObj[];
+    }
+    return [];
+  }
 }
 
 /**
@@ -315,4 +342,8 @@ export function makeNode(node: Node): NodeObj {
 
 export function makeNodeList(nodes: NodeList): NodeListObj {
   return new NodeListObj(nodes);
+}
+
+export function makeSosofo(type: 'empty' | 'append' | 'entity' | 'formatting-instruction', data?: unknown): SosofoObj {
+  return new SosofoObj(type, data);
 }

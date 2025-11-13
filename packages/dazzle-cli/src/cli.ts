@@ -8,9 +8,56 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseXmlGrove, parse, Compiler, GlobalEnvironment, Environment, VM } from 'dazzle-core';
+import { parseXmlGrove, parse, Compiler, GlobalEnvironment, Environment, VM, type ELObj } from 'dazzle-core';
 // TODO: Import backend when DSSSL processing is integrated
 // import { createTransformBackend } from 'dazzle-backend-sgml';
+
+/**
+ * Format a Scheme value for display
+ */
+function formatValue(value: ELObj): string {
+  // String
+  const str = value.asString();
+  if (str) return str.value;
+
+  // Number
+  const num = value.asNumber();
+  if (num) return num.value.toString();
+
+  // Boolean
+  const bool = value.asBoolean();
+  if (bool !== null) return bool.value ? '#t' : '#f';
+
+  // Nil (empty list)
+  if (value.asNil()) return '()';
+
+  // List
+  const pair = value.asPair();
+  if (pair) {
+    const elements: string[] = [];
+    let current = value;
+
+    while (current.asPair()) {
+      const p = current.asPair()!;
+      elements.push(formatValue(p.car));
+      current = p.cdr;
+    }
+
+    // Check for improper list
+    if (!current.asNil()) {
+      return `(${elements.join(' ')} . ${formatValue(current)})`;
+    }
+
+    return `(${elements.join(' ')})`;
+  }
+
+  // Symbol
+  const sym = value.asSymbol();
+  if (sym) return sym.name;
+
+  // Other
+  return '<value>';
+}
 
 const program = new Command();
 
@@ -93,7 +140,7 @@ program
         // Execute bytecode
         const result = vm.eval(bytecode);
 
-        console.log(`Result: ${result.asString()?.value || result.asNumber()?.value || result.asBoolean()?.value || '(value)'}`);
+        console.log(`Result: ${formatValue(result)}`);
       }
 
     } catch (error) {

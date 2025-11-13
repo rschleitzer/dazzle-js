@@ -11,6 +11,7 @@ import {
   type PrimitiveFunction,
   FunctionObj,
   PairObj,
+  SosofoObj,
   makeNumber,
   makeBoolean,
   makePair,
@@ -20,12 +21,14 @@ import {
   makeChar,
   makeNode,
   makeNodeList,
+  makeSosofo,
   theNilObj,
   theTrueObj,
   theFalseObj,
 } from './elobj.js';
 
 import type { VM } from './vm.js';
+import type { NodeList } from '../grove/index.js';
 import { EMPTY_NODE_LIST } from '../grove/index.js';
 import { CallInsn } from './insn.js';
 
@@ -48,7 +51,13 @@ function callClosure(func: FunctionObj, args: ELObj[], vm: VM): ELObj {
 
   // Create and execute CallInsn
   const callInsn = new CallInsn(args.length, null);
-  callInsn.execute(vm);
+  let next = callInsn.execute(vm);
+
+  // Execute the continuation until completion
+  // (The closure body will execute and return via ReturnInsn)
+  while (next) {
+    next = next.execute(vm);
+  }
 
   // Result is now on top of stack
   return vm.pop();
@@ -6984,6 +6993,193 @@ const listToVectorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj 
 };
 
 /**
+ * ========================================================================
+ * DSSSL Processing Primitives (§10)
+ * Port from: OpenJade style/primitive.cxx
+ * ========================================================================
+ */
+
+/**
+ * current-node - Returns the current node being processed
+ * Port from: primitive.cxx CurrentNode::primitiveCall
+ */
+const currentNodePrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj => {
+  if (!vm.currentNode) {
+    throw new Error('current-node: no current node in processing context');
+  }
+  return makeNode(vm.currentNode);
+};
+
+/**
+ * empty-sosofo - Returns an empty sosofo
+ * Port from: primitive.cxx EmptySosofo::primitiveCall
+ */
+const emptySosofoPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj => {
+  return makeSosofo('empty');
+};
+
+/**
+ * sosofo-append - Appends sosofos into a sequence
+ * Port from: primitive.cxx SosofoAppend::primitiveCall
+ */
+const sosofoAppendPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  const sosofos: SosofoObj[] = [];
+
+  for (const arg of args) {
+    const sosofo = arg.asSosofo();
+    if (!sosofo) {
+      throw new Error('sosofo-append: all arguments must be sosofos');
+    }
+    if (!sosofo.isEmpty()) {
+      sosofos.push(sosofo);
+    }
+  }
+
+  if (sosofos.length === 0) {
+    return makeSosofo('empty');
+  }
+  if (sosofos.length === 1) {
+    return sosofos[0];
+  }
+
+  return makeSosofo('append', sosofos);
+};
+
+/**
+ * process-children - Process the children of the current node
+ * Port from: primitive.cxx ProcessChildren::primitiveCall
+ */
+const processChildrenPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj => {
+  if (!vm.currentNode) {
+    throw new Error('process-children: no current node in processing context');
+  }
+
+  const children = vm.currentNode.children();
+  return processNodeListHelper(children, vm);
+};
+
+/**
+ * process-node-list - Process a node list
+ * Port from: primitive.cxx ProcessNodeList::primitiveCall
+ */
+const processNodeListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('process-node-list requires exactly 1 argument');
+  }
+
+  const nodeListObj = args[0].asNodeList();
+  if (!nodeListObj) {
+    throw new Error('process-node-list requires a node-list argument');
+  }
+
+  return processNodeListHelper(nodeListObj.nodes, vm);
+};
+
+/**
+ * Helper: Process a node list and return a sosofo
+ * Port from: Interpreter.cxx Interpreter::processNodeList()
+ *
+ * For now, this is a stub that returns empty sosofo.
+ * Full implementation will invoke DSSSL construction rules.
+ */
+function processNodeListHelper(nodeList: NodeList, vm: VM): ELObj {
+  // TODO: Implement full DSSSL rule matching and construction
+  // For now, just return empty sosofo
+  return makeSosofo('empty');
+}
+
+/**
+ * make-flow-object - Create a DSSSL flow object
+ * Port from: primitive.cxx MakeFlowObject::primitiveCall
+ *
+ * Syntax: (make type keyword: value ... content)
+ * Examples:
+ *   (make entity system-id: "file.txt")
+ *   (make formatting-instruction data: "text")
+ */
+const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length === 0) {
+    throw new Error('make requires at least a flow object type');
+  }
+
+  // First argument is the flow object type
+  const typeSym = args[0].asSymbol();
+  if (!typeSym) {
+    throw new Error('make requires a symbol as first argument (flow object type)');
+  }
+
+  const flowObjectType = typeSym.name;
+
+  // Parse keyword arguments
+  const characteristics: Record<string, unknown> = {};
+  let contentStart = 1;
+
+  // Scan for keyword: value pairs
+  for (let i = 1; i < args.length; i++) {
+    const keyword = args[i].asKeyword();
+    if (keyword) {
+      // Next argument is the value
+      if (i + 1 >= args.length) {
+        throw new Error(`make: keyword ${keyword.name}: requires a value`);
+      }
+      i++;
+      const value = args[i];
+
+      // Store characteristic (for now, store the raw value)
+      characteristics[keyword.name] = value;
+      contentStart = i + 1;
+    } else {
+      // No more keywords, rest is content
+      break;
+    }
+  }
+
+  // Content arguments (if any)
+  const content = args.slice(contentStart);
+
+  // Create flow object based on type
+  switch (flowObjectType) {
+    case 'entity': {
+      // (make entity system-id: "file.txt" content...)
+      const systemIdValue = characteristics['system-id'];
+      if (!systemIdValue) {
+        throw new Error('make entity requires system-id: characteristic');
+      }
+      const systemId = (systemIdValue as ELObj).asString();
+      if (!systemId) {
+        throw new Error('make entity system-id: must be a string');
+      }
+
+      return makeSosofo('entity', {
+        systemId: systemId.value,
+        content,
+      });
+    }
+
+    case 'formatting-instruction': {
+      // (make formatting-instruction data: "text")
+      const dataValue = characteristics['data'];
+      if (!dataValue) {
+        throw new Error('make formatting-instruction requires data: characteristic');
+      }
+      const data = (dataValue as ELObj).asString();
+      if (!data) {
+        throw new Error('make formatting-instruction data: must be a string');
+      }
+
+      return makeSosofo('formatting-instruction', {
+        data: data.value,
+      });
+    }
+
+    default:
+      // For now, unsupported flow object types return empty sosofo
+      // TODO: Implement other flow object types (paragraph, sequence, etc.)
+      return makeSosofo('empty');
+  }
+};
+
+/**
  * Standard primitive registry
  * Maps primitive names to function objects
  */
@@ -7324,6 +7520,14 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   'ancestors': new FunctionObj('ancestors', ancestorsPrimitive),
   'descendants': new FunctionObj('descendants', descendantsPrimitive),
   'child-number': new FunctionObj('child-number', childNumberPrimitive),
+
+  // DSSSL processing primitives (§10)
+  'current-node': new FunctionObj('current-node', currentNodePrimitive),
+  'process-children': new FunctionObj('process-children', processChildrenPrimitive),
+  'process-node-list': new FunctionObj('process-node-list', processNodeListPrimitive),
+  'empty-sosofo': new FunctionObj('empty-sosofo', emptySosofoPrimitive),
+  'sosofo-append': new FunctionObj('sosofo-append', sosofoAppendPrimitive),
+  'make-flow-object': new FunctionObj('make-flow-object', makeFlowObjectPrimitive),
 };
 
 /**

@@ -10,8 +10,9 @@
 import {
   type ELObj,
   makeNumber,
-    makeBoolean,
+  makeBoolean,
   makeSymbol,
+  makeKeyword,
   makeString,
   makeChar,
   makePair,
@@ -434,8 +435,10 @@ export class Parser {
   }
 
   /**
-   * Parse identifier/symbol
+   * Parse identifier/symbol/keyword
    * Port from: SchemeParser::handleIdentifier
+   *
+   * DSSSL keywords end with ':' (e.g., system-id:, data:)
    */
   private parseIdentifier(): ELObj {
     let id = '';
@@ -446,6 +449,11 @@ export class Parser {
 
     if (id.length === 0) {
       throw this.error('Expected identifier');
+    }
+
+    // DSSSL keyword: trailing colon (e.g., system-id:, data:)
+    if (id.endsWith(':')) {
+      return makeKeyword(id.slice(0, -1)); // Remove trailing colon
     }
 
     return makeSymbol(id);

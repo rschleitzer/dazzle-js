@@ -5,10 +5,12 @@
  * - A value stack for computation
  * - A control stack for function calls
  * - A closure for lexical variable access
+ * - DSSSL processing context (current node, grove)
  */
 
 import type { ELObj } from './elobj.js';
 import type { Insn } from './insn.js';
+import type { Node, Grove } from '../grove/index.js';
 import { makePair as makeELObjPair } from './elobj.js';
 
 /**
@@ -59,6 +61,18 @@ export class VM {
    */
   private controlStack: ControlStackEntry[] = [];
   private controlStackLimit: number = 1000;
+
+  /**
+   * DSSSL processing context - current node being processed
+   * Port from: Interpreter.h ELObj *currentNode
+   */
+  public currentNode: Node | null = null;
+
+  /**
+   * DSSSL processing context - grove being processed
+   * Port from: Interpreter.h Grove *grove
+   */
+  public grove: Grove | null = null;
 
   constructor() {
     this.initStack();
