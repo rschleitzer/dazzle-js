@@ -7075,6 +7075,56 @@ const sosofoAppendPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj 
 };
 
 /**
+ * process-root - Start DSSSL processing from the document root
+ * Port from: primitive.cxx ProcessRoot::primitiveCall
+ *
+ * Finds and executes the "root" construction rule.
+ */
+const processRootPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj => {
+  if (!vm.grove) {
+    throw new Error('process-root: no grove in processing context');
+  }
+  if (!vm.globals) {
+    throw new Error('process-root: no global environment');
+  }
+
+  // Find the root rule
+  const mode = vm.processingMode || '';
+  const rule = vm.globals.ruleRegistry.findRule('root', mode);
+
+  if (!rule) {
+    // No root rule defined - return empty sosofo
+    return makeSosofo('empty');
+  }
+
+  // Save current node and set to root
+  const savedNode = vm.currentNode;
+  vm.currentNode = vm.grove.root();
+
+  try {
+    // Execute the rule's lambda (should be a closure)
+    const func = rule.func.asFunction();
+    if (!func || !func.isClosure()) {
+      throw new Error('process-root: root rule must be a function');
+    }
+
+    // Call the rule with no arguments
+    const result = callClosure(func, [], vm);
+
+    // Result should be a sosofo
+    const sosofo = result.asSosofo();
+    if (!sosofo) {
+      throw new Error('process-root: root rule must return a sosofo');
+    }
+
+    return result;
+  } finally {
+    // Restore current node
+    vm.currentNode = savedNode;
+  }
+};
+
+/**
  * process-children - Process the children of the current node
  * Port from: primitive.cxx ProcessChildren::primitiveCall
  */
@@ -7108,13 +7158,69 @@ const processNodeListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELO
  * Helper: Process a node list and return a sosofo
  * Port from: Interpreter.cxx Interpreter::processNodeList()
  *
- * For now, this is a stub that returns empty sosofo.
- * Full implementation will invoke DSSSL construction rules.
+ * Iterates through nodes, finds matching rules, executes them, and combines results.
  */
 function processNodeListHelper(nodeList: NodeList, vm: VM): ELObj {
-  // TODO: Implement full DSSSL rule matching and construction
-  // For now, just return empty sosofo
-  return makeSosofo('empty');
+  if (!vm.globals) {
+    throw new Error('processNodeList: no global environment');
+  }
+
+  const sosofos: ELObj[] = [];
+  const mode = vm.processingMode || '';
+
+  // Iterate through node list
+  let current = nodeList.first();
+  while (current) {
+    // Find construction rule for this element
+    const gi = current.gi();
+    if (gi) {
+      const rule = vm.globals.ruleRegistry.findRule(gi, mode);
+
+      if (rule) {
+        // Save current node
+        const savedNode = vm.currentNode;
+        vm.currentNode = current;
+
+        try {
+          // Execute the rule's lambda
+          const func = rule.func.asFunction();
+          if (!func || !func.isClosure()) {
+            throw new Error(`processNodeList: rule for '${gi}' must be a function`);
+          }
+
+          // Call the rule with no arguments
+          const result = callClosure(func, [], vm);
+
+          // Result should be a sosofo
+          const sosofo = result.asSosofo();
+          if (!sosofo) {
+            throw new Error(`processNodeList: rule for '${gi}' must return a sosofo`);
+          }
+
+          sosofos.push(result);
+        } finally {
+          // Restore current node
+          vm.currentNode = savedNode;
+        }
+      }
+      // If no rule found, skip this node (default behavior)
+    }
+
+    // Move to next node
+    const rest = nodeList.rest();
+    if (!rest) break;
+    current = rest.first();
+    nodeList = rest;
+  }
+
+  // Combine all sosofos
+  if (sosofos.length === 0) {
+    return makeSosofo('empty');
+  } else if (sosofos.length === 1) {
+    return sosofos[0];
+  } else {
+    return makeSosofo('append', sosofos);
+  }
 }
 
 /**
@@ -7552,6 +7658,7 @@ export const standardPrimitives: Record<string, FunctionObj> = {
 
   // DSSSL processing primitives (§10)
   'current-node': new FunctionObj('current-node', currentNodePrimitive),
+  'process-root': new FunctionObj('process-root', processRootPrimitive),
   'process-children': new FunctionObj('process-children', processChildrenPrimitive),
   'process-node-list': new FunctionObj('process-node-list', processNodeListPrimitive),
   'empty-sosofo': new FunctionObj('empty-sosofo', emptySosofoPrimitive),

@@ -64,15 +64,19 @@ export class ProcessContext {
 
       case 'entity': {
         // Entity flow object - open file, process content, close file
-        const entityData = sosofo.data as { systemId: string; content: unknown[] };
+        const entityData = sosofo.data as { systemId: string; content: any[] };
         if (entityData && entityData.systemId) {
           this.fotBuilder.startEntity(entityData.systemId);
 
           // Process content (if any)
+          // Content items are ELObj values that may be sosofos
           if (entityData.content && Array.isArray(entityData.content)) {
             for (const item of entityData.content) {
-              if (item instanceof SosofoObj) {
-                this.process(item);
+              const sosofoItem = item.asSosofo?.();
+              if (sosofoItem) {
+                this.process(sosofoItem);
+              } else {
+                throw new Error(`make entity: content must be sosofos, got non-sosofo item`);
               }
             }
           }

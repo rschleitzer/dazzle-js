@@ -33,7 +33,9 @@ import {
   ClosureInsn,
 } from './insn.js';
 
+import { VM } from './vm.js';
 import { standardPrimitives } from './primitives.js';
+import { RuleRegistry } from '../dsssl/rules.js';
 
 /**
  * Variable binding in environment
@@ -119,10 +121,11 @@ export class Environment {
 }
 
 /**
- * Global environment - top-level bindings
+ * Global environment - top-level bindings and DSSSL rules
  */
 export class GlobalEnvironment {
   private bindings: Map<string, ELObj> = new Map();
+  public ruleRegistry: RuleRegistry = new RuleRegistry();
 
   constructor() {
     // Install standard primitives
@@ -201,6 +204,12 @@ export class Compiler {
             return this.compileOr(pair.cdr, env, stackPos, next);
           case 'make':
             return this.compileMake(pair.cdr, env, stackPos, next);
+          case 'element':
+            return this.compileElement(pair.cdr, env, stackPos, next);
+          case 'root':
+            return this.compileRoot(pair.cdr, env, stackPos, next);
+          case 'mode':
+            return this.compileMode(pair.cdr, env, stackPos, next);
         }
       }
 
@@ -725,5 +734,177 @@ export class Compiler {
       list = new PairObj(exprs[i], list);
     }
     return new PairObj(makeSymbol('begin'), list);
+  }
+
+  /**
+   * Compile element construction rule
+   * Port from: Interpreter.cxx compileElement()
+   *
+   * Syntax: (element gi body...)
+   *
+   * This doesn't generate runtime code - it registers a construction rule.
+   * Returns empty instruction that does nothing.
+   */
+  private compileElement(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
+    const argsArray = this.listToArray(args);
+
+    if (argsArray.length < 1) {
+      throw new Error('element requires at least a GI');
+    }
+
+    // First arg is element name (symbol or string)
+    const giArg = argsArray[0];
+    let elementName: string;
+
+    const giSym = giArg.asSymbol();
+    const giStr = giArg.asString();
+
+    if (giSym) {
+      elementName = giSym.name;
+    } else if (giStr) {
+      elementName = giStr.value;
+    } else {
+      throw new Error('element requires a symbol or string for GI');
+    }
+
+    // Body is rest of arguments (wrapped in begin if multiple)
+    const body = argsArray.slice(1);
+    const bodyExpr = body.length === 1 ? body[0] : this.makeBegin(body);
+
+    // Compile body to a lambda (takes no args, accesses current-node via VM)
+    const lambdaBody = new PairObj(bodyExpr, theNilObj);
+    const lambdaExpr = new PairObj(
+      makeSymbol('lambda'),
+      new PairObj(theNilObj, lambdaBody) // Empty arg list
+    );
+
+    // Compile lambda to bytecode
+    const lambdaInsn = this.compile(lambdaExpr, env, stackPos, null);
+
+    // Execute to get the closure
+    const vm = new VM();
+    const closure = vm.eval(lambdaInsn);
+
+    // Register rule (mode is empty string for default)
+    this.globals.ruleRegistry.addRule(elementName, "", closure);
+
+    // Return no-op instruction (element forms don't execute at template load time)
+    return new ConstantInsn(theNilObj, next);
+  }
+
+  /**
+   * Compile root construction rule
+   * Port from: Interpreter.cxx compileRoot()
+   *
+   * Syntax: (root body...)
+   *
+   * Registers a rule for the document root.
+   */
+  private compileRoot(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
+    const argsArray = this.listToArray(args);
+
+    if (argsArray.length === 0) {
+      throw new Error('root requires a body');
+    }
+
+    // Body (wrapped in begin if multiple expressions)
+    const bodyExpr = argsArray.length === 1 ? argsArray[0] : this.makeBegin(argsArray);
+
+    // Compile to lambda
+    const lambdaBody = new PairObj(bodyExpr, theNilObj);
+    const lambdaExpr = new PairObj(
+      makeSymbol('lambda'),
+      new PairObj(theNilObj, lambdaBody)
+    );
+
+    // Compile the lambda to bytecode
+    const lambdaInsn = this.compile(lambdaExpr, env, stackPos, null);
+
+    // Execute to get the closure
+    const vm = new VM();
+    const closure = vm.eval(lambdaInsn);
+
+    // Register as root rule
+    this.globals.ruleRegistry.addRule("root", "", closure);
+
+    // Return no-op
+    return new ConstantInsn(theNilObj, next);
+  }
+
+  /**
+   * Compile mode declaration
+   * Port from: Interpreter.cxx compileMode()
+   *
+   * Syntax: (mode name (element gi body...)...)
+   *
+   * For now, this is a stub. Full implementation would set current mode context.
+   */
+  private compileMode(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
+    const argsArray = this.listToArray(args);
+
+    if (argsArray.length < 2) {
+      throw new Error('mode requires a name and at least one rule');
+    }
+
+    // First arg is mode name
+    const modeNameArg = argsArray[0];
+    let modeName: string;
+
+    const modeSym = modeNameArg.asSymbol();
+    if (modeSym) {
+      modeName = modeSym.name;
+    } else {
+      throw new Error('mode requires a symbol for mode name');
+    }
+
+    // Rest are element definitions
+    for (let i = 1; i < argsArray.length; i++) {
+      const ruleExpr = argsArray[i];
+      const rulePair = ruleExpr.asPair();
+
+      if (!rulePair) {
+        throw new Error('mode body must contain element expressions');
+      }
+
+      const ruleOp = rulePair.car.asSymbol();
+      if (ruleOp && ruleOp.name === 'element') {
+        // Parse element rule
+        const elementArgs = this.listToArray(rulePair.cdr);
+        if (elementArgs.length < 1) {
+          throw new Error('element in mode requires GI');
+        }
+
+        const giArg = elementArgs[0];
+        let elementName: string;
+
+        const giSym = giArg.asSymbol();
+        const giStr = giArg.asString();
+
+        if (giSym) {
+          elementName = giSym.name;
+        } else if (giStr) {
+          elementName = giStr.value;
+        } else {
+          throw new Error('element requires symbol or string for GI');
+        }
+
+        // Body
+        const body = elementArgs.slice(1);
+        const bodyExpr = body.length === 1 ? body[0] : this.makeBegin(body);
+
+        // Compile to lambda
+        const lambdaBody = new PairObj(bodyExpr, theNilObj);
+        const lambdaExpr = new PairObj(
+          makeSymbol('lambda'),
+          new PairObj(theNilObj, lambdaBody)
+        );
+
+        // Register with mode
+        this.globals.ruleRegistry.addRule(elementName, modeName, lambdaExpr);
+      }
+    }
+
+    // Return no-op
+    return new ConstantInsn(theNilObj, next);
   }
 }

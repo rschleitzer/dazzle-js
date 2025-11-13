@@ -74,6 +74,18 @@ export class VM {
    */
   public grove: Grove | null = null;
 
+  /**
+   * DSSSL processing context - current processing mode
+   * Port from: Interpreter.h mode
+   */
+  public processingMode: string = '';
+
+  /**
+   * Global environment - for accessing rule registry
+   * Port from: Interpreter.h GlobalEnvironment
+   */
+  public globals: any = null;
+
   constructor() {
     this.initStack();
   }

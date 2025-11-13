@@ -123,6 +123,7 @@ program
 
       // Create VM and set up DSSSL context
       const vm = new VM();
+      vm.globals = globals;
       vm.grove = grove;
       vm.currentNode = grove.root();
 

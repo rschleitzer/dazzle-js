@@ -58,6 +58,38 @@ Full DSSSL processing system ported from OpenJade, enabling template-driven code
 
 Output: `MyClass.java` containing Java class with XML element name.
 
+## Rule-Based Processing (Complete)
+
+**Construction Rules** (`dsssl/rules.ts`):
+- `RuleRegistry`: Stores element and root rules indexed by name+mode
+- `element` special form: Registers element construction rules
+- `root` special form: Registers document root rule
+- Rules compile to closures executed during traversal
+
+**Processing Primitives**:
+- `process-root`: Entry point - finds root rule and executes
+- `process-children`: Traverses child nodes, matches rules, returns combined sosofo
+- Automatic tree traversal with rule matching
+
+**Example**:
+```scheme
+(root
+  (make entity system-id: "output.txt"
+    (literal "Header\n")
+    (process-children)
+    (literal "Footer\n")))
+
+(element chapter
+  (sosofo-append
+    (literal "Chapter: ")
+    (literal (gi (current-node)))
+    (literal "\n")))
+
+(process-root)
+```
+
+Result: Automatic traversal, rule execution, sosofo collection and backend processing.
+
 ## Status
-**Phase Complete**: Code generation with sosofos ✓
-**Next**: Rule-based processing (process-root, construction rules, modes)
+**Phase Complete**: Rule-based processing with construction rules ✓
+**Next**: Multi-pass processing with modes, next-match
