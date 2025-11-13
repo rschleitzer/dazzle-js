@@ -8,6 +8,7 @@
 import {
   type ELObj,
   type Signature,
+  PairObj,
   makeSymbol,
   theNilObj,
   theTrueObj,
@@ -520,10 +521,10 @@ export class Compiler {
     }
 
     // Build (begin expr1 expr2 ...)
-    let list = theNilObj;
+    let list: ELObj = theNilObj;
     for (let i = exprs.length - 1; i >= 0; i--) {
-      list = new (require('./elobj').PairObj)(exprs[i], list);
+      list = new PairObj(exprs[i], list);
     }
-    return new (require('./elobj').PairObj)(makeSymbol('begin'), list);
+    return new PairObj(makeSymbol('begin'), list);
   }
 }
