@@ -10,6 +10,7 @@ import {
   type ELObj,
   type PrimitiveFunction,
   FunctionObj,
+  PairObj,
   makeNumber,
   makeBoolean,
   makePair,
@@ -24,7 +25,7 @@ import {
   theFalseObj,
 } from './elobj';
 
-import { EMPTY_NODE_LIST } from '../grove';
+import { EMPTY_NODE_LIST } from '../grove/index';
 
 /**
  * Arithmetic primitive: +
@@ -387,7 +388,7 @@ const lengthPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
  * Port from: primitive.cxx List::primitiveCall
  */
 const listPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
-  let result = theNilObj;
+  let result: ELObj = theNilObj;
 
   // Build list from right to left
   for (let i = args.length - 1; i >= 0; i--) {
@@ -467,7 +468,7 @@ const reversePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
     throw new Error('reverse requires exactly 1 argument');
   }
 
-  let result = theNilObj;
+  let result: ELObj = theNilObj;
   let current = args[0];
 
   while (!current.asNil()) {
@@ -2732,7 +2733,7 @@ const reverseInPlacePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   // For now, just use reverse (non-destructive)
   // A true in-place reverse would require mutable pair support
   let list = args[0];
-  let result = theNilObj;
+  let result: ELObj = theNilObj;
 
   while (!list.asNil()) {
     const pair = list.asPair();
@@ -2776,7 +2777,7 @@ const listCopyPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   }
 
   // Reconstruct the list
-  let result = theNilObj;
+  let result: ELObj = theNilObj;
   for (let i = elements.length - 1; i >= 0; i--) {
     result = makePair(elements[i], result);
   }
@@ -2825,7 +2826,7 @@ const makeListPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   const fillValue = args.length === 2 ? args[1] : theNilObj;
   const size = Math.floor(n.value);
 
-  let result = theNilObj;
+  let result: ELObj = theNilObj;
   for (let i = 0; i < size; i++) {
     result = makePair(fillValue, result);
   }
@@ -2855,7 +2856,7 @@ const iotaPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   const step = args.length >= 3 ? args[2].asNumber() : null;
   const stepValue = step ? step.value : 1;
 
-  let result = theNilObj;
+  let result: ELObj = theNilObj;
   for (let i = Math.floor(count.value) - 1; i >= 0; i--) {
     const value = startValue + i * stepValue;
     result = makePair(makeNumber(value, true), result);
@@ -3035,7 +3036,7 @@ const filterPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   }
 
   // Reconstruct list
-  let finalResult = theNilObj;
+  let finalResult: ELObj = theNilObj;
   for (let i = result.length - 1; i >= 0; i--) {
     finalResult = makePair(result[i], finalResult);
   }
@@ -3081,7 +3082,7 @@ const removePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   }
 
   // Reconstruct list
-  let finalResult = theNilObj;
+  let finalResult: ELObj = theNilObj;
   for (let i = result.length - 1; i >= 0; i--) {
     finalResult = makePair(result[i], finalResult);
   }
@@ -3210,7 +3211,7 @@ const takePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   }
 
   // Reconstruct list
-  let finalResult = theNilObj;
+  let finalResult: ELObj = theNilObj;
   for (let i = result.length - 1; i >= 0; i--) {
     finalResult = makePair(result[i], finalResult);
   }
@@ -3298,7 +3299,7 @@ const splitAtPrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   }
 
   // Reconstruct first part
-  let first = theNilObj;
+  let first: ELObj = theNilObj;
   for (let i = firstPart.length - 1; i >= 0; i--) {
     first = makePair(firstPart[i], first);
   }
@@ -3346,7 +3347,7 @@ const takeWhilePrimitive: PrimitiveFunction = (args: ELObj[]): ELObj => {
   }
 
   // Reconstruct list
-  let finalResult = theNilObj;
+  let finalResult: ELObj = theNilObj;
   for (let i = result.length - 1; i >= 0; i--) {
     finalResult = makePair(result[i], finalResult);
   }
@@ -7266,18 +7267,6 @@ export const standardPrimitives: Record<string, FunctionObj> = {
 
   // Symbol operations
   'gensym': new FunctionObj('gensym', gensymPrimitive),
-
-  // Case-insensitive string comparisons
-  'string-ci<?': new FunctionObj('string-ci<?', stringCiLessPrimitive),
-  'string-ci>?': new FunctionObj('string-ci>?', stringCiGreaterPrimitive),
-  'string-ci<=?': new FunctionObj('string-ci<=?', stringCiLessOrEqualPrimitive),
-  'string-ci>=?': new FunctionObj('string-ci>=?', stringCiGreaterOrEqualPrimitive),
-
-  // Case-insensitive character comparisons
-  'char-ci<?': new FunctionObj('char-ci<?', charCiLessPrimitive),
-  'char-ci>?': new FunctionObj('char-ci>?', charCiGreaterPrimitive),
-  'char-ci<=?': new FunctionObj('char-ci<=?', charCiLessOrEqualPrimitive),
-  'char-ci>=?': new FunctionObj('char-ci>=?', charCiGreaterOrEqualPrimitive),
 
   // Additional I/O operations (stubs)
   'call-with-input-file': new FunctionObj('call-with-input-file', callWithInputFilePrimitive),

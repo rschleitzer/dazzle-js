@@ -23,7 +23,7 @@ import {
   AndInsn,
   PopInsn,
   PopBindingsInsn,
-  ConsInsn,
+    ConsInsn,
   FrameRefInsn,
   StackRefInsn,
   ClosureRefInsn,
@@ -294,7 +294,7 @@ export class Compiler {
     const capturedVars: string[] = [];
     const lambdaEnv = env.enterLambda(paramNames, capturedVars);
 
-    const bodyInsn = this.compile(body, lambdaEnv, new ReturnInsn(paramNames.length));
+    const bodyInsn = this.compile(body, lambdaEnv, 0, new ReturnInsn(paramNames.length));
 
     const signature: Signature = {
       nRequiredArgs: paramNames.length,

@@ -10,7 +10,7 @@
 import {
   type ELObj,
   makeNumber,
-  makeBoolean,
+    makeBoolean,
   makeSymbol,
   makeString,
   makeChar,
@@ -106,7 +106,7 @@ export class Parser {
     }
 
     const c = this.peek();
-    const location = this.currentLocation();
+    const currentToken = this.currentLocation();
 
     // Self-evaluating
     if (c === '#') {
