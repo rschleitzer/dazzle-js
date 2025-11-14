@@ -419,11 +419,20 @@ export class CallInsn extends Insn {
   }
 
   execute(vm: VM): Insn | null {
+    // DEBUG: show stack state
+    console.error('[CallInsn] Stack size:', vm.stackSize());
+    console.error('[CallInsn] nArgs:', this.nArgs);
+    for (let i = 0; i < Math.min(5, vm.stackSize()); i++) {
+      console.error(`[CallInsn] Stack[${vm.stackSize() - 1 - i}]:`, vm.getStackValue(vm.stackSize() - 1 - i));
+    }
+
     // Pop function from top of stack
     const funcObj = vm.pop();
     const func = funcObj.asFunction();
 
     if (!func) {
+      console.error('[CallInsn] Trying to call:', funcObj);
+      console.error('[CallInsn] Type:', funcObj.constructor.name);
       throw new Error('Cannot call non-function');
     }
 
@@ -531,6 +540,33 @@ export class ClosureInsn extends Insn {
  * Sets a stack variable to the value on top of stack.
  * The old value is returned (left on stack).
  */
+/**
+ * SetImmediateInsn - For letrec initialization
+ * Port from: OpenJade Insn.h SetImmediateInsn
+ *
+ * Pops a value from stack and stores it at a relative offset.
+ * Used by letrec to initialize recursive bindings.
+ */
+export class SetImmediateInsn extends Insn {
+  constructor(
+    private offset: number,  // positive offset from current stack position
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Pop the value to store
+    const value = vm.pop();
+
+    // Set the stack slot at -offset from current position
+    // Port from: OpenJade Insn.cxx: vm.sp[-n_] = *vm.sp (after --vm.sp)
+    vm.setStackRelative(-this.offset, value);
+
+    return this.next;
+  }
+}
+
 export class StackSetInsn extends Insn {
   constructor(
     private index: number,        // negative offset from sp

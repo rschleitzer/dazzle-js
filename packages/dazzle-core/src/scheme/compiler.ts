@@ -26,6 +26,7 @@ import {
   PopInsn,
   PopBindingsInsn,
   ConsInsn,
+  SetImmediateInsn,
   FrameRefInsn,
   StackRefInsn,
   ClosureRefInsn,
@@ -277,7 +278,6 @@ export class GlobalEnvironment {
           if (sym) paramsDebug.push(sym.name);
           curr = curr.asPair()!.cdr;
         }
-        console.error('[DEBUG deepCopyAST] Copying lambda with params:', paramsDebug);
       }
 
       const newCar = this.deepCopyAST(pair.car);
@@ -294,7 +294,6 @@ export class GlobalEnvironment {
           if (sym) paramsDebug.push(sym.name);
           curr = curr.asPair()!.cdr;
         }
-        console.error('[DEBUG deepCopyAST] Lambda AFTER copy has params:', paramsDebug);
       }
 
       return result;
@@ -348,7 +347,6 @@ export class GlobalEnvironment {
       try {
         // DEBUG: Check if this is map function
         if (name === 'map') {
-          console.error('[DEBUG lookup] Compiling stored map expression');
           // Check map1 params in stored expr
           try {
             const lambda = def.expr.asPair();
@@ -365,9 +363,7 @@ export class GlobalEnvironment {
               if (sym) paramsArray.push(sym.name);
               current = current.asPair()!.cdr;
             }
-            console.error('[DEBUG lookup] map1 params in stored expr:', paramsArray);
           } catch (e) {
-            console.error('[DEBUG lookup] Failed to extract map1 params');
           }
         }
 
@@ -502,20 +498,7 @@ export class Compiler {
   private compileVariable(name: string, env: Environment, stackPos: number, next: Insn | null): Insn {
     const binding = env.lookup(name);
 
-    // DEBUG: Check if this is map1
-    if (name === 'map1') {
-      console.error('[DEBUG compileVariable] Looking up map1');
-      console.error('[DEBUG compileVariable] Binding result:', binding);
-      console.error('[DEBUG compileVariable] Environment bindings:', env.getBindingNames());
-      console.error('[DEBUG compileVariable] Stack position:', stackPos);
-    }
-
     if (binding) {
-      // DEBUG
-      if (name === 'map1') {
-        console.error('[DEBUG compileVariable] Found map1 binding:', binding);
-      }
-
       // Local variable (frame, stack, or closure)
       switch (binding.kind) {
         case 'frame':
@@ -532,10 +515,6 @@ export class Compiler {
     // Global variable - check if defined
     // Port from: OpenJade VariableExpression::compile global lookup
     if (!this.globals.defined(name)) {
-      // DEBUG: Show environment state
-      console.error(`[DEBUG] Undefined variable: ${name}`);
-      console.error(`[DEBUG] Environment bindings:`, env.getBindingNames());
-      console.error(`[DEBUG] Stack position:`, stackPos);
       throw new Error(`Undefined variable: ${name}`);
     }
 
@@ -582,32 +561,10 @@ export class Compiler {
       throw new Error('lambda requires at least 2 arguments');
     }
 
-    // DEBUG: Check raw params BEFORE listToArray
-    const rawParamsDebug = [];
-    let rawCurrent = argsArray[0];
-    while (rawCurrent.asPair()) {
-      const sym = rawCurrent.asPair()!.car.asSymbol();
-      if (sym) rawParamsDebug.push(sym.name);
-      rawCurrent = rawCurrent.asPair()!.cdr;
-    }
-    if (rawParamsDebug.includes('xs') && rawParamsDebug.length === 1) {
-      console.error('[DEBUG compileLambda] RAW params (before listToArray):', rawParamsDebug);
-      console.error('[DEBUG compileLambda] This lambda is corrupted at entry!');
-    }
-
     const params = this.listToArray(argsArray[0]);
     const paramNames: string[] = [];
     let hasRestArg = false;
     let restArgName: string | null = null;
-
-    // DEBUG
-    const paramsDebug = params.map(p => {
-      const sym = p.asSymbol();
-      return sym ? sym.name : '<not-symbol>';
-    });
-    if (paramsDebug.includes('xs') || paramsDebug.includes('f')) {
-      console.error('[DEBUG compileLambda] params before parsing:', paramsDebug);
-    }
 
     // Parse parameters, handling #!rest
     for (let i = 0; i < params.length; i++) {
@@ -662,9 +619,6 @@ export class Compiler {
 
     // DEBUG
     if (paramNames.includes('xs')) {
-      console.error('[DEBUG compileLambda] paramNames:', paramNames);
-      console.error('[DEBUG compileLambda] hasRestArg:', hasRestArg);
-      console.error('[DEBUG compileLambda] nRequiredArgs:', hasRestArg ? paramNames.length - 1 : paramNames.length);
     }
 
     const lambdaEnv = env.enterLambda(paramNames, capturedVars);
@@ -735,7 +689,6 @@ export class Compiler {
     if (nameExprPair) {
       const funcName = nameExprPair.car.asSymbol();
       if (funcName && funcName.name === 'map') {
-        console.error('[DEBUG compileDefine] Compiling define for map');
         // Check if body contains map1 lambda
         try {
           const body = argsArray[1];
@@ -753,10 +706,8 @@ export class Compiler {
               if (sym) paramsArray.push(sym.name);
               current = current.asPair()!.cdr;
             }
-            console.error('[DEBUG compileDefine] map1 params in body:', paramsArray);
           }
         } catch (e) {
-          console.error('[DEBUG compileDefine] Failed to extract map1 params');
         }
       }
     }
@@ -915,7 +866,6 @@ export class Compiler {
             if (sym) paramsDebug.push(sym.name);
             curr = curr.asPair()!.cdr;
           }
-          console.error('[DEBUG compileLet] map1 params BEFORE pushing to inits:', paramsDebug);
         }
       }
 
@@ -934,8 +884,6 @@ export class Compiler {
             if (sym) paramsDebug.push(sym.name);
             curr = curr.asPair()!.cdr;
           }
-          console.error('[DEBUG compileLet] map1 params AFTER pushing to inits:', paramsDebug);
-          console.error('[DEBUG compileLet] map1 first pair cdr:', firstPair?.cdr);
           // Store reference to check later
           (globalThis as any).__map1ParamsFirstPair = firstPair;
         }
@@ -969,7 +917,6 @@ export class Compiler {
             if (sym) paramsDebug.push(sym.name);
             curr = curr.asPair()!.cdr;
           }
-          console.error('[DEBUG compileLet] map1 params BEFORE compile (iteration', i, '):', paramsDebug);
         }
       }
 
@@ -979,7 +926,6 @@ export class Compiler {
         if (lambdaPair) {
           const params = lambdaPair.cdr.asPair()?.car;
           const firstPair = params?.asPair();
-          console.error('[DEBUG compileLet] RIGHT BEFORE compile: first pair cdr:', firstPair?.cdr);
         }
       }
 
@@ -999,7 +945,6 @@ export class Compiler {
             if (sym) paramsDebug.push(sym.name);
             curr = curr.asPair()!.cdr;
           }
-          console.error('[DEBUG compileLet] map1 params AFTER compile (iteration', i, '):', paramsDebug);
         }
       }
     }
@@ -1008,12 +953,14 @@ export class Compiler {
   }
 
   /**
-   * Compile letrec special form - WORK IN PROGRESS
-   * Port from: OpenJade Interpreter.cxx compileLetrec
+   * Compile letrec special form
+   * Port from: OpenJade Expression.cxx LetrecExpression::compile
    *
-   * TEMPORARY: Implement just enough to support named let
-   * Named let transforms to: (letrec ((name (lambda ...))) (name args...))
-   * For now, use define + let as a workaround
+   * Letrec allows recursive bindings by:
+   * 1. Allocating stack slots for all variables (initially undefined)
+   * 2. Evaluating inits with those slots visible in the environment
+   * 3. Storing the computed values into those slots
+   * 4. Evaluating the body
    */
   private compileLetrec(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
     const argsArray = this.listToArray(args);
@@ -1022,12 +969,6 @@ export class Compiler {
     }
 
     const bindings = this.listToArray(argsArray[0]);
-
-    // WORKAROUND: Transform (letrec ((v1 e1) ...) body)
-    // to: (let ((v1 e1') ...) body) where e1' doesn't reference v1
-    // This works if inits are lambdas that don't immediately reference the letrec vars
-    // (they reference them later when called, at which point vars are on stack)
-
     const vars: string[] = [];
     const inits: ELObj[] = [];
 
@@ -1046,23 +987,41 @@ export class Compiler {
       inits.push(bindingList[1]);
     }
 
+    const nVars = vars.length;
+
     // Body is remaining arguments (implicit begin)
     const bodyExprs = argsArray.slice(1);
     const body = bodyExprs.length === 1
       ? bodyExprs[0]
       : this.makeBegin(bodyExprs);
 
-    // Compile body in extended environment (variables on stack)
-    const bodyEnv = env.extendStack(vars);
-    const bodyStackPos = stackPos + vars.length;
-    let result = this.compile(body, bodyEnv, bodyStackPos, new PopBindingsInsn(vars.length, next));
+    // DEBUG
+    const bodySym = body.asSymbol();
+    if (bodySym) {
+    }
 
-    // Compile initializers in extended environment to support recursion
-    // For letrec, the inits must see the letrec variables so they can capture them
-    // This is critical for named let where the lambda needs to recursively call itself
-    for (let i = 0; i < inits.length; i++) {
-      const numPushed = inits.length - 1 - i;
-      result = this.compile(inits[i], bodyEnv, stackPos + numPushed, result);
+    // Create extended environment with all variables visible
+    const bodyEnv = env.extendStack(vars);
+    const bodyStackPos = stackPos + nVars;
+
+    // Compile body with extended environment
+    let result: Insn = this.compile(body, bodyEnv, bodyStackPos, new PopBindingsInsn(nVars, next));
+
+    // Add SetImmediateInsn for each variable (in reverse order)
+    // These will pop init values and store them into the reserved slots
+    for (let i = 0; i < nVars; i++) {
+      result = new SetImmediateInsn(nVars, result);
+    }
+
+    // Compile inits in reverse order
+    // Each init is compiled with all variables visible (for recursion)
+    for (let i = nVars - 1; i >= 0; i--) {
+      result = this.compile(inits[i], bodyEnv, bodyStackPos, result);
+    }
+
+    // Push placeholder values for all variables (to reserve stack slots)
+    for (let i = nVars - 1; i >= 0; i--) {
+      result = new ConstantInsn(theNilObj, result);
     }
 
     return result;
@@ -1331,15 +1290,21 @@ export class Compiler {
     }
 
     // Generic function call
-    // Stack layout: [arg1, arg2, ..., argN, function]
-    // CallInsn will pop function, execute it with args, push result
+    // Stack layout when CallInsn executes: [arg0, arg1, ..., argN-1, function]
+    // Function must be on top of stack for CallInsn to pop it
+    //
+    // Instruction chain: last compiled executes first
+    // To get stack [arg0, ..., argN-1, fn]:
+    //   Compile: arg0 first (pushes first) → ... → argN-1 → fn last (pushes last) → CallInsn
+    // Build chain: CallInsn ← fn ← argN-1 ← ... ← arg0
 
     let result: Insn = new CallInsn(args.length, next);
 
-    // Compile function expression - will be on top of stack after args
+    // Compile function - it will execute after all args, so will be on top
     result = this.compile(fn, env, stackPos + args.length, result);
 
-    // Compile arguments right-to-left so they evaluate left-to-right
+    // Compile arguments in reverse (n-1 down to 0)
+    // They execute first-to-last (0 to n-1), pushing in that order
     for (let i = args.length - 1; i >= 0; i--) {
       result = this.compile(args[i], env, stackPos + i, result);
     }
