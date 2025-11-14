@@ -1131,7 +1131,8 @@ export class Compiler {
         const bodyExpr = clauseBody.length === 1
           ? clauseBody[0]
           : this.makeBegin(clauseBody);
-        failInsn = new PopInsn(this.compile(bodyExpr, env, stackPos - 1, next));
+        // Key will be popped before body executes, so body runs at original stackPos
+        failInsn = new PopInsn(this.compile(bodyExpr, env, stackPos, next));
         continue;
       }
 
@@ -1142,9 +1143,9 @@ export class Compiler {
         : this.makeBegin(clauseBody);
 
       // Compile the clause body
-      // Note: CaseInsn will pop the key from stack when it matches, before executing body
-      // So the body runs at stackPos-1 (key is gone) and continues directly to next
-      const bodyInsn = this.compile(bodyExpr, env, stackPos - 1, next);
+      // Port from: OpenJade CaseInsn behavior - body executes after key is popped
+      // Key was pushed to stackPos, then popped, so body runs with stack at stackPos
+      const bodyInsn = this.compile(bodyExpr, env, stackPos, next);
 
       // Build chain of CaseInsn for each datum (right to left)
       let clauseInsn: Insn = failInsn;
