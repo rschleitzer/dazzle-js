@@ -6165,18 +6165,36 @@ const descendantsPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj =
 /**
  * Grove: child-number
  * Port from: primitive.h PRIMITIVE(ChildNumber, "child-number", 0, 1, 0)
+ * Port from: primitive.cxx ChildNumber - uses optSingletonNodeList
  */
 const childNumberPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('child-number requires exactly 1 argument');
   }
 
-  const node = args[0].asNode();
-  if (!node) {
-    throw new Error('child-number requires a node argument');
+  // Port from: OpenJade optSingletonNodeList - accepts node or singleton node-list
+  let nodeObj = args[0].asNode();
+  if (!nodeObj) {
+    // Try as a singleton node-list
+    const nodeList = args[0].asNodeList();
+    if (nodeList) {
+      const first = nodeList.nodes.first();
+      const rest = nodeList.nodes.rest();
+
+      // Must be singleton (exactly one element)
+      if (first && (!rest || rest.length() === 0)) {
+        nodeObj = makeNode(first).asNode();
+      } else {
+        throw new Error('child-number requires a singleton node-list (got empty or multi-element list)');
+      }
+    }
+
+    if (!nodeObj) {
+      throw new Error('child-number requires a node or singleton node-list argument');
+    }
   }
 
-  return makeNumber(node.node.childNumber());
+  return makeNumber(nodeObj.node.childNumber());
 };
 
 // ============ Common List Accessors ============
