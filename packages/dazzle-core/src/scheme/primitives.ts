@@ -837,8 +837,9 @@ const stringAppendPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
 
-    // Port from: OpenJade appears to treat () and #f as empty string in string-append
+    // Port from: OpenJade StringAppend - treats () and #f as empty string
     // This allows templates to use (if ...) and (case ...) without else clauses
+    // AND allows attribute-string returning #f to be safely concatenated
     if (arg.asNil() || (arg.asBoolean() !== null && !arg.asBoolean()!.value)) {
       continue; // Treat () and #f as empty string
     }
@@ -6020,14 +6021,23 @@ const nodeListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
     return makeNodeList(EMPTY_NODE_LIST);
   }
 
-  // All arguments must be node-lists
+  // Port from: OpenJade primitive.cxx NodeList - accepts both nodes and node-lists
+  // Arguments can be either single nodes or node-lists
   const nodeLists: NodeList[] = [];
   for (let i = 0; i < args.length; i++) {
     const nl = args[i].asNodeList();
-    if (!nl) {
-      throw new Error(`node-list argument ${i} must be a node-list`);
+    if (nl) {
+      // It's a node-list, use it directly
+      nodeLists.push(nl.nodes);
+    } else {
+      // Try as a single node - wrap it in a singleton node-list
+      const node = args[i].asNode();
+      if (node) {
+        nodeLists.push(nodeListFromArray([node.node]));
+      } else {
+        throw new Error(`node-list argument ${i} must be a node or node-list`);
+      }
     }
-    nodeLists.push(nl.nodes);
   }
 
   // Concatenate all node-lists by converting to arrays and merging
@@ -6578,9 +6588,11 @@ const stringToListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj 
     throw new Error('string->list requires exactly 1 argument');
   }
 
+  // Port from: OpenJade - handle #f gracefully (from attribute-string returning #f)
   const str = args[0].asString();
   if (!str) {
-    throw new Error('string->list requires a string argument');
+    // Return empty list for #f (similar to how string=? returns #f for non-strings)
+    return theNilObj;
   }
 
   let result: ELObj = theNilObj;
