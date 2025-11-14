@@ -203,33 +203,15 @@ export class GlobalEnvironment {
     `;
 
     // map - R4RS map with multi-list support
-    // Port from: OpenJade builtins.dsl clause 8.5.10.3
-    const mapCode = `
-      (define (map f #!rest xs)
-        (let ((map1 (lambda (f xs)
-                     (let loop ((xs xs))
-                       (if (null? xs)
-                           '()
-                           (cons (f (car xs))
-                                 (loop (cdr xs))))))))
-         (cond ((null? xs)
-               '())
-              ((null? (cdr xs))
-               (map1 f (car xs)))
-              (else
-               (let loop ((xs xs))
-                 (if (null? (car xs))
-                     '()
-                     (cons (apply f (map1 car xs))
-                           (loop (map1 cdr xs)))))))))
-    `;
+    // NOTE: We use the primitive map from primitives.ts instead of the Scheme-level version
+    // The primitive version is more efficient and fully working
+    // const mapCode = `...` - REMOVED
 
     try {
       const exprs = parse(`
         ${nodeListReduceCode}
         ${nodeListToListCode}
         ${nodeListFilterCode}
-        ${mapCode}
       `);
 
       // Compile and execute immediately to avoid AST corruption

@@ -2437,7 +2437,6 @@ const listTailPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
  * Port from: primitive.cxx Map::primitiveCall
  */
 const mapPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
-  console.error('[DEBUG] mapPrimitive called with', args.length, 'arguments');
   if (args.length < 2) {
     throw new Error('map requires at least 2 arguments');
   }
@@ -5745,6 +5744,11 @@ const giPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
 const idPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('id requires exactly 1 argument');
+  }
+
+  console.error('[id] Called with argument type:', args[0].constructor.name);
+  if (args[0].asString()) {
+    console.error('[id] String value:', args[0].asString()!.value.substring(0, 50));
   }
 
   // Port from: OpenJade Id primitive uses optSingletonNodeList

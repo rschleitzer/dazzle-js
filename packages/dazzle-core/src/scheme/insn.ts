@@ -217,6 +217,10 @@ export class FrameRefInsn extends Insn {
 
   execute(vm: VM): Insn | null {
     const value = vm.getFrame(this.index);
+    console.error(`[FrameRefInsn] index=${this.index}, value type=${value.constructor.name}`);
+    if (value.asString()) {
+      console.error(`[FrameRefInsn] String value: "${value.asString()!.value.substring(0, 50)}"`);
+    }
     vm.push(value);
     return this.next;
   }
