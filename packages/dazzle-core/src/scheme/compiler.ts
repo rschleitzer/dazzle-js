@@ -266,7 +266,38 @@ export class GlobalEnvironment {
     // Pairs - recursively copy
     const pair = obj.asPair();
     if (pair) {
-      return makePair(this.deepCopyAST(pair.car), this.deepCopyAST(pair.cdr));
+      const carSym = pair.car.asSymbol();
+      if (carSym && carSym.name === 'lambda') {
+        // DEBUG: Show lambda params BEFORE copying
+        const params = pair.cdr.asPair()?.car;
+        const paramsDebug = [];
+        let curr = params;
+        while (curr?.asPair()) {
+          const sym = curr.asPair()!.car.asSymbol();
+          if (sym) paramsDebug.push(sym.name);
+          curr = curr.asPair()!.cdr;
+        }
+        console.error('[DEBUG deepCopyAST] Copying lambda with params:', paramsDebug);
+      }
+
+      const newCar = this.deepCopyAST(pair.car);
+      const newCdr = this.deepCopyAST(pair.cdr);
+      const result = makePair(newCar, newCdr);
+
+      // DEBUG: Check if this was a lambda, show params AFTER copying
+      if (carSym && carSym.name === 'lambda') {
+        const params = result.cdr.asPair()?.car;
+        const paramsDebug = [];
+        let curr = params;
+        while (curr?.asPair()) {
+          const sym = curr.asPair()!.car.asSymbol();
+          if (sym) paramsDebug.push(sym.name);
+          curr = curr.asPair()!.cdr;
+        }
+        console.error('[DEBUG deepCopyAST] Lambda AFTER copy has params:', paramsDebug);
+      }
+
+      return result;
     }
 
     // Other types (functions, sosofos, etc.) - return as-is
@@ -279,9 +310,9 @@ export class GlobalEnvironment {
    * Port from: Identifier::setDefinition
    */
   setDefinition(name: string, expr: ELObj): void {
-    // WORKAROUND: Deep copy the AST to prevent shared structure corruption
-    // This is necessary because compileLambda modifies shared list structures
-    this.bindings.set(name, { expr: this.deepCopyAST(expr) });
+    // NOTE: OpenJade doesn't deep copy - it stores the expression as-is
+    // Deep copying was causing corruption of shared AST structures
+    this.bindings.set(name, { expr });
   }
 
   /**
@@ -315,6 +346,31 @@ export class GlobalEnvironment {
 
       def.beingComputed = true;
       try {
+        // DEBUG: Check if this is map function
+        if (name === 'map') {
+          console.error('[DEBUG lookup] Compiling stored map expression');
+          // Check map1 params in stored expr
+          try {
+            const lambda = def.expr.asPair();
+            const lambdaBody = lambda?.cdr.asPair()?.cdr.asPair()?.car;
+            const letBindings = lambdaBody?.asPair()?.cdr.asPair()?.car;
+            const map1Binding = letBindings?.asPair()?.car.asPair();
+            const map1Lambda = map1Binding?.cdr.asPair()?.car;
+            const map1Params = map1Lambda?.asPair()?.cdr.asPair()?.car;
+
+            const paramsArray = [];
+            let current = map1Params;
+            while (current?.asPair()) {
+              const sym = current.asPair()!.car.asSymbol();
+              if (sym) paramsArray.push(sym.name);
+              current = current.asPair()!.cdr;
+            }
+            console.error('[DEBUG lookup] map1 params in stored expr:', paramsArray);
+          } catch (e) {
+            console.error('[DEBUG lookup] Failed to extract map1 params');
+          }
+        }
+
         // Compile and evaluate the expression
         const compiler = new Compiler(this);
         const insn = compiler.compile(def.expr, new Environment(), 0, null);
@@ -446,7 +502,20 @@ export class Compiler {
   private compileVariable(name: string, env: Environment, stackPos: number, next: Insn | null): Insn {
     const binding = env.lookup(name);
 
+    // DEBUG: Check if this is map1
+    if (name === 'map1') {
+      console.error('[DEBUG compileVariable] Looking up map1');
+      console.error('[DEBUG compileVariable] Binding result:', binding);
+      console.error('[DEBUG compileVariable] Environment bindings:', env.getBindingNames());
+      console.error('[DEBUG compileVariable] Stack position:', stackPos);
+    }
+
     if (binding) {
+      // DEBUG
+      if (name === 'map1') {
+        console.error('[DEBUG compileVariable] Found map1 binding:', binding);
+      }
+
       // Local variable (frame, stack, or closure)
       switch (binding.kind) {
         case 'frame':
@@ -786,34 +855,30 @@ export class Compiler {
         inits.push(bindingList[1]);
       }
 
-      // Named let implementation:
-      // (let name ((v1 e1) ...) body) compiles to:
-      // 1. Create lambda: (lambda (v1 ...) body)
-      // 2. Temporarily define 'name' as that lambda globally
-      // 3. Compile call: (name e1 ...)
-      // 4. Restore original global
+      // Named let implementation (Port from OpenJade SchemeParser.cxx parseLet)
+      // OpenJade transforms: (let name ((v1 e1) ...) body) to:
+      //   ((letrec ((name (lambda (v1 ...) body))) name) e1 ...)
+      //
+      // This creates a local recursive binding using letrec, not a global definition.
+      // This is critical because the lambda needs to capture the current environment.
 
       // Build lambda: (lambda (v1 ...) body)
       const lambdaParams = vars.reduceRight((acc: ELObj, v) => makePair(makeSymbol(v), acc), theNilObj);
       const lambdaBody = bodyExprs.length === 1 ? bodyExprs[0] : this.makeBegin(bodyExprs);
       const lambda = makePair(makeSymbol('lambda'), makePair(lambdaParams, makePair(lambdaBody, theNilObj)));
 
-      // Save and temporarily define the function globally
-      const savedGlobal = this.globals.lookup(name);
-      this.globals.setDefinition(name, lambda);  // Store uncompiled - will compile when looked up
+      // Build: (letrec ((name (lambda ...))) name)
+      const letrecBinding = makePair(makeSymbol(name), makePair(lambda, theNilObj));
+      const letrecBindings = makePair(letrecBinding, theNilObj);
+      const letrecBody = makeSymbol(name);  // Just the variable reference
+      const letrec = makePair(makeSymbol('letrec'), makePair(letrecBindings, makePair(letrecBody, theNilObj)));
 
-      // Build and compile call: (name e1 ...)
+      // Build call: ((letrec ...) e1 ...)
       const callArgs = inits.reduceRight((acc: ELObj, init) => makePair(init, acc), theNilObj);
-      const call = makePair(makeSymbol(name), callArgs);
-      const result = this.compile(call, env, stackPos, next);
+      const call = makePair(letrec, callArgs);
 
-      // Restore original global
-      if (savedGlobal !== null) {
-        this.globals.define(name, savedGlobal);
-      }
-      // Note: Can't fully remove temporary def, but that's OK - it's cached as compiled code
-
-      return result;
+      // Compile the call expression
+      return this.compile(call, env, stackPos, next);
     }
 
     const bindings = this.listToArray(argsArray[0]);
@@ -836,7 +901,45 @@ export class Compiler {
       }
 
       vars.push(name.name);
-      inits.push(bindingList[1]);
+      const init = bindingList[1];
+
+      // DEBUG: Check map1's lambda params BEFORE pushing to inits
+      if (name.name === 'map1') {
+        const lambdaPair = init.asPair();
+        if (lambdaPair) {
+          const params = lambdaPair.cdr.asPair()?.car;
+          const paramsDebug = [];
+          let curr = params;
+          while (curr?.asPair()) {
+            const sym = curr.asPair()!.car.asSymbol();
+            if (sym) paramsDebug.push(sym.name);
+            curr = curr.asPair()!.cdr;
+          }
+          console.error('[DEBUG compileLet] map1 params BEFORE pushing to inits:', paramsDebug);
+        }
+      }
+
+      inits.push(init);
+
+      // DEBUG: Check map1's lambda params AFTER pushing to inits
+      if (name.name === 'map1') {
+        const lambdaPair = init.asPair();
+        if (lambdaPair) {
+          const params = lambdaPair.cdr.asPair()?.car;
+          const firstPair = params?.asPair();
+          const paramsDebug = [];
+          let curr = params;
+          while (curr?.asPair()) {
+            const sym = curr.asPair()!.car.asSymbol();
+            if (sym) paramsDebug.push(sym.name);
+            curr = curr.asPair()!.cdr;
+          }
+          console.error('[DEBUG compileLet] map1 params AFTER pushing to inits:', paramsDebug);
+          console.error('[DEBUG compileLet] map1 first pair cdr:', firstPair?.cdr);
+          // Store reference to check later
+          (globalThis as any).__map1ParamsFirstPair = firstPair;
+        }
+      }
     }
 
     // Body is remaining arguments (implicit begin)
@@ -854,9 +957,51 @@ export class Compiler {
     // We want to push right-to-left: inits[n-1], ..., inits[0]
     // So compile them left-to-right: inits[0], ..., inits[n-1]
     for (let i = 0; i < inits.length; i++) {
+      // DEBUG: Check map1's lambda params BEFORE compiling this init
+      if (vars[i] === 'map1') {
+        const lambdaPair = inits[i].asPair();
+        if (lambdaPair) {
+          const params = lambdaPair.cdr.asPair()?.car;
+          const paramsDebug = [];
+          let curr = params;
+          while (curr?.asPair()) {
+            const sym = curr.asPair()!.car.asSymbol();
+            if (sym) paramsDebug.push(sym.name);
+            curr = curr.asPair()!.cdr;
+          }
+          console.error('[DEBUG compileLet] map1 params BEFORE compile (iteration', i, '):', paramsDebug);
+        }
+      }
+
+      // DEBUG: Check map1's lambda params RIGHT BEFORE compiling this init
+      if (vars[i] === 'map1') {
+        const lambdaPair = inits[i].asPair();
+        if (lambdaPair) {
+          const params = lambdaPair.cdr.asPair()?.car;
+          const firstPair = params?.asPair();
+          console.error('[DEBUG compileLet] RIGHT BEFORE compile: first pair cdr:', firstPair?.cdr);
+        }
+      }
+
       // Init i will execute with (inits.length - 1 - i) values already on stack
       const numPushed = inits.length - 1 - i;
       result = this.compile(inits[i], env, stackPos + numPushed, result);
+
+      // DEBUG: Check map1's lambda params AFTER compiling this init
+      if (vars[i] === 'map1') {
+        const lambdaPair = inits[i].asPair();
+        if (lambdaPair) {
+          const params = lambdaPair.cdr.asPair()?.car;
+          const paramsDebug = [];
+          let curr = params;
+          while (curr?.asPair()) {
+            const sym = curr.asPair()!.car.asSymbol();
+            if (sym) paramsDebug.push(sym.name);
+            curr = curr.asPair()!.cdr;
+          }
+          console.error('[DEBUG compileLet] map1 params AFTER compile (iteration', i, '):', paramsDebug);
+        }
+      }
     }
 
     return result;
@@ -912,12 +1057,12 @@ export class Compiler {
     const bodyStackPos = stackPos + vars.length;
     let result = this.compile(body, bodyEnv, bodyStackPos, new PopBindingsInsn(vars.length, next));
 
-    // Compile initializers in current environment
-    // TODO: This doesn't support true letrec semantics where inits can reference each other
-    // For named let, this works because the lambda doesn't execute until later
+    // Compile initializers in extended environment to support recursion
+    // For letrec, the inits must see the letrec variables so they can capture them
+    // This is critical for named let where the lambda needs to recursively call itself
     for (let i = 0; i < inits.length; i++) {
       const numPushed = inits.length - 1 - i;
-      result = this.compile(inits[i], env, stackPos + numPushed, result);
+      result = this.compile(inits[i], bodyEnv, stackPos + numPushed, result);
     }
 
     return result;
