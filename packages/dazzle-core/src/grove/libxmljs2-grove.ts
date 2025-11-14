@@ -450,9 +450,21 @@ class LibxmljsNode implements Node {
 
   documentNode(): Node {
     let current: libxmljs2.Node = this.native;
-    while (current.parent()) {
-      current = current.parent() as libxmljs2.Node;
+
+    // Keep walking up the tree until we reach the document node
+    // Port from: OpenJade Node.cxx getDocumentNode()
+    // Document nodes in libxmljs2 don't have a parent() method, so we need to check
+    while (true) {
+      // Check if current has a parent() method (Document objects don't)
+      if (typeof current.parent !== 'function') {
+        break;
+      }
+
+      const parent = current.parent();
+      if (!parent) break;
+      current = parent as libxmljs2.Node;
     }
+
     return wrapNode(current)!;
   }
 

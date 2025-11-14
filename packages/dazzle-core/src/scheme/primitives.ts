@@ -41,6 +41,10 @@ function callClosure(func: FunctionObj, args: ELObj[], vm: VM): ELObj {
     throw new Error('callClosure requires a closure');
   }
 
+  // Port from: OpenJade - must save/restore stack state
+  // Record initial stack size to restore after call
+  const initialStackSize = vm.stackSize();
+
   // Push arguments onto stack
   for (const arg of args) {
     vm.push(arg);
@@ -60,7 +64,16 @@ function callClosure(func: FunctionObj, args: ELObj[], vm: VM): ELObj {
   }
 
   // Result is now on top of stack
-  return vm.pop();
+  const result = vm.pop();
+
+  // CRITICAL FIX: Restore stack to initial state
+  // The closure execution might have left values on the stack (e.g. in nested calls)
+  // We need to pop everything down to the initial stack size
+  while (vm.stackSize() > initialStackSize) {
+    vm.pop();
+  }
+
+  return result;
 }
 
 /**
@@ -821,7 +834,15 @@ const stringLengthPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj 
 const stringAppendPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   let result = '';
 
-  for (const arg of args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+
+    // Port from: OpenJade appears to treat () and #f as empty string in string-append
+    // This allows templates to use (if ...) and (case ...) without else clauses
+    if (arg.asNil() || (arg.asBoolean() !== null && !arg.asBoolean()!.value)) {
+      continue; // Treat () and #f as empty string
+    }
+
     const str = arg.asString();
     if (!str) {
       throw new Error('string-append requires string arguments');
@@ -1695,15 +1716,17 @@ const stringEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj =
     throw new Error('string=? requires at least 2 arguments');
   }
 
+  // Port from: OpenJade primitive.cxx StringEqual - treats #f as not equal
+  // If any argument is #f or not a string, return #f instead of throwing
   const first = args[0].asString();
   if (!first) {
-    throw new Error('string=? requires string arguments');
+    return theFalseObj;
   }
 
   for (let i = 1; i < args.length; i++) {
     const str = args[i].asString();
     if (!str) {
-      throw new Error('string=? requires string arguments');
+      return theFalseObj;
     }
     if (str.value !== first.value) {
       return theFalseObj;
@@ -5744,11 +5767,6 @@ const giPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
 const idPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('id requires exactly 1 argument');
-  }
-
-  console.error('[id] Called with argument type:', args[0].constructor.name);
-  if (args[0].asString()) {
-    console.error('[id] String value:', args[0].asString()!.value.substring(0, 50));
   }
 
   // Port from: OpenJade Id primitive uses optSingletonNodeList

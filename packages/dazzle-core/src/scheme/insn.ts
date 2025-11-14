@@ -8,7 +8,7 @@
 
 import type { ELObj } from './elobj.js';
 import type { VM } from './vm.js';
-import { FunctionObj, type Signature } from './elobj.js';
+import { FunctionObj, type Signature, theNilObj, makePair } from './elobj.js';
 
 /**
  * Base class for all instructions
@@ -217,10 +217,6 @@ export class FrameRefInsn extends Insn {
 
   execute(vm: VM): Insn | null {
     const value = vm.getFrame(this.index);
-    console.error(`[FrameRefInsn] index=${this.index}, value type=${value.constructor.name}`);
-    if (value.asString()) {
-      console.error(`[FrameRefInsn] String value: "${value.asString()!.value.substring(0, 50)}"`);
-    }
     vm.push(value);
     return this.next;
   }
@@ -336,6 +332,9 @@ export class ReturnInsn extends Insn {
   }
 
   execute(vm: VM): Insn | null {
+    // DEBUG: Check stack before return
+    const stackBefore = vm.stackSize();
+
     // Pop the return value
     const result = vm.pop();
 
@@ -349,6 +348,14 @@ export class ReturnInsn extends Insn {
 
     // Push result back on stack for caller
     vm.push(result);
+
+    // DEBUG: Check if stack grew unexpectedly
+    const stackAfter = vm.stackSize();
+    const expectedDelta = 1 - this.totalArgs; // pop args, push result
+    const actualDelta = stackAfter - stackBefore;
+    if (actualDelta > expectedDelta + 5) {
+      console.log(`ReturnInsn: Stack grew unexpectedly! before=${stackBefore}, after=${stackAfter}, expected delta=${expectedDelta}, actual=${actualDelta}, totalArgs=${this.totalArgs}`);
+    }
 
     return next;
   }
@@ -379,6 +386,22 @@ export class PrimitiveCallInsn extends Insn {
     const func = this.primitive.asFunction();
     if (!func || !func.isPrimitive()) {
       throw new Error('PrimitiveCallInsn requires a primitive function');
+    }
+
+    // DEBUG: Track apply primitive calls
+    if (func.name === 'apply') {
+      const val0 = vm.getStackValue(vm.stackSize() - this.nArgs);
+      const val0Func = val0.asFunction();
+      const isBad = val0Func && !val0Func.isPrimitive();
+      if (isBad) {
+        console.log(`PrimitiveCallInsn(apply) BAD CALL - stack[0] is anonymous closure!`);
+        console.log(`  Dumping stack from bottom (most recent pushes at end):`);
+        for (let i = 0; i < vm.stackSize(); i++) {
+          const val = vm.getStackValue(i);
+          const valFunc = val.asFunction();
+          console.log(`    [${i}]:`, val.constructor.name, valFunc ? `(${valFunc.name || 'anonymous'}, isPrimitive: ${valFunc.isPrimitive()})` : '');
+        }
+      }
     }
 
     // Gather arguments from stack (they're at sp - nArgs .. sp - 1)
@@ -423,20 +446,11 @@ export class CallInsn extends Insn {
   }
 
   execute(vm: VM): Insn | null {
-    // DEBUG: show stack state
-    console.error('[CallInsn] Stack size:', vm.stackSize());
-    console.error('[CallInsn] nArgs:', this.nArgs);
-    for (let i = 0; i < Math.min(5, vm.stackSize()); i++) {
-      console.error(`[CallInsn] Stack[${vm.stackSize() - 1 - i}]:`, vm.getStackValue(vm.stackSize() - 1 - i));
-    }
-
     // Pop function from top of stack
     const funcObj = vm.pop();
     const func = funcObj.asFunction();
 
     if (!func) {
-      console.error('[CallInsn] Trying to call:', funcObj);
-      console.error('[CallInsn] Type:', funcObj.constructor.name);
       throw new Error('Cannot call non-function');
     }
 
@@ -464,22 +478,23 @@ export class CallInsn extends Insn {
 
     // Handle closures
     if (func.isClosure()) {
-      // Validate argument count
-      const sig = func.signature!;
-      if (this.nArgs !== sig.nRequiredArgs + sig.nOptionalArgs && !sig.restArg) {
-        throw new Error(`Function expects ${sig.nRequiredArgs} arguments, got ${this.nArgs}`);
-      }
-
-      // Set up frame for closure call
-      // Arguments are already on the stack in the right order
-      vm.frameIndex = vm.stackSize() - this.nArgs;
+      // Port from: OpenJade Insn.cxx ClosureObj::call lines 755-764
+      // Note: OpenJade doesn't validate argument count here - VarargsInsn handles it
+      // IMPORTANT: Order matters! Must match OpenJade exactly:
+      // 1. Set nActualArgs
+      // 2. Push frame (saves previous frameIndex)
+      // 3. Set new frameIndex
+      // 4. Set closure display
       vm.nActualArgs = this.nArgs;
+
+      // Push call frame (saves current frame state)
+      vm.pushFrame(this.next, this.nArgs);
+
+      // Set up frame for closure call (arguments are already on stack)
+      vm.frameIndex = vm.stackSize() - this.nArgs;
 
       // Set closure display
       vm.closure = func.display || null;
-
-      // Push call frame
-      vm.pushFrame(this.next, this.nArgs);
 
       // Execute closure body
       // The closure's code will end with a ReturnInsn that pops the frame
@@ -534,6 +549,67 @@ export class ClosureInsn extends Insn {
     vm.push(closure);
 
     return this.next;
+  }
+}
+
+/**
+ * Varargs instruction - Handle variable argument lists
+ * Port from: Insn.h VarargsInsn
+ *
+ * Packs excess arguments into a list for the rest parameter.
+ * For a function with signature (lambda (a b #!rest c) ...):
+ * - nRequiredArgs = 2 (a, b)
+ * - restArg = true (c)
+ * If called with 5 args, this packs args 2-4 into a list for c.
+ */
+export class VarargsInsn extends Insn {
+  constructor(
+    private signature: Signature,
+    private body: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    const nActual = vm.nActualArgs;
+    const nRequired = this.signature.nRequiredArgs;
+    const stackBefore = vm.stackSize();
+
+    // Port from: OpenJade Insn.cxx VarargsInsn::execute lines 689-735
+    // For now, simplified version: no optional args, no keyword args
+    if (this.signature.restArg) {
+      // Number of extra arguments beyond required
+      const nExtra = nActual - nRequired;
+
+      if (nExtra > 0) {
+        // Pack extra arguments into a list (from top of stack backwards)
+        // Port from: lines 695-702
+        let restList: ELObj = theNilObj;
+        for (let i = 0; i < nExtra; i++) {
+          const arg = vm.pop();
+          restList = makePair(arg, restList);
+        }
+        // Push the rest list back onto stack
+        vm.push(restList);
+      } else {
+        // No extra args, push empty list for rest parameter
+        vm.push(theNilObj);
+      }
+
+      // DEBUG: Check stack transformation
+      const stackAfter = vm.stackSize();
+      const expectedAfter = stackBefore - nExtra + 1;  // pop nExtra, push 1
+      if (nExtra === 0) {
+        // No pops, just push 1
+        if (stackAfter !== stackBefore + 1) {
+          console.log(`VarargsInsn BUG (nExtra=0): stack before=${stackBefore}, after=${stackAfter}, expected=${stackBefore + 1}`);
+        }
+      } else if (stackAfter !== expectedAfter) {
+        console.log(`VarargsInsn BUG: stack before=${stackBefore}, after=${stackAfter}, expected=${expectedAfter}, nExtra=${nExtra}`);
+      }
+    }
+
+    return this.body;
   }
 }
 

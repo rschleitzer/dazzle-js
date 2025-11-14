@@ -35,6 +35,7 @@ import {
   PrimitiveCallInsn,
   CallInsn,
   ClosureInsn,
+  VarargsInsn,
 } from './insn.js';
 
 import { VM } from './vm.js';
@@ -314,7 +315,9 @@ export class GlobalEnvironment {
     if (!def) return null;
 
     // Already computed
-    if (def.value) return def.value;
+    if (def.value) {
+      return def.value;
+    }
 
     // Need to compute from expression
     if (def.expr) {
@@ -617,10 +620,17 @@ export class Compiler {
       nKeyArgs: 0,
     };
 
+    // Port from: OpenJade Expression.cxx lines 602-636
+    // If function has rest arg, wrap body with VarargsInsn
+    let closureCode: Insn | null = bodyInsn;
+    if (hasRestArg) {
+      closureCode = new VarargsInsn(signature, bodyInsn);
+    }
+
     // Build instruction chain:
     // 1. Push captured variables onto stack (right-to-left)
     // 2. Create closure with those values
-    let result: Insn = new ClosureInsn(signature, bodyInsn, capturedVars.length, next);
+    let result: Insn = new ClosureInsn(signature, closureCode, capturedVars.length, next);
 
     // Push captured variables onto stack (right-to-left so they're in order)
     for (let i = capturedVars.length - 1; i >= 0; i--) {
