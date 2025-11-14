@@ -7127,14 +7127,35 @@ const processRootPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj 
 /**
  * process-children - Process the children of the current node
  * Port from: primitive.cxx ProcessChildren::primitiveCall
+ *
+ * Optionally takes a mode name to process in a different mode.
  */
-const processChildrenPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj => {
+const processChildrenPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (!vm.currentNode) {
     throw new Error('process-children: no current node in processing context');
   }
 
-  const children = vm.currentNode.children();
-  return processNodeListHelper(children, vm);
+  // Optional mode argument
+  let mode = vm.processingMode || '';
+  if (args.length > 0) {
+    const modeArg = args[0].asSymbol();
+    if (!modeArg) {
+      throw new Error('process-children: mode argument must be a symbol');
+    }
+    mode = modeArg.name;
+  }
+
+  // Save current mode and switch to new mode
+  const savedMode = vm.processingMode;
+  vm.processingMode = mode;
+
+  try {
+    const children = vm.currentNode.children();
+    return processNodeListHelper(children, vm);
+  } finally {
+    // Restore mode
+    vm.processingMode = savedMode;
+  }
 };
 
 /**
@@ -7152,6 +7173,22 @@ const processNodeListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELO
   }
 
   return processNodeListHelper(nodeListObj.nodes, vm);
+};
+
+/**
+ * next-match - Continue to next matching rule
+ * Port from: primitive.cxx NextMatch::primitiveCall
+ *
+ * In DSSSL, next-match allows a rule to explicitly call the next rule
+ * that would match the current node (typically with lower priority).
+ *
+ * For now, this is a stub that returns empty-sosofo.
+ * Full implementation would require rule priorities and a rule stack.
+ */
+const nextMatchPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj => {
+  // TODO: Implement full next-match with priorities
+  // For now, just return empty sosofo
+  return makeSosofo('empty');
 };
 
 /**
@@ -7661,6 +7698,7 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   'process-root': new FunctionObj('process-root', processRootPrimitive),
   'process-children': new FunctionObj('process-children', processChildrenPrimitive),
   'process-node-list': new FunctionObj('process-node-list', processNodeListPrimitive),
+  'next-match': new FunctionObj('next-match', nextMatchPrimitive),
   'empty-sosofo': new FunctionObj('empty-sosofo', emptySosofoPrimitive),
   'literal': new FunctionObj('literal', literalPrimitive),
   'sosofo-append': new FunctionObj('sosofo-append', sosofoAppendPrimitive),

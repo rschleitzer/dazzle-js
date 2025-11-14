@@ -899,8 +899,13 @@ export class Compiler {
           new PairObj(theNilObj, lambdaBody)
         );
 
+        // Compile lambda to bytecode and execute to get closure
+        const lambdaInsn = this.compile(lambdaExpr, env, stackPos, null);
+        const vm = new VM();
+        const closure = vm.eval(lambdaInsn);
+
         // Register with mode
-        this.globals.ruleRegistry.addRule(elementName, modeName, lambdaExpr);
+        this.globals.ruleRegistry.addRule(elementName, modeName, closure);
       }
     }
 

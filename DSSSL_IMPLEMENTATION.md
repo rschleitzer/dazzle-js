@@ -90,6 +90,44 @@ Output: `MyClass.java` containing Java class with XML element name.
 
 Result: Automatic traversal, rule execution, sosofo collection and backend processing.
 
+## Multi-Pass Processing with Modes (Complete)
+
+**Mode Support** (`compiler.ts:834-913`):
+- `mode` special form: `(mode name (element gi body...)...)`
+- Registers rules with specific mode names
+- Multiple rules for same element in different modes
+
+**Mode Switching** (`primitives.ts:7133-7159`):
+- `process-children` with optional mode argument: `(process-children 'mode-name)`
+- Saves/restores processing mode during traversal
+- Enables multi-pass document processing
+
+**Example**:
+```scheme
+(root
+  (make entity system-id: "output.txt"
+    (literal "First pass:\n")
+    (process-children)           ;; Default mode
+    (literal "\nSecond pass:\n")
+    (process-children 'toc)))    ;; TOC mode
+
+(element chapter
+  (literal "Chapter content\n"))
+
+(mode toc
+  (element chapter
+    (literal "TOC entry\n")))
+
+(process-root)
+```
+
+Result: Document processed twice with different rules for each pass.
+
+**next-match Primitive** (`primitives.ts:7178-7192`):
+- Stub implementation (returns empty-sosofo)
+- Placeholder for rule priority chains
+- Full implementation requires priority system
+
 ## Status
-**Phase Complete**: Rule-based processing with construction rules ✓
-**Next**: Multi-pass processing with modes, next-match
+**Phase Complete**: Multi-pass processing with modes ✓
+**Next**: XML template wrapper support (.dsl format)
