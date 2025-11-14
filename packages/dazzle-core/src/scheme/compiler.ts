@@ -1127,10 +1127,11 @@ export class Compiler {
       const selectorSym = selector.asSymbol();
       if (selectorSym && selectorSym.name === 'else') {
         // Else clause - compile body
+        // Port from: R4RS case - else clause must pop key before executing body
         const bodyExpr = clauseBody.length === 1
           ? clauseBody[0]
           : this.makeBegin(clauseBody);
-        failInsn = this.compile(bodyExpr, env, stackPos - 1, new PopInsn(next));
+        failInsn = new PopInsn(this.compile(bodyExpr, env, stackPos - 1, next));
         continue;
       }
 
