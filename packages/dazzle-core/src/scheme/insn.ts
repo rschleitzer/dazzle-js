@@ -171,6 +171,8 @@ export class CaseInsn extends Insn {
   /**
    * R4RS eqv? predicate
    * Port from: ELObj.h ELObj::eqv()
+   *
+   * Extended for DSSSL: Strings are compared by content for case matching
    */
   private eqv(obj1: ELObj, obj2: ELObj): boolean {
     // Identity check
@@ -193,6 +195,14 @@ export class CaseInsn extends Insn {
     const sym2 = obj2.asSymbol();
     if (sym1 && sym2) {
       return sym1.name === sym2.name;
+    }
+
+    // DSSSL extension: Compare strings by content for case matching
+    // Port from: OpenJade behavior - enables case expressions with string literals
+    const str1 = obj1.asString();
+    const str2 = obj2.asString();
+    if (str1 && str2) {
+      return str1.value === str2.value;
     }
 
     // Characters would go here when implemented

@@ -1108,7 +1108,8 @@ export class Compiler {
     const clauses = argsArray.slice(1);
 
     // Compile failure case (no match) - return unspecified
-    let failInsn: Insn = new ConstantInsn(theNilObj, next);
+    // Must pop the key from stack before continuing
+    let failInsn: Insn = new PopInsn(new ConstantInsn(theNilObj, next));
 
     // Compile clauses from right to left
     for (let i = clauses.length - 1; i >= 0; i--) {
@@ -1140,8 +1141,9 @@ export class Compiler {
         : this.makeBegin(clauseBody);
 
       // Compile the clause body
-      // Note: After matching, we need to pop the key from stack before executing body
-      const bodyInsn = this.compile(bodyExpr, env, stackPos - 1, new PopInsn(next));
+      // Note: CaseInsn will pop the key from stack when it matches, before executing body
+      // So the body runs at stackPos-1 (key is gone) and continues directly to next
+      const bodyInsn = this.compile(bodyExpr, env, stackPos - 1, next);
 
       // Build chain of CaseInsn for each datum (right to left)
       let clauseInsn: Insn = failInsn;
