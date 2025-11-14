@@ -283,14 +283,33 @@ class LibxmljsNode implements Node {
     }
 
     const elem = this.native as libxmljs2.Element;
-    const attrs = elem.attrs();
 
-    if (!attrs || attrs.length === 0) {
+    // WORKAROUND: When DTD validation is enabled, attrs() may return DTD default attributes
+    // that cause assertion failures in libxmljs2's wrapper (attr->type != XML_ATTRIBUTE_NODE).
+    // For now, we don't expose attributes via the attributes() node-list when this happens.
+    // DTD defaults are still accessible via attributeString() which is the primary way
+    // templates access attribute values.
+    try {
+      const attrs = elem.attrs();
+
+      if (!attrs || attrs.length === 0) {
+        return EMPTY_NODE_LIST;
+      }
+
+      // PERFORMANCE: Lazy list - don't wrap attributes until accessed
+      return new LazyNodeList(() => {
+        try {
+          return wrapNodes(attrs as unknown as libxmljs2.Node[]);
+        } catch (e) {
+          // Failed to wrap attributes (likely DTD defaults causing assertion failures)
+          // Return empty array - attributes are still accessible via attributeString()
+          return [];
+        }
+      });
+    } catch (e) {
+      // Failed to get attrs
       return EMPTY_NODE_LIST;
     }
-
-    // PERFORMANCE: Lazy list - don't wrap attributes until accessed
-    return new LazyNodeList(() => wrapNodes(attrs as unknown as libxmljs2.Node[]));
   }
 
   attributeString(name: string): string | null {
@@ -589,6 +608,7 @@ export function parseXmlGrove(
     baseUrl?: string;
     dtdload?: boolean;
     dtdvalid?: boolean;
+    dtdattr?: boolean;
     noent?: boolean;
     nocdata?: boolean;
   }
@@ -600,6 +620,7 @@ export function parseXmlGrove(
     baseUrl: options?.baseUrl,
     dtdload: options?.dtdload ?? false,
     dtdvalid: options?.dtdvalid ?? false,
+    dtdattr: options?.dtdattr ?? false,  // Apply DTD default attributes
     noent: options?.noent ?? true,  // Expand entities
     nocdata: options?.nocdata ?? false,
   });

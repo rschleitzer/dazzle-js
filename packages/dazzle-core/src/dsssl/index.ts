@@ -4,3 +4,4 @@
  */
 
 export { ProcessContext } from './process-context.js';
+export { loadTemplate, type TemplateResult } from './template-loader.js';

@@ -8,7 +8,7 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseXmlGrove, parse, Compiler, GlobalEnvironment, Environment, VM, type ELObj, ProcessContext } from 'dazzle-core';
+import { parseXmlGrove, parse, Compiler, GlobalEnvironment, Environment, VM, type ELObj, ProcessContext, loadTemplate } from 'dazzle-core';
 import { createTransformBackend } from 'dazzle-backend-sgml';
 
 /**
@@ -98,16 +98,23 @@ program
         process.exit(1);
       }
 
-      // Read template
+      // Load template (handles both plain Scheme and XML wrapper)
       const templatePath = path.resolve(options.template);
-      const templateContent = fs.readFileSync(templatePath, 'utf-8');
+      const searchPaths = (options.searchPath || []).map((p: string) => path.resolve(p));
+      const templateResult = loadTemplate(templatePath, searchPaths);
+      const templateContent = templateResult.schemeCode;
 
       // Read input XML
       const inputPath = path.resolve(inputFile);
       const inputContent = fs.readFileSync(inputPath, 'utf-8');
 
-      // Parse input XML to grove
-      const grove = parseXmlGrove(inputContent);
+      // Parse input XML to grove with DTD loading enabled
+      // Port from: OpenJade uses OpenSP which always loads DTDs and applies defaults
+      const grove = parseXmlGrove(inputContent, {
+        baseUrl: inputPath,
+        dtdload: true,   // Load external DTD
+        dtdattr: true,   // Apply DTD default attributes
+      });
 
       // Create backend
       const outputDir = path.resolve(options.output);
@@ -115,6 +122,12 @@ program
 
       // Parse template into S-expressions
       const exprs = parse(templateContent);
+
+      console.log(`Loaded entities: ${templateResult.entities.map(e => e.name).join(', ') || 'none'}`);
+
+      if (process.env.DEBUG_TEMPLATE) {
+        console.log('Template content:\n', templateContent);
+      }
 
       // Create global environment and compiler
       const globals = new GlobalEnvironment();
@@ -137,7 +150,7 @@ program
       console.log(`Grove root: ${grove.root().gi()}`);
       console.log(`Parsed ${exprs.length} expression(s) from template\n`);
 
-      // Execute each expression
+      // Execute each expression (defines rules, functions, etc.)
       for (let i = 0; i < exprs.length; i++) {
         const expr = exprs[i];
         console.log(`Executing expression ${i + 1}...`);
@@ -149,11 +162,23 @@ program
         const result = vm.eval(bytecode);
 
         console.log(`Result: ${formatValue(result)}`);
+      }
 
-        // If result is a sosofo, process it through the backend
-        const sosofo = result.asSosofo();
-        if (sosofo) {
-          processContext.process(sosofo);
+      // After loading all definitions, automatically invoke processing
+      // Port from: OpenJade jade.cxx - automatically starts root processing
+      console.log('\nStarting document processing...');
+
+      const processRootFunc = globals.lookup('process-root');
+      if (processRootFunc) {
+        const func = processRootFunc.asFunction();
+        if (func && func.isPrimitive()) {
+          const sosofo = func.callPrimitive([], vm);
+
+          // Process the resulting sosofo through the backend
+          const sosofoParsed = sosofo.asSosofo();
+          if (sosofoParsed) {
+            processContext.process(sosofoParsed);
+          }
         }
       }
 

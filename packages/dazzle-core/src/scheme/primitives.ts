@@ -28,8 +28,8 @@ import {
 } from './elobj.js';
 
 import type { VM } from './vm.js';
-import type { NodeList } from '../grove/index.js';
-import { EMPTY_NODE_LIST } from '../grove/index.js';
+import type { Node, NodeList } from '../grove/index.js';
+import { EMPTY_NODE_LIST, nodeListFromArray } from '../grove/index.js';
 import { CallInsn } from './insn.js';
 
 /**
@@ -61,6 +61,61 @@ function callClosure(func: FunctionObj, args: ELObj[], vm: VM): ELObj {
 
   // Result is now on top of stack
   return vm.pop();
+}
+
+/**
+ * Helper: Convert argument to optional singleton node
+ * Port from: OpenJade ELObj::optSingletonNodeList
+ *
+ * Accepts:
+ * - A node → returns the node
+ * - A singleton node-list → returns the single node
+ * - An empty node-list → returns null
+ * - Multiple nodes → throws error
+ *
+ * This matches OpenJade's optSingletonNodeList pattern:
+ * - Returns false (error) for multi-node lists
+ * - Returns true (ok) for singleton/empty, with node possibly null
+ */
+function optSingletonNode(obj: ELObj): Node | null {
+  // Direct node
+  const node = obj.asNode();
+  if (node) {
+    return node.node;
+  }
+
+  // Node-list
+  const nl = obj.asNodeList();
+  if (nl) {
+    const first = nl.nodes.first();
+    if (!first) {
+      // Empty node-list - return null (not an error)
+      return null;
+    }
+
+    const rest = nl.nodes.rest();
+    if (rest && rest.first() !== null) {
+      // Multiple nodes - ERROR
+      throw new Error('expected singleton node-list, got multiple nodes');
+    }
+
+    // Singleton node-list
+    return first;
+  }
+
+  // Not a node or node-list - ERROR
+  const error = new Error('expected node or node-list');
+  // Add stack trace for debugging
+  console.error('optSingletonNode error - object type:', obj.constructor.name);
+  if (obj.asString()) {
+    console.error('  String value:', obj.asString()?.value);
+  } else if (obj.asSymbol()) {
+    console.error('  Symbol:', obj.asSymbol()?.name);
+  } else {
+    console.error('  Value:', obj);
+  }
+  console.error('Stack trace:', error.stack);
+  throw error;
 }
 
 /**
@@ -2382,6 +2437,7 @@ const listTailPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
  * Port from: primitive.cxx Map::primitiveCall
  */
 const mapPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  console.error('[DEBUG] mapPrimitive called with', args.length, 'arguments');
   if (args.length < 2) {
     throw new Error('map requires at least 2 arguments');
   }
@@ -5669,12 +5725,16 @@ const giPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
     throw new Error('gi requires exactly 1 argument');
   }
 
-  const node = args[0].asNode();
+  // Port from: OpenJade Gi primitive uses optSingletonNodeList
+  // Accepts nodes, singleton node-lists, and empty node-lists
+  const node = optSingletonNode(args[0]);
   if (!node) {
-    throw new Error('gi requires a node argument');
+    // Empty node-list -> return #f (not an error)
+    // Port from: OpenJade returns makeFalse() when node is null
+    return theFalseObj;
   }
 
-  const gi = node.node.gi();
+  const gi = node.gi();
   return gi ? makeString(gi) : theFalseObj;
 };
 
@@ -5687,13 +5747,75 @@ const idPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
     throw new Error('id requires exactly 1 argument');
   }
 
-  const node = args[0].asNode();
+  // Port from: OpenJade Id primitive uses optSingletonNodeList
+  // Accepts nodes, singleton node-lists, and empty node-lists
+  const node = optSingletonNode(args[0]);
   if (!node) {
-    throw new Error('id requires a node argument');
+    // Empty node-list -> return #f (not an error)
+    // Port from: OpenJade returns makeFalse() when node is null
+    return theFalseObj;
   }
 
-  const id = node.node.id();
+  const id = node.id();
   return id ? makeString(id) : theFalseObj;
+};
+
+/**
+ * Grove: element-with-id
+ * Port from: primitive.cxx DEFPRIMITIVE(ElementWithId)
+ *
+ * Looks up an element by ID in the document.
+ * Takes an ID string and optional node (defaults to current node).
+ * The node parameter determines which grove to search (for multi-document scenarios).
+ * Returns singleton node-list containing the element, or empty node-list if not found.
+ */
+const elementWithIdPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length < 1 || args.length > 2) {
+    throw new Error('element-with-id requires 1 or 2 arguments');
+  }
+
+  const idStr = args[0].asString();
+  if (!idStr) {
+    throw new Error('element-with-id requires a string as first argument');
+  }
+
+  // Get the node to search from (defaults to current node)
+  // Port from: OpenJade ElementWithId - argc > 1 check
+  let searchNode: Node;
+  if (args.length === 2) {
+    const nodeArg = args[1].asNode();
+    if (!nodeArg) {
+      throw new Error('element-with-id requires a node as second argument');
+    }
+    searchNode = nodeArg.node;
+  } else {
+    if (!vm.currentNode) {
+      throw new Error('element-with-id: no current node');
+    }
+    searchNode = vm.currentNode;
+  }
+
+  // Get the grove root from the node
+  // Port from: OpenJade node->getGroveRoot(node)
+  const groveRoot = searchNode.documentNode();
+
+  // Get the grove to perform ID lookup
+  // Port from: OpenJade node->getElements(elements) && elements->namedNode(id, node)
+  // In our architecture, the Grove object has elementWithId()
+  if (!vm.grove) {
+    throw new Error('element-with-id: no grove available');
+  }
+
+  // Look up element by ID
+  const element = vm.grove.elementWithId(idStr.value);
+  if (element) {
+    // Return singleton node-list
+    // Port from: OpenJade new (interp) NodePtrNodeListObj(node)
+    return makeNodeList(nodeListFromArray([element]));
+  }
+
+  // Port from: OpenJade interp.makeEmptyNodeList()
+  return makeNodeList(EMPTY_NODE_LIST);
 };
 
 /**
@@ -5791,6 +5913,23 @@ const emptyNodeListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj
 };
 
 /**
+ * Grove: node-list-empty?
+ * Port from: primitive.h PRIMITIVE(IsNodeListEmpty, "node-list-empty?", 1, 0, 0)
+ */
+const nodeListEmptyPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('node-list-empty? requires exactly 1 argument');
+  }
+
+  const nl = args[0].asNodeList();
+  if (!nl) {
+    throw new Error('node-list-empty? requires a node-list argument');
+  }
+
+  return makeBoolean(nl.nodes.first() === null);
+};
+
+/**
  * Grove: node-list-first
  * Port from: primitive.h PRIMITIVE(NodeListFirst, "node-list-first", 0, 1, 0)
  */
@@ -5827,6 +5966,94 @@ const nodeListRestPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj 
 };
 
 /**
+ * Grove: node-list-reverse
+ * Port from: primitive.h PRIMITIVE(NodeListReverse, "node-list-reverse", 0, 1, 0)
+ */
+const nodeListReversePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('node-list-reverse requires exactly 1 argument');
+  }
+
+  const nl = args[0].asNodeList();
+  if (!nl) {
+    throw new Error('node-list-reverse requires a node-list argument');
+  }
+
+  // Convert to array, reverse it, and convert back to node-list
+  const nodesArray = nl.nodes.toArray();
+  const reversed = nodesArray.reverse();
+  return makeNodeList(nodeListFromArray(reversed));
+};
+
+/**
+ * Grove: node-list
+ * Port from: primitive.h PRIMITIVE(NodeList, "node-list", 0, 0, 1)
+ *
+ * Concatenates multiple node-lists into a single node-list.
+ * With 0 arguments, returns empty node-list.
+ * With 1+ arguments, concatenates them from left to right.
+ */
+const nodeListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length === 0) {
+    return makeNodeList(EMPTY_NODE_LIST);
+  }
+
+  // All arguments must be node-lists
+  const nodeLists: NodeList[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const nl = args[i].asNodeList();
+    if (!nl) {
+      throw new Error(`node-list argument ${i} must be a node-list`);
+    }
+    nodeLists.push(nl.nodes);
+  }
+
+  // Concatenate all node-lists by converting to arrays and merging
+  let combined: Node[] = [];
+  for (const nl of nodeLists) {
+    combined = combined.concat(nl.toArray());
+  }
+
+  return makeNodeList(nodeListFromArray(combined));
+};
+
+/**
+ * Grove: select-elements
+ * Port from: primitive.h PRIMITIVE(SelectElements, "select-elements", 0, 2, 0)
+ *
+ * Filters a node-list to include only elements matching the pattern.
+ * For now, only supports simple element name (GI) patterns.
+ * TODO: Full pattern support for attributes, etc.
+ */
+const selectElementsPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 2) {
+    throw new Error('select-elements requires exactly 2 arguments');
+  }
+
+  const nl = args[0].asNodeList();
+  if (!nl) {
+    throw new Error('select-elements requires a node-list as first argument');
+  }
+
+  // Pattern can be a string (element name) or symbol
+  const pattern = args[1].asString() || args[1].asSymbol();
+  if (!pattern) {
+    throw new Error('select-elements requires a string or symbol as second argument (element name pattern)');
+  }
+
+  const elementName = args[1].asString()?.value || args[1].asSymbol()?.name || '';
+
+  // Filter nodes by element name
+  const nodesArray = nl.nodes.toArray();
+  const filtered = nodesArray.filter((node: Node) => {
+    // Only match element nodes with the specified GI
+    return node.isElement() && node.gi() === elementName;
+  });
+
+  return makeNodeList(nodeListFromArray(filtered));
+};
+
+/**
  * Grove: attributes
  * Port from: primitive.h PRIMITIVE(Attributes, "attributes", 0, 1, 0)
  */
@@ -5857,13 +6084,15 @@ const attributeStringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELO
     throw new Error('attribute-string requires string or symbol as first argument');
   }
 
-  const node = args[1].asNode();
+  // Port from: primitive.cxx line 3009 - optSingletonNodeList
+  const node = optSingletonNode(args[1]);
   if (!node) {
-    throw new Error('attribute-string requires a node as second argument');
+    // Empty node-list -> return #f (line 3012-3013)
+    return theFalseObj;
   }
 
   const attrName = args[0].asString()?.value || args[0].asSymbol()?.name || '';
-  const value = node.node.attributeString(attrName);
+  const value = node.attributeString(attrName);
   return value ? makeString(value) : theFalseObj;
 };
 
@@ -7088,36 +7317,53 @@ const processRootPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj 
     throw new Error('process-root: no global environment');
   }
 
-  // Find the root rule
+  // Find the root rule (lazy compilation with globals)
   const mode = vm.processingMode || '';
-  const rule = vm.globals.ruleRegistry.findRule('root', mode);
-
-  if (!rule) {
-    // No root rule defined - return empty sosofo
-    return makeSosofo('empty');
-  }
+  const rule = vm.globals.ruleRegistry.findRule('root', mode, vm.globals);
 
   // Save current node and set to root
   const savedNode = vm.currentNode;
-  vm.currentNode = vm.grove.root();
+  const rootNode = vm.grove.root();
+  vm.currentNode = rootNode;
 
   try {
-    // Execute the rule's lambda (should be a closure)
-    const func = rule.func.asFunction();
-    if (!func || !func.isClosure()) {
-      throw new Error('process-root: root rule must be a function');
+    if (rule) {
+      // Explicit root rule exists - use it
+      const func = rule.func!.asFunction();
+      if (!func || !func.isClosure()) {
+        throw new Error('process-root: root rule must be a function');
+      }
+
+      // Call the rule with no arguments
+      const result = callClosure(func, [], vm);
+
+      // Result should be a sosofo
+      const sosofo = result.asSosofo();
+      if (!sosofo) {
+        throw new Error('process-root: root rule must return a sosofo');
+      }
+
+      return result;
+    } else {
+      // No explicit root rule - default to processing document element
+      // Port from: OpenJade default behavior when no root rule exists
+      const docElement = rootNode.gi();
+      if (docElement) {
+        const elementRule = vm.globals.ruleRegistry.findRule(docElement, mode, vm.globals);
+        if (elementRule) {
+          const func = elementRule.func!.asFunction();
+          if (!func || !func.isClosure()) {
+            throw new Error(`process-root: rule for '${docElement}' must be a function`);
+          }
+
+          const result = callClosure(func, [], vm);
+          return result;
+        }
+      }
+
+      // No rule found - return empty sosofo
+      return makeSosofo('empty');
     }
-
-    // Call the rule with no arguments
-    const result = callClosure(func, [], vm);
-
-    // Result should be a sosofo
-    const sosofo = result.asSosofo();
-    if (!sosofo) {
-      throw new Error('process-root: root rule must return a sosofo');
-    }
-
-    return result;
   } finally {
     // Restore current node
     vm.currentNode = savedNode;
@@ -7211,7 +7457,7 @@ function processNodeListHelper(nodeList: NodeList, vm: VM): ELObj {
     // Find construction rule for this element
     const gi = current.gi();
     if (gi) {
-      const rule = vm.globals.ruleRegistry.findRule(gi, mode);
+      const rule = vm.globals.ruleRegistry.findRule(gi, mode, vm.globals);
 
       if (rule) {
         // Save current node
@@ -7220,7 +7466,7 @@ function processNodeListHelper(nodeList: NodeList, vm: VM): ELObj {
 
         try {
           // Execute the rule's lambda
-          const func = rule.func.asFunction();
+          const func = rule.func!.asFunction();
           if (!func || !func.isClosure()) {
             throw new Error(`processNodeList: rule for '${gi}' must be a function`);
           }
@@ -7679,14 +7925,19 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   // Grove primitives (DSSSL §9)
   'gi': new FunctionObj('gi', giPrimitive),
   'id': new FunctionObj('id', idPrimitive),
+  'element-with-id': new FunctionObj('element-with-id', elementWithIdPrimitive),
   'data': new FunctionObj('data', dataPrimitive),
   'parent': new FunctionObj('parent', parentPrimitive),
   'children': new FunctionObj('children', childrenPrimitive),
+  'node-list': new FunctionObj('node-list', nodeListPrimitive),
   'node-list?': new FunctionObj('node-list?', nodeListPredicate),
   'node-list-length': new FunctionObj('node-list-length', nodeListLengthPrimitive),
   'empty-node-list': new FunctionObj('empty-node-list', emptyNodeListPrimitive),
+  'node-list-empty?': new FunctionObj('node-list-empty?', nodeListEmptyPredicate),
   'node-list-first': new FunctionObj('node-list-first', nodeListFirstPrimitive),
   'node-list-rest': new FunctionObj('node-list-rest', nodeListRestPrimitive),
+  'node-list-reverse': new FunctionObj('node-list-reverse', nodeListReversePrimitive),
+  'select-elements': new FunctionObj('select-elements', selectElementsPrimitive),
   'attributes': new FunctionObj('attributes', attributesPrimitive),
   'attribute-string': new FunctionObj('attribute-string', attributeStringPrimitive),
   'ancestors': new FunctionObj('ancestors', ancestorsPrimitive),

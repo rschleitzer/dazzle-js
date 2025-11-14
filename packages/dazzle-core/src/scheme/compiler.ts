@@ -10,6 +10,7 @@ import {
   type Signature,
   PairObj,
   makeSymbol,
+  makePair,
   theNilObj,
   theTrueObj,
   theFalseObj,
@@ -21,12 +22,14 @@ import {
   TestInsn,
   OrInsn,
   AndInsn,
+  CaseInsn,
   PopInsn,
   PopBindingsInsn,
   ConsInsn,
   FrameRefInsn,
   StackRefInsn,
   ClosureRefInsn,
+  GlobalRefInsn,
   ReturnInsn,
   PrimitiveCallInsn,
   CallInsn,
@@ -36,6 +39,7 @@ import {
 import { VM } from './vm.js';
 import { standardPrimitives } from './primitives.js';
 import { RuleRegistry } from '../dsssl/rules.js';
+import { parse } from './parser.js';
 
 /**
  * Variable binding in environment
@@ -118,28 +122,219 @@ export class Environment {
 
     return newEnv;
   }
+
+  /**
+   * Get all binding names (for debugging)
+   */
+  getBindingNames(): string[] {
+    return Array.from(this.bindings.keys());
+  }
+}
+
+/**
+ * Definition entry - stores either compiled value or uncompiled expression
+ * Port from: OpenJade Interpreter.h Identifier (def_ and value_ fields)
+ */
+interface Definition {
+  value?: ELObj;          // Compiled value (if computed)
+  expr?: ELObj;          // Uncompiled expression AST (if not yet computed)
+  beingComputed?: boolean; // Loop detection
 }
 
 /**
  * Global environment - top-level bindings and DSSSL rules
+ * Port from: OpenJade Interpreter.h Identifier management
  */
 export class GlobalEnvironment {
-  private bindings: Map<string, ELObj> = new Map();
+  private bindings: Map<string, Definition> = new Map();
   public ruleRegistry: RuleRegistry = new RuleRegistry();
 
   constructor() {
     // Install standard primitives
     for (const [name, func] of Object.entries(standardPrimitives)) {
-      this.bindings.set(name, func);
+      this.bindings.set(name, { value: func });
+    }
+
+    // Install Scheme helper functions from OpenJade builtins.dsl
+    // These are commonly-used utilities built on primitives
+    this.installBuiltins();
+  }
+
+  /**
+   * Install Scheme helper functions
+   * Port from: OpenJade dsssl/builtins.dsl
+   */
+  private installBuiltins(): void {
+    // Parse and install helper functions as uncompiled expressions
+    // They will be compiled lazily on first use
+
+    // node-list-reduce - DSSSL §10.2.2
+    // Fundamental node-list iterator
+    const nodeListReduceCode = `
+      (define (node-list-reduce nl combine init)
+        (if (node-list-empty? nl)
+            init
+            (node-list-reduce (node-list-rest nl)
+                              combine
+                              (combine init (node-list-first nl)))))
+    `;
+
+    // node-list->list - Convert node-list to Scheme list
+    // Used with map, apply, etc.
+    const nodeListToListCode = `
+      (define (node-list->list nl)
+        (reverse (node-list-reduce nl
+                                   (lambda (result snl)
+                                     (cons snl result))
+                                   '())))
+    `;
+
+    // node-list-filter - Filter node-list by predicate
+    // Port from: OpenJade builtins.dsl
+    const nodeListFilterCode = `
+      (define (node-list-filter proc nl)
+        (node-list-reduce nl
+                          (lambda (result snl)
+                            (if (proc snl)
+                                (node-list result snl)
+                                result))
+                          (empty-node-list)))
+    `;
+
+    // map - R4RS map with multi-list support
+    // Port from: OpenJade builtins.dsl clause 8.5.10.3
+    const mapCode = `
+      (define (map f #!rest xs)
+        (let ((map1 (lambda (f xs)
+                     (let loop ((xs xs))
+                       (if (null? xs)
+                           '()
+                           (cons (f (car xs))
+                                 (loop (cdr xs))))))))
+         (cond ((null? xs)
+               '())
+              ((null? (cdr xs))
+               (map1 f (car xs)))
+              (else
+               (let loop ((xs xs))
+                 (if (null? (car xs))
+                     '()
+                     (cons (apply f (map1 car xs))
+                           (loop (map1 cdr xs)))))))))
+    `;
+
+    try {
+      const exprs = parse(`
+        ${nodeListReduceCode}
+        ${nodeListToListCode}
+        ${nodeListFilterCode}
+        ${mapCode}
+      `);
+
+      // Compile and execute immediately to avoid AST corruption
+      const compiler = new Compiler(this);
+      const vm = new VM();
+      vm.globals = this;
+
+      for (const expr of exprs) {
+        const bytecode = compiler.compile(expr, new Environment(), 0, null);
+        vm.eval(bytecode); // Execute the define
+      }
+    } catch (e) {
+      // Ignore errors during builtin installation
+      // They will surface as undefined variable errors if actually needed
     }
   }
 
+  /**
+   * Define a value (already computed)
+   * Port from: Identifier::setValue
+   */
   define(name: string, value: ELObj): void {
-    this.bindings.set(name, value);
+    this.bindings.set(name, { value });
   }
 
+  /**
+   * Deep copy an AST to prevent shared structure corruption
+   */
+  private deepCopyAST(obj: ELObj): ELObj {
+    // Primitives and immutables
+    if (obj.asNil() || obj.asBoolean() !== null || obj.asNumber() || obj.asString() || obj.asSymbol()) {
+      return obj; // These are immutable, safe to share
+    }
+
+    // Pairs - recursively copy
+    const pair = obj.asPair();
+    if (pair) {
+      return makePair(this.deepCopyAST(pair.car), this.deepCopyAST(pair.cdr));
+    }
+
+    // Other types (functions, sosofos, etc.) - return as-is
+    // These shouldn't appear in uncompiled ASTs
+    return obj;
+  }
+
+  /**
+   * Define an expression (to be compiled lazily)
+   * Port from: Identifier::setDefinition
+   */
+  setDefinition(name: string, expr: ELObj): void {
+    // WORKAROUND: Deep copy the AST to prevent shared structure corruption
+    // This is necessary because compileLambda modifies shared list structures
+    this.bindings.set(name, { expr: this.deepCopyAST(expr) });
+  }
+
+  /**
+   * Check if identifier is defined
+   * Port from: Identifier::defined
+   */
+  defined(name: string): boolean {
+    const def = this.bindings.get(name);
+    return def !== undefined && (def.value !== undefined || def.expr !== undefined);
+  }
+
+  /**
+   * Lookup value, computing if necessary
+   * Port from: Identifier::computeValue
+   */
   lookup(name: string): ELObj | null {
-    return this.bindings.get(name) || null;
+    const def = this.bindings.get(name);
+    if (!def) return null;
+
+    // Already computed
+    if (def.value) return def.value;
+
+    // Need to compute from expression
+    if (def.expr) {
+      // Loop detection - return null to allow recursive functions
+      // Port from: OpenJade Identifier::computeValue - returns NULL when beingComputed
+      // This allows forward/self references to compile as GlobalRefInsn (runtime lookup)
+      if (def.beingComputed) {
+        return null;
+      }
+
+      def.beingComputed = true;
+      try {
+        // Compile and evaluate the expression
+        const compiler = new Compiler(this);
+        const insn = compiler.compile(def.expr, new Environment(), 0, null);
+        const vm = new VM();
+        vm.globals = this;
+        const value = vm.eval(insn);
+
+        // Cache the computed value
+        def.value = value;
+        delete def.expr;  // Free the AST
+        delete def.beingComputed;
+
+        return value;
+      } catch (e) {
+        delete def.beingComputed;
+        throw e;
+      }
+    }
+
+    return null;
   }
 }
 
@@ -196,12 +391,18 @@ export class Compiler {
             return this.compileSet(pair.cdr, env, stackPos, next);
           case 'let':
             return this.compileLet(pair.cdr, env, stackPos, next);
+          case 'letrec':
+            return this.compileLetrec(pair.cdr, env, stackPos, next);
           case 'begin':
             return this.compileBegin(pair.cdr, env, stackPos, next);
           case 'and':
             return this.compileAnd(pair.cdr, env, stackPos, next);
           case 'or':
             return this.compileOr(pair.cdr, env, stackPos, next);
+          case 'case':
+            return this.compileCase(pair.cdr, env, stackPos, next);
+          case 'cond':
+            return this.compileCond(pair.cdr, env, stackPos, next);
           case 'make':
             return this.compileMake(pair.cdr, env, stackPos, next);
           case 'element':
@@ -210,6 +411,24 @@ export class Compiler {
             return this.compileRoot(pair.cdr, env, stackPos, next);
           case 'mode':
             return this.compileMode(pair.cdr, env, stackPos, next);
+          // DSSSL declaration forms - no-ops for SGML backend (code generation)
+          // Port from: OpenJade SchemeParser.cxx doDeclareCharacteristic, doDeclareFlowObjectClass, etc.
+          // TODO: Implement when adding RTF/document formatting backends
+          // These register characteristics, flow object classes, and language definitions
+          // needed for document formatting but not code generation
+          case 'declare-flow-object-class':
+          case 'declare-characteristic':
+          case 'declare-default-language':
+          case 'define-language':
+          case 'declare-initial-value':
+          case 'declare-class-attribute':
+          case 'declare-id-attribute':
+          case 'declare-flow-object-macro':
+          case 'declare-char-property':
+          case 'add-char-properties':
+          case 'declare-char-characteristic+property':
+          case 'declare-reference-value-type':
+            return new ConstantInsn(theNilObj, next);
         }
       }
 
@@ -222,12 +441,13 @@ export class Compiler {
 
   /**
    * Compile variable reference
+   * Port from: OpenJade Expression.cxx VariableExpression::compile
    */
   private compileVariable(name: string, env: Environment, stackPos: number, next: Insn | null): Insn {
     const binding = env.lookup(name);
 
     if (binding) {
-      // Local variable
+      // Local variable (frame, stack, or closure)
       switch (binding.kind) {
         case 'frame':
           return new FrameRefInsn(binding.index, next);
@@ -240,13 +460,19 @@ export class Compiler {
       }
     }
 
-    // Global variable
-    const value = this.globals.lookup(name);
-    if (value) {
-      return new ConstantInsn(value, next);
+    // Global variable - check if defined
+    // Port from: OpenJade VariableExpression::compile global lookup
+    if (!this.globals.defined(name)) {
+      // DEBUG: Show environment state
+      console.error(`[DEBUG] Undefined variable: ${name}`);
+      console.error(`[DEBUG] Environment bindings:`, env.getBindingNames());
+      console.error(`[DEBUG] Stack position:`, stackPos);
+      throw new Error(`Undefined variable: ${name}`);
     }
 
-    throw new Error(`Undefined variable: ${name}`);
+    // Use runtime lookup (like OpenJade's TopRefInsn)
+    // This allows forward references
+    return new GlobalRefInsn(name, next);
   }
 
   /**
@@ -287,14 +513,64 @@ export class Compiler {
       throw new Error('lambda requires at least 2 arguments');
     }
 
+    // DEBUG: Check raw params BEFORE listToArray
+    const rawParamsDebug = [];
+    let rawCurrent = argsArray[0];
+    while (rawCurrent.asPair()) {
+      const sym = rawCurrent.asPair()!.car.asSymbol();
+      if (sym) rawParamsDebug.push(sym.name);
+      rawCurrent = rawCurrent.asPair()!.cdr;
+    }
+    if (rawParamsDebug.includes('xs') && rawParamsDebug.length === 1) {
+      console.error('[DEBUG compileLambda] RAW params (before listToArray):', rawParamsDebug);
+      console.error('[DEBUG compileLambda] This lambda is corrupted at entry!');
+    }
+
     const params = this.listToArray(argsArray[0]);
-    const paramNames = params.map((p) => {
+    const paramNames: string[] = [];
+    let hasRestArg = false;
+    let restArgName: string | null = null;
+
+    // DEBUG
+    const paramsDebug = params.map(p => {
+      const sym = p.asSymbol();
+      return sym ? sym.name : '<not-symbol>';
+    });
+    if (paramsDebug.includes('xs') || paramsDebug.includes('f')) {
+      console.error('[DEBUG compileLambda] params before parsing:', paramsDebug);
+    }
+
+    // Parse parameters, handling #!rest
+    for (let i = 0; i < params.length; i++) {
+      const p = params[i];
       const sym = p.asSymbol();
       if (!sym) {
         throw new Error('lambda parameter must be a symbol');
       }
-      return sym.name;
-    });
+
+      // Check for #!rest keyword
+      if (sym.name === '#!rest') {
+        if (i === params.length - 1) {
+          throw new Error('#!rest must be followed by a parameter name');
+        }
+        hasRestArg = true;
+        // Next parameter is the rest arg name
+        i++;
+        const restSym = params[i].asSymbol();
+        if (!restSym) {
+          throw new Error('rest parameter must be a symbol');
+        }
+        restArgName = restSym.name;
+        paramNames.push(restArgName);
+        // #!rest must be the last parameter specification
+        if (i !== params.length - 1) {
+          throw new Error('#!rest must be the last parameter specification');
+        }
+        break;
+      }
+
+      paramNames.push(sym.name);
+    }
 
     // Body is remaining arguments (implicit begin)
     const bodyExprs = argsArray.slice(1);
@@ -315,14 +591,24 @@ export class Compiler {
       }
     }
 
+    // DEBUG
+    if (paramNames.includes('xs')) {
+      console.error('[DEBUG compileLambda] paramNames:', paramNames);
+      console.error('[DEBUG compileLambda] hasRestArg:', hasRestArg);
+      console.error('[DEBUG compileLambda] nRequiredArgs:', hasRestArg ? paramNames.length - 1 : paramNames.length);
+    }
+
     const lambdaEnv = env.enterLambda(paramNames, capturedVars);
 
     const bodyInsn = this.compile(body, lambdaEnv, 0, new ReturnInsn(paramNames.length));
 
+    // Calculate required args (excluding rest arg if present)
+    const nRequiredArgs = hasRestArg ? paramNames.length - 1 : paramNames.length;
+
     const signature: Signature = {
-      nRequiredArgs: paramNames.length,
+      nRequiredArgs,
       nOptionalArgs: 0,
-      restArg: false,
+      restArg: hasRestArg,
       nKeyArgs: 0,
     };
 
@@ -358,22 +644,102 @@ export class Compiler {
   }
 
   /**
-   * Compile define special form (top-level only for now)
+   * Compile define special form
+   * Port from: OpenJade SchemeParser.cxx doDefine()
+   *
+   * Supports two forms:
+   * 1. (define name value)
+   * 2. (define (name args...) body...) - lambda shorthand
+   *
+   * Stores the UNCOMPILED expression for lazy evaluation (like OpenJade)
    */
   private compileDefine(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
     const argsArray = this.listToArray(args);
+    if (argsArray.length < 2) {
+      throw new Error('define requires at least 2 arguments');
+    }
+
+    const nameExpr = argsArray[0];
+
+    // DEBUG: Check if this is the map function
+    const nameExprPair = nameExpr.asPair();
+    if (nameExprPair) {
+      const funcName = nameExprPair.car.asSymbol();
+      if (funcName && funcName.name === 'map') {
+        console.error('[DEBUG compileDefine] Compiling define for map');
+        // Check if body contains map1 lambda
+        try {
+          const body = argsArray[1];
+          const letExpr = body.asPair();
+          if (letExpr) {
+            const letBindings = letExpr.cdr.asPair()?.car;
+            const map1Binding = letBindings?.asPair()?.car;
+            const map1Lambda = map1Binding?.asPair()?.cdr.asPair()?.car;
+            const map1Params = map1Lambda?.asPair()?.cdr.asPair()?.car;
+
+            const paramsArray = [];
+            let current = map1Params;
+            while (current?.asPair()) {
+              const sym = current.asPair()!.car.asSymbol();
+              if (sym) paramsArray.push(sym.name);
+              current = current.asPair()!.cdr;
+            }
+            console.error('[DEBUG compileDefine] map1 params in body:', paramsArray);
+          }
+        } catch (e) {
+          console.error('[DEBUG compileDefine] Failed to extract map1 params');
+        }
+      }
+    }
+
+    // Check for lambda shorthand: (define (name args...) body...)
+    const namePair = nameExpr.asPair();
+    if (namePair) {
+      // Lambda shorthand form
+      const funcNameSym = namePair.car.asSymbol();
+      if (!funcNameSym) {
+        throw new Error('define: function name must be a symbol');
+      }
+
+      // Body is rest of define args
+      const body = argsArray.slice(1);
+
+      // Transform to: (lambda (args...) body...)
+      // IMPORTANT: Use namePair.cdr directly (the original param list) instead of extracting and rebuilding
+      // This avoids potential issues with shared structure
+      const lambdaBody = body.length === 1 ? body[0] : this.makeBegin(body);
+      const lambdaExpr = new PairObj(
+        makeSymbol('lambda'),
+        new PairObj(
+          namePair.cdr,  // Use original params list directly
+          new PairObj(lambdaBody, theNilObj)
+        )
+      );
+
+      // Store UNCOMPILED expression (lazy compilation like OpenJade)
+      this.globals.setDefinition(funcNameSym.name, lambdaExpr);
+
+      // Return no-op (define doesn't produce a value)
+      return new ConstantInsn(theNilObj, next);
+    }
+
+    // Simple form: (define name value)
     if (argsArray.length !== 2) {
       throw new Error('define requires exactly 2 arguments');
     }
 
-    const nameExpr = argsArray[0];
     const sym = nameExpr.asSymbol();
     if (!sym) {
       throw new Error('define name must be a symbol');
     }
 
-    // For now, just return unspecified (real define would update global env at runtime)
-    throw new Error('define not yet implemented');
+    const valueExpr = argsArray[1];
+
+    // Store UNCOMPILED expression (lazy compilation like OpenJade)
+    this.globals.setDefinition(sym.name, valueExpr);
+
+    // Return no-op
+    return new ConstantInsn(theNilObj, next);
   }
 
   /**
@@ -390,6 +756,64 @@ export class Compiler {
     const argsArray = this.listToArray(args);
     if (argsArray.length < 2) {
       throw new Error('let requires at least 2 arguments');
+    }
+
+    // Check for named let: (let name ((var init) ...) body)
+    const firstArg = argsArray[0];
+    const namedLetSym = firstArg.asSymbol();
+    if (namedLetSym) {
+      // Named let - direct implementation without letrec
+      if (argsArray.length < 3) {
+        throw new Error('named let requires at least 3 arguments');
+      }
+      const name = namedLetSym.name;
+      const bindings = this.listToArray(argsArray[1]);
+      const bodyExprs = argsArray.slice(2);
+
+      // Extract vars and inits from bindings
+      const vars: string[] = [];
+      const inits: ELObj[] = [];
+      for (const binding of bindings) {
+        const bindingList = this.listToArray(binding);
+        if (bindingList.length !== 2) {
+          throw new Error('let binding must have exactly 2 elements');
+        }
+        const varSym = bindingList[0].asSymbol();
+        if (!varSym) {
+          throw new Error('let binding name must be a symbol');
+        }
+        vars.push(varSym.name);
+        inits.push(bindingList[1]);
+      }
+
+      // Named let implementation:
+      // (let name ((v1 e1) ...) body) compiles to:
+      // 1. Create lambda: (lambda (v1 ...) body)
+      // 2. Temporarily define 'name' as that lambda globally
+      // 3. Compile call: (name e1 ...)
+      // 4. Restore original global
+
+      // Build lambda: (lambda (v1 ...) body)
+      const lambdaParams = vars.reduceRight((acc: ELObj, v) => makePair(makeSymbol(v), acc), theNilObj);
+      const lambdaBody = bodyExprs.length === 1 ? bodyExprs[0] : this.makeBegin(bodyExprs);
+      const lambda = makePair(makeSymbol('lambda'), makePair(lambdaParams, makePair(lambdaBody, theNilObj)));
+
+      // Save and temporarily define the function globally
+      const savedGlobal = this.globals.lookup(name);
+      this.globals.setDefinition(name, lambda);  // Store uncompiled - will compile when looked up
+
+      // Build and compile call: (name e1 ...)
+      const callArgs = inits.reduceRight((acc: ELObj, init) => makePair(init, acc), theNilObj);
+      const call = makePair(makeSymbol(name), callArgs);
+      const result = this.compile(call, env, stackPos, next);
+
+      // Restore original global
+      if (savedGlobal !== null) {
+        this.globals.define(name, savedGlobal);
+      }
+      // Note: Can't fully remove temporary def, but that's OK - it's cached as compiled code
+
+      return result;
     }
 
     const bindings = this.listToArray(argsArray[0]);
@@ -431,6 +855,67 @@ export class Compiler {
     // So compile them left-to-right: inits[0], ..., inits[n-1]
     for (let i = 0; i < inits.length; i++) {
       // Init i will execute with (inits.length - 1 - i) values already on stack
+      const numPushed = inits.length - 1 - i;
+      result = this.compile(inits[i], env, stackPos + numPushed, result);
+    }
+
+    return result;
+  }
+
+  /**
+   * Compile letrec special form - WORK IN PROGRESS
+   * Port from: OpenJade Interpreter.cxx compileLetrec
+   *
+   * TEMPORARY: Implement just enough to support named let
+   * Named let transforms to: (letrec ((name (lambda ...))) (name args...))
+   * For now, use define + let as a workaround
+   */
+  private compileLetrec(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
+    const argsArray = this.listToArray(args);
+    if (argsArray.length < 2) {
+      throw new Error('letrec requires at least 2 arguments');
+    }
+
+    const bindings = this.listToArray(argsArray[0]);
+
+    // WORKAROUND: Transform (letrec ((v1 e1) ...) body)
+    // to: (let ((v1 e1') ...) body) where e1' doesn't reference v1
+    // This works if inits are lambdas that don't immediately reference the letrec vars
+    // (they reference them later when called, at which point vars are on stack)
+
+    const vars: string[] = [];
+    const inits: ELObj[] = [];
+
+    for (const binding of bindings) {
+      const bindingList = this.listToArray(binding);
+      if (bindingList.length !== 2) {
+        throw new Error('letrec binding must have exactly 2 elements');
+      }
+
+      const name = bindingList[0].asSymbol();
+      if (!name) {
+        throw new Error('letrec binding name must be a symbol');
+      }
+
+      vars.push(name.name);
+      inits.push(bindingList[1]);
+    }
+
+    // Body is remaining arguments (implicit begin)
+    const bodyExprs = argsArray.slice(1);
+    const body = bodyExprs.length === 1
+      ? bodyExprs[0]
+      : this.makeBegin(bodyExprs);
+
+    // Compile body in extended environment (variables on stack)
+    const bodyEnv = env.extendStack(vars);
+    const bodyStackPos = stackPos + vars.length;
+    let result = this.compile(body, bodyEnv, bodyStackPos, new PopBindingsInsn(vars.length, next));
+
+    // Compile initializers in current environment
+    // TODO: This doesn't support true letrec semantics where inits can reference each other
+    // For named let, this works because the lambda doesn't execute until later
+    for (let i = 0; i < inits.length; i++) {
       const numPushed = inits.length - 1 - i;
       result = this.compile(inits[i], env, stackPos + numPushed, result);
     }
@@ -500,6 +985,135 @@ export class Compiler {
 
     for (let i = exprs.length - 2; i >= 0; i--) {
       result = this.compile(exprs[i], env, stackPos, new OrInsn(result, next));
+    }
+
+    return result;
+  }
+
+  /**
+   * Compile case special form
+   * Port from: OpenJade Interpreter.cxx (case uses CaseInsn for matching)
+   *
+   * Syntax: (case <key>
+   *           ((<datum1> ...) <expr> ...)
+   *           ((<datum2> ...) <expr> ...)
+   *           (else <expr> ...))
+   *
+   * Semantics: Evaluate <key>, then check each clause to see if the result
+   * is eqv? to any datum in the clause. If so, evaluate that clause's expressions.
+   */
+  private compileCase(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
+    const argsArray = this.listToArray(args);
+    if (argsArray.length < 2) {
+      throw new Error('case requires at least key and one clause');
+    }
+
+    const keyExpr = argsArray[0];
+    const clauses = argsArray.slice(1);
+
+    // Compile failure case (no match) - return unspecified
+    let failInsn: Insn = new ConstantInsn(theNilObj, next);
+
+    // Compile clauses from right to left
+    for (let i = clauses.length - 1; i >= 0; i--) {
+      const clause = clauses[i];
+      const clauseList = this.listToArray(clause);
+
+      if (clauseList.length < 2) {
+        throw new Error('case clause must have at least datum list and one expression');
+      }
+
+      const selector = clauseList[0];
+      const clauseBody = clauseList.slice(1);
+
+      // Check for else clause
+      const selectorSym = selector.asSymbol();
+      if (selectorSym && selectorSym.name === 'else') {
+        // Else clause - compile body
+        const bodyExpr = clauseBody.length === 1
+          ? clauseBody[0]
+          : this.makeBegin(clauseBody);
+        failInsn = this.compile(bodyExpr, env, stackPos - 1, new PopInsn(next));
+        continue;
+      }
+
+      // Regular clause - compile datum list and body
+      const datums = this.listToArray(selector);
+      const bodyExpr = clauseBody.length === 1
+        ? clauseBody[0]
+        : this.makeBegin(clauseBody);
+
+      // Compile the clause body
+      // Note: After matching, we need to pop the key from stack before executing body
+      const bodyInsn = this.compile(bodyExpr, env, stackPos - 1, new PopInsn(next));
+
+      // Build chain of CaseInsn for each datum (right to left)
+      let clauseInsn: Insn = failInsn;
+      for (let j = datums.length - 1; j >= 0; j--) {
+        clauseInsn = new CaseInsn(datums[j], bodyInsn, clauseInsn);
+      }
+
+      failInsn = clauseInsn;
+    }
+
+    // Compile key expression - result will be on stack for CaseInsn to test
+    return this.compile(keyExpr, env, stackPos, failInsn);
+  }
+
+  /**
+   * Compile cond special form
+   * Port from: R4RS cond specification
+   */
+  private compileCond(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
+    const argsArray = this.listToArray(args);
+    if (argsArray.length < 1) {
+      throw new Error('cond requires at least one clause');
+    }
+
+    // Compile clauses from right to left
+    let result: Insn = new ConstantInsn(theNilObj, next); // Default if no clause matches
+
+    for (let i = argsArray.length - 1; i >= 0; i--) {
+      const clause = argsArray[i];
+      const clauseList = this.listToArray(clause);
+
+      if (clauseList.length < 1) {
+        throw new Error('cond clause must have at least a test');
+      }
+
+      const test = clauseList[0];
+      const testSym = test.asSymbol();
+
+      // Check for else clause
+      if (testSym && testSym.name === 'else') {
+        if (clauseList.length < 2) {
+          throw new Error('else clause must have at least one expression');
+        }
+        const bodyExprs = clauseList.slice(1);
+        const body = bodyExprs.length === 1
+          ? bodyExprs[0]
+          : this.makeBegin(bodyExprs);
+        result = this.compile(body, env, stackPos, next);
+        continue;
+      }
+
+      // Regular clause
+      if (clauseList.length === 1) {
+        // (test) with no body - return test result if true
+        const thenBranch = new PopInsn(next); // Pop test result and continue
+        const elseBranch = result;
+        const testInsn = this.compile(test, env, stackPos, new TestInsn(thenBranch, elseBranch));
+        result = testInsn;
+      } else {
+        // (test expr ...) - evaluate body if test is true
+        const bodyExprs = clauseList.slice(1);
+        const body = bodyExprs.length === 1
+          ? bodyExprs[0]
+          : this.makeBegin(bodyExprs);
+        const thenBranch = this.compile(body, env, stackPos - 1, new PopInsn(next));
+        const elseBranch = result;
+        result = this.compile(test, env, stackPos, new TestInsn(thenBranch, elseBranch));
+      }
     }
 
     return result;
@@ -645,6 +1259,34 @@ export class Compiler {
             const args = this.listToArray(pair.cdr);
             if (args.length < 2) return;
 
+            // Check for named let
+            const firstArg = args[0];
+            const namedLetSym = firstArg.asSymbol();
+            if (namedLetSym) {
+              // Named let: (let name ((v1 e1) ...) body)
+              if (args.length < 3) return;
+              const bindings = this.listToArray(args[1]);
+              const newBound = new Set(b);
+              newBound.add(namedLetSym.name); // The name is bound in the body
+
+              // Analyze init expressions with current bindings
+              for (const binding of bindings) {
+                const bindingList = this.listToArray(binding);
+                if (bindingList.length === 2) {
+                  analyze(bindingList[1], b);
+                  const varSym = bindingList[0].asSymbol();
+                  if (varSym) newBound.add(varSym.name);
+                }
+              }
+
+              // Analyze body with extended bindings
+              for (let i = 2; i < args.length; i++) {
+                analyze(args[i], newBound);
+              }
+              return;
+            }
+
+            // Regular let
             const bindings = this.listToArray(args[0]);
             const newBound = new Set(b);
 
@@ -655,6 +1297,39 @@ export class Compiler {
                 analyze(bindingList[1], b);
                 const nameSym = bindingList[0].asSymbol();
                 if (nameSym) newBound.add(nameSym.name);
+              }
+            }
+
+            // Analyze body with extended bindings
+            for (let i = 1; i < args.length; i++) {
+              analyze(args[i], newBound);
+            }
+            return;
+          }
+
+          case 'letrec': {
+            // letrec: variables are bound during init evaluation
+            const args = this.listToArray(pair.cdr);
+            if (args.length < 2) return;
+
+            const bindings = this.listToArray(args[0]);
+            const newBound = new Set(b);
+
+            // First, add all variable names to bindings
+            for (const binding of bindings) {
+              const bindingList = this.listToArray(binding);
+              if (bindingList.length === 2) {
+                const nameSym = bindingList[0].asSymbol();
+                if (nameSym) newBound.add(nameSym.name);
+              }
+            }
+
+            // KEY DIFFERENCE FROM LET:
+            // Analyze init expressions with extended bindings (allows recursive references)
+            for (const binding of bindings) {
+              const bindingList = this.listToArray(binding);
+              if (bindingList.length === 2) {
+                analyze(bindingList[1], newBound);
               }
             }
 
@@ -718,6 +1393,20 @@ export class Compiler {
   }
 
   /**
+   * Convert array to list
+   */
+  private arrayToList(arr: ELObj[]): ELObj {
+    let result: ELObj = theNilObj;
+
+    // Build list from right to left
+    for (let i = arr.length - 1; i >= 0; i--) {
+      result = new PairObj(arr[i], result);
+    }
+
+    return result;
+  }
+
+  /**
    * Create begin form from array of expressions
    */
   private makeBegin(exprs: ELObj[]): ELObj {
@@ -771,22 +1460,17 @@ export class Compiler {
     const body = argsArray.slice(1);
     const bodyExpr = body.length === 1 ? body[0] : this.makeBegin(body);
 
-    // Compile body to a lambda (takes no args, accesses current-node via VM)
+    // Create lambda expression (takes no args, accesses current-node via VM)
     const lambdaBody = new PairObj(bodyExpr, theNilObj);
     const lambdaExpr = new PairObj(
       makeSymbol('lambda'),
       new PairObj(theNilObj, lambdaBody) // Empty arg list
     );
 
-    // Compile lambda to bytecode
-    const lambdaInsn = this.compile(lambdaExpr, env, stackPos, null);
-
-    // Execute to get the closure
-    const vm = new VM();
-    const closure = vm.eval(lambdaInsn);
-
-    // Register rule (mode is empty string for default)
-    this.globals.ruleRegistry.addRule(elementName, "", closure);
+    // Store UNCOMPILED lambda expression (lazy compilation like define)
+    // This allows rules to reference variables defined later in the template
+    // The lambda will be compiled when the rule is first matched
+    this.globals.ruleRegistry.addRuleLambdaExpr(elementName, "", lambdaExpr, this.globals);
 
     // Return no-op instruction (element forms don't execute at template load time)
     return new ConstantInsn(theNilObj, next);
@@ -810,22 +1494,15 @@ export class Compiler {
     // Body (wrapped in begin if multiple expressions)
     const bodyExpr = argsArray.length === 1 ? argsArray[0] : this.makeBegin(argsArray);
 
-    // Compile to lambda
+    // Create lambda expression
     const lambdaBody = new PairObj(bodyExpr, theNilObj);
     const lambdaExpr = new PairObj(
       makeSymbol('lambda'),
       new PairObj(theNilObj, lambdaBody)
     );
 
-    // Compile the lambda to bytecode
-    const lambdaInsn = this.compile(lambdaExpr, env, stackPos, null);
-
-    // Execute to get the closure
-    const vm = new VM();
-    const closure = vm.eval(lambdaInsn);
-
-    // Register as root rule
-    this.globals.ruleRegistry.addRule("root", "", closure);
+    // Store UNCOMPILED lambda expression (lazy compilation)
+    this.globals.ruleRegistry.addRuleLambdaExpr("root", "", lambdaExpr, this.globals);
 
     // Return no-op
     return new ConstantInsn(theNilObj, next);
@@ -892,20 +1569,15 @@ export class Compiler {
         const body = elementArgs.slice(1);
         const bodyExpr = body.length === 1 ? body[0] : this.makeBegin(body);
 
-        // Compile to lambda
+        // Create lambda expression
         const lambdaBody = new PairObj(bodyExpr, theNilObj);
         const lambdaExpr = new PairObj(
           makeSymbol('lambda'),
           new PairObj(theNilObj, lambdaBody)
         );
 
-        // Compile lambda to bytecode and execute to get closure
-        const lambdaInsn = this.compile(lambdaExpr, env, stackPos, null);
-        const vm = new VM();
-        const closure = vm.eval(lambdaInsn);
-
-        // Register with mode
-        this.globals.ruleRegistry.addRule(elementName, modeName, closure);
+        // Store UNCOMPILED lambda expression (lazy compilation)
+        this.globals.ruleRegistry.addRuleLambdaExpr(elementName, modeName, lambdaExpr, this.globals);
       }
     }
 

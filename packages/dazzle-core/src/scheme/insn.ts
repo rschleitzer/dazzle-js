@@ -266,6 +266,35 @@ export class ClosureRefInsn extends Insn {
 }
 
 /**
+ * GlobalRef instruction - Lookup global variable by name at runtime
+ * Port from: OpenJade pattern for deferred global lookup
+ *
+ * This allows forward references to globals that will be defined later.
+ */
+export class GlobalRefInsn extends Insn {
+  constructor(
+    private name: string,
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    if (!vm.globals) {
+      throw new Error(`GlobalRefInsn: no globals available for ${this.name}`);
+    }
+
+    const value = vm.globals.lookup(this.name);
+    if (!value) {
+      throw new Error(`Undefined variable: ${this.name}`);
+    }
+
+    vm.push(value);
+    return this.next;
+  }
+}
+
+/**
  * TestNull instruction - Branch based on whether value is null/undefined
  * Port from: Insn.h TestNullInsn
  *

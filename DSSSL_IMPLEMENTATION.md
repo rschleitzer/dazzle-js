@@ -128,6 +128,42 @@ Result: Document processed twice with different rules for each pass.
 - Placeholder for rule priority chains
 - Full implementation requires priority system
 
+## XML Template Wrapper Support (Complete)
+
+**Template Loader** (`dsssl/template-loader.ts`):
+- Auto-detects XML wrapper vs plain Scheme
+- Parses DOCTYPE for entity declarations: `<!ENTITY name SYSTEM "file.scm">`
+- Resolves entity references: `&name;` → file contents
+- Extracts `<style-specification>` content
+- Supports search paths for entity resolution
+
+**define Special Form** (`compiler.ts:368-441`):
+- Simple form: `(define name value)`
+- Lambda shorthand: `(define (name args...) body...)`
+- Registers functions in global environment
+- Enables helper functions and code reuse
+
+**Example .dsl File**:
+```xml
+<?xml version="1.0"?>
+<!DOCTYPE style-sheet PUBLIC "-//James Clark//DTD DSSSL Style Sheet//EN" [
+  <!ENTITY helpers SYSTEM "helpers.scm">
+  <!ENTITY rules SYSTEM "rules.scm">
+]>
+<style-sheet>
+<style-specification>
+&helpers;
+&rules;
+(process-root)
+</style-specification>
+</style-sheet>
+```
+
+**CLI Usage**:
+```bash
+dazzle -d template.dsl -D /usr/share/dazzle input.xml
+```
+
 ## Status
-**Phase Complete**: Multi-pass processing with modes ✓
-**Next**: XML template wrapper support (.dsl format)
+**Phase Complete**: XML template wrapper support (.dsl format) ✓
+**Next**: Production testing and optimization

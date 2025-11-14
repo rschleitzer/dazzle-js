@@ -197,6 +197,20 @@ export class Parser {
       return this.parseNumberWithRadix(c);
     }
 
+    // #!rest and other #! keywords
+    // Port from: OpenJade supports #!rest for variadic arguments
+    if (c === '!') {
+      this.advance();
+      // Read the keyword name
+      const start = this.pos;
+      while (this.pos < this.input.length && this.isIdentifierChar(this.peek())) {
+        this.advance();
+      }
+      const keyword = this.input.substring(start, this.pos);
+      // Return as a special symbol with #! prefix
+      return makeSymbol('#!' + keyword);
+    }
+
     throw this.error(`Invalid hash expression: #${c}`);
   }
 
