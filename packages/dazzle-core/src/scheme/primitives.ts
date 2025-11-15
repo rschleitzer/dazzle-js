@@ -441,26 +441,8 @@ const greaterThanOrEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): 
   for (let i = 0; i < args.length - 1; i++) {
     const a = args[i].asNumber();
     const b = args[i + 1].asNumber();
-
-    // DEBUG: Show what we're comparing
-    const describeValue = (obj: ELObj): string => {
-      const num = obj.asNumber();
-      if (num) return `number(${num.value})`;
-      if (obj.asString()) return `string("${obj.asString()!.value}")`;
-      if (obj.asSymbol()) return `symbol(${obj.asSymbol()!.name})`;
-      if (obj.asBoolean()) return `boolean(${obj.asBoolean()!.value})`;
-      if (obj.asNil()) return 'nil';
-      if (obj.asPair()) return 'pair';
-      if (obj.asNode()) return `node(${obj.asNode()!.node.gi()})`;
-      if (obj.asNodeList()) return 'node-list';
-      if (obj.asFunction()) return `function(${obj.asFunction()!.name})`;
-      if (obj.asSosofo()) return 'sosofo';
-      return `${obj.constructor.name}`;
-    };
-    console.error(`DEBUG >=: comparing ${describeValue(args[i])} with ${describeValue(args[i + 1])}`);
-
     if (!a || !b) {
-      throw new Error(`>= requires numeric arguments (got ${describeValue(args[i])} and ${describeValue(args[i + 1])})`);
+      throw new Error('>= requires numeric arguments');
     }
     if (!(a.value >= b.value)) {
       return theFalseObj;
@@ -828,13 +810,10 @@ const stringLengthPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj 
 
   const str = args[0].asString();
   if (!str) {
-    console.error('DEBUG: string-length got non-string:', args[0].constructor.name);
     throw new Error('string-length requires a string');
   }
 
-  const result = makeNumber(str.value.length, true);
-  console.error(`DEBUG: string-length("${str.value}") = ${str.value.length}`, new Error().stack?.split('\n')[2]);
-  return result;
+  return makeNumber(str.value.length, true);
 };
 
 /**

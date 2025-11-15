@@ -895,52 +895,13 @@ export class Compiler {
     const bodyStackPos = stackPos + vars.length;
     let result = this.compile(body, bodyEnv, bodyStackPos, new PopBindingsInsn(vars.length, next));
 
-    // Compile initializers - last init compiled executes first
-    // We want to push right-to-left: inits[n-1], ..., inits[0]
-    // So compile them left-to-right: inits[0], ..., inits[n-1]
-    for (let i = 0; i < inits.length; i++) {
-      // DEBUG: Check map1's lambda params BEFORE compiling this init
-      if (vars[i] === 'map1') {
-        const lambdaPair = inits[i].asPair();
-        if (lambdaPair) {
-          const params = lambdaPair.cdr.asPair()?.car;
-          const paramsDebug = [];
-          let curr = params;
-          while (curr?.asPair()) {
-            const sym = curr.asPair()!.car.asSymbol();
-            if (sym) paramsDebug.push(sym.name);
-            curr = curr.asPair()!.cdr;
-          }
-        }
-      }
-
-      // DEBUG: Check map1's lambda params RIGHT BEFORE compiling this init
-      if (vars[i] === 'map1') {
-        const lambdaPair = inits[i].asPair();
-        if (lambdaPair) {
-          const params = lambdaPair.cdr.asPair()?.car;
-          const firstPair = params?.asPair();
-        }
-      }
-
-      // Init i will execute with (inits.length - 1 - i) values already on stack
-      const numPushed = inits.length - 1 - i;
-      result = this.compile(inits[i], env, stackPos + numPushed, result);
-
-      // DEBUG: Check map1's lambda params AFTER compiling this init
-      if (vars[i] === 'map1') {
-        const lambdaPair = inits[i].asPair();
-        if (lambdaPair) {
-          const params = lambdaPair.cdr.asPair()?.car;
-          const paramsDebug = [];
-          let curr = params;
-          while (curr?.asPair()) {
-            const sym = curr.asPair()!.car.asSymbol();
-            if (sym) paramsDebug.push(sym.name);
-            curr = curr.asPair()!.cdr;
-          }
-        }
-      }
+    // Compile initializers in reverse order (like OpenJade's compileInits)
+    // Port from: OpenJade Expression.cxx LetExpression::compileInits
+    // Each init[i] is compiled at stackPos + i, with the chain of later inits as next
+    // Compile from last to first so init[0] executes first
+    for (let i = inits.length - 1; i >= 0; i--) {
+      // Init i pushes its value to stackPos + i
+      result = this.compile(inits[i], env, stackPos + i, result);
     }
 
     return result;
