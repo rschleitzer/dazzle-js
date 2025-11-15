@@ -8,59 +8,8 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseXmlGrove, parse, Compiler, GlobalEnvironment, Environment, VM, type ELObj, ProcessContext, loadTemplate } from 'dazzle-core';
+import { parseXmlGrove, parse, Compiler, GlobalEnvironment, Environment, VM, ProcessContext, loadTemplate } from 'dazzle-core';
 import { createTransformBackend } from 'dazzle-backend-sgml';
-
-/**
- * Format a Scheme value for display
- */
-function formatValue(value: ELObj): string {
-  // String
-  const str = value.asString();
-  if (str) return str.value;
-
-  // Number
-  const num = value.asNumber();
-  if (num) return num.value.toString();
-
-  // Boolean
-  const bool = value.asBoolean();
-  if (bool !== null) return bool.value ? '#t' : '#f';
-
-  // Nil (empty list)
-  if (value.asNil()) return '()';
-
-  // List
-  const pair = value.asPair();
-  if (pair) {
-    const elements: string[] = [];
-    let current = value;
-
-    while (current.asPair()) {
-      const p = current.asPair()!;
-      elements.push(formatValue(p.car));
-      current = p.cdr;
-    }
-
-    // Check for improper list
-    if (!current.asNil()) {
-      return `(${elements.join(' ')} . ${formatValue(current)})`;
-    }
-
-    return `(${elements.join(' ')})`;
-  }
-
-  // Symbol
-  const sym = value.asSymbol();
-  if (sym) return sym.name;
-
-  // Sosofo
-  const sosofo = value.asSosofo();
-  if (sosofo) return `<sosofo:${sosofo.type}>`;
-
-  // Other
-  return '<value>';
-}
 
 const program = new Command();
 
@@ -123,8 +72,6 @@ program
       // Parse template into S-expressions
       const exprs = parse(templateContent);
 
-      console.log(`Loaded entities: ${templateResult.entities.map(e => e.name).join(', ') || 'none'}`);
-
       if (process.env.DEBUG_TEMPLATE) {
         console.log('Template content:\n', templateContent);
       }
@@ -143,30 +90,19 @@ program
       // Create ProcessContext for sosofo execution
       const processContext = new ProcessContext(backend, vm);
 
-      console.log(`Template: ${templatePath}`);
-      console.log(`Input: ${inputPath}`);
-      console.log(`Backend: ${options.backend}`);
-      console.log(`Output dir: ${outputDir}`);
-      console.log(`Grove root: ${grove.root().gi()}`);
-      console.log(`Parsed ${exprs.length} expression(s) from template\n`);
-
       // Execute each expression (defines rules, functions, etc.)
       for (let i = 0; i < exprs.length; i++) {
         const expr = exprs[i];
-        console.log(`Executing expression ${i + 1}...`);
 
         // Compile expression to bytecode
         const bytecode = compiler.compile(expr, env, 0, null);
 
         // Execute bytecode
-        const result = vm.eval(bytecode);
-
-        console.log(`Result: ${formatValue(result)}`);
+        vm.eval(bytecode);
       }
 
       // After loading all definitions, automatically invoke processing
       // Port from: OpenJade jade.cxx - automatically starts root processing
-      console.log('\nStarting document processing...');
 
       const processRootFunc = globals.lookup('process-root');
       if (processRootFunc) {
