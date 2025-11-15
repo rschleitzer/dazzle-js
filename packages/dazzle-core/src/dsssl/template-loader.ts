@@ -77,7 +77,11 @@ function loadXmlTemplate(content: string, baseDir: string, searchPaths: string[]
   // Replace entity references with file contents
   for (const entity of entities) {
     const entityPath = resolveEntityPath(entity.systemId, baseDir, searchPaths);
-    const entityContent = fs.readFileSync(entityPath, 'utf-8');
+    let entityContent = fs.readFileSync(entityPath, 'utf-8');
+
+    // Strip CDATA sections if present (used in some templates for XML escaping)
+    // Transform: <![CDATA[content]]> → content
+    entityContent = entityContent.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
 
     // Replace &entityName; with content
     const entityRef = `&${entity.name};`;

@@ -428,6 +428,8 @@ export class Compiler {
             return this.compileSet(pair.cdr, env, stackPos, next);
           case 'let':
             return this.compileLet(pair.cdr, env, stackPos, next);
+          case 'let*':
+            return this.compileLetStar(pair.cdr, env, stackPos, next);
           case 'letrec':
             return this.compileLetrec(pair.cdr, env, stackPos, next);
           case 'begin':
@@ -945,6 +947,63 @@ export class Compiler {
   }
 
   /**
+   * Compile let* - sequential bindings
+   * Port from: R4RS §4.2.2
+   * (let* ((v1 e1) (v2 e2) ...) body) transforms to nested let forms
+   */
+  private compileLetStar(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
+    const argsArray = this.listToArray(args);
+    if (argsArray.length < 2) {
+      throw new Error('let* requires at least 2 arguments');
+    }
+
+    const bindings = this.listToArray(argsArray[0]);
+    const bodyExprs = argsArray.slice(1);
+
+    // Empty bindings - just evaluate body
+    if (bindings.length === 0) {
+      const body = bodyExprs.length === 1
+        ? bodyExprs[0]
+        : this.makeBegin(bodyExprs);
+      return this.compile(body, env, stackPos, next);
+    }
+
+    // Transform let* to nested let forms
+    // (let* ((v1 e1) (v2 e2)) body) => (let ((v1 e1)) (let ((v2 e2)) body))
+    let result: ELObj;
+
+    // Start with the innermost let (last binding + body)
+    const lastBinding = bindings[bindings.length - 1];
+    const innerBody = bodyExprs.length === 1
+      ? bodyExprs[0]
+      : this.makeBegin(bodyExprs);
+
+    // Build: (let ((last-binding)) body)
+    result = makePair(
+      makeSymbol('let'),
+      makePair(
+        makePair(lastBinding, theNilObj),  // Single binding list
+        makePair(innerBody, theNilObj)      // Body
+      )
+    );
+
+    // Wrap each previous binding as an outer let
+    for (let i = bindings.length - 2; i >= 0; i--) {
+      const binding = bindings[i];
+      result = makePair(
+        makeSymbol('let'),
+        makePair(
+          makePair(binding, theNilObj),  // Single binding list
+          makePair(result, theNilObj)     // Previous let as body
+        )
+      );
+    }
+
+    // Compile the transformed expression
+    return this.compile(result, env, stackPos, next);
+  }
+
+  /**
    * Compile letrec special form
    * Port from: OpenJade Expression.cxx LetrecExpression::compile
    *
@@ -1409,6 +1468,36 @@ export class Compiler {
             // Analyze body with extended bindings
             for (let i = 1; i < args.length; i++) {
               analyze(args[i], newBound);
+            }
+            return;
+          }
+
+          case 'let*': {
+            // let*: bindings are evaluated sequentially, each sees previous
+            const args = this.listToArray(pair.cdr);
+            if (args.length < 2) return;
+
+            const bindings = this.listToArray(args[0]);
+            let currentBound = new Set(b);
+
+            // Analyze each binding, extending bound set incrementally
+            for (const binding of bindings) {
+              const bindingList = this.listToArray(binding);
+              if (bindingList.length === 2) {
+                // Analyze init with current bindings
+                analyze(bindingList[1], currentBound);
+                // Add variable to bindings for next init
+                const nameSym = bindingList[0].asSymbol();
+                if (nameSym) {
+                  currentBound = new Set(currentBound);
+                  currentBound.add(nameSym.name);
+                }
+              }
+            }
+
+            // Analyze body with all bindings
+            for (let i = 1; i < args.length; i++) {
+              analyze(args[i], currentBound);
             }
             return;
           }

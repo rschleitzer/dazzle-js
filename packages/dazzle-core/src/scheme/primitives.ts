@@ -6075,6 +6075,102 @@ const selectElementsPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
 };
 
 /**
+ * Grove: node-list-map
+ * Maps a function over a node-list, returning a new node-list
+ * Port from: OpenJade extension (not in DSSSL standard)
+ */
+const nodeListMapPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 2) {
+    throw new Error('node-list-map requires exactly 2 arguments');
+  }
+
+  const func = args[0].asFunction();
+  if (!func) {
+    throw new Error('node-list-map requires a function as first argument');
+  }
+
+  const nl = args[1].asNodeList();
+  if (!nl) {
+    throw new Error('node-list-map requires a node-list as second argument');
+  }
+
+  // Map function over each node in the list
+  const results: Node[] = [];
+  let current = nl.nodes;
+  while (true) {
+    const first = current.first();
+    if (!first) {
+      break;
+    }
+
+    // Call function with node as argument
+    const nodeObj = makeNode(first);
+    const result = func.isPrimitive()
+      ? func.callPrimitive([nodeObj], vm)
+      : callClosure(func, [nodeObj], vm);
+
+    // Result should be a node
+    const resultNode = result.asNode();
+    if (resultNode) {
+      results.push(resultNode.node);
+    } else {
+      throw new Error('node-list-map: function must return a node');
+    }
+
+    const rest = current.rest();
+    if (!rest) {
+      break;
+    }
+    current = rest;
+  }
+
+  return makeNodeList(nodeListFromArray(results));
+};
+
+/**
+ * Grove: node-list-contains?
+ * Helper primitive for checking if a node is in a node-list
+ * Used in SchwebNet templates
+ */
+const nodeListContainsPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 2) {
+    throw new Error('node-list-contains? requires exactly 2 arguments');
+  }
+
+  const nl = args[0].asNodeList();
+  if (!nl) {
+    throw new Error('node-list-contains? requires a node-list as first argument');
+  }
+
+  const searchNode = args[1].asNode();
+  if (!searchNode) {
+    throw new Error('node-list-contains? requires a node as second argument');
+  }
+
+  // Search for the node in the list
+  let current = nl.nodes;
+  while (true) {
+    const first = current.first();
+    if (!first) {
+      // End of list, not found
+      return theFalseObj;
+    }
+
+    // Compare nodes - check if they're the same node
+    // In grove model, nodes have identity - compare underlying native nodes
+    if (first === searchNode.node) {
+      return theTrueObj;
+    }
+
+    const rest = current.rest();
+    if (!rest) {
+      return theFalseObj;
+    }
+    current = rest;
+  }
+};
+
+/**
  * Grove: attributes
  * Port from: primitive.h PRIMITIVE(Attributes, "attributes", 0, 1, 0)
  */
@@ -6132,6 +6228,52 @@ const ancestorsPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => 
   }
 
   return makeNodeList(node.node.ancestors());
+};
+
+/**
+ * Grove: ancestor
+ * Port from: primitive.h PRIMITIVE(Ancestor, "ancestor", 1, 1, 0)
+ * Returns first ancestor with matching GI
+ */
+const ancestorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 2) {
+    throw new Error('ancestor requires exactly 2 arguments');
+  }
+
+  const giStr = args[0].asString();
+  if (!giStr) {
+    throw new Error('ancestor requires a string as first argument');
+  }
+
+  const node = args[1].asNode();
+  if (!node) {
+    throw new Error('ancestor requires a node as second argument');
+  }
+
+  const gi = giStr.value;
+  let ancestorList = node.node.ancestors();
+
+  // Search for first ancestor with matching GI
+  while (true) {
+    const first = ancestorList.first();
+    if (!first) {
+      // No more ancestors
+      break;
+    }
+
+    if (first.gi() === gi) {
+      return makeNode(first);
+    }
+
+    const rest = ancestorList.rest();
+    if (!rest) {
+      break;
+    }
+    ancestorList = rest;
+  }
+
+  // No matching ancestor found
+  return makeNodeList(EMPTY_NODE_LIST);
 };
 
 /**
@@ -7973,15 +8115,19 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   'node-list': new FunctionObj('node-list', nodeListPrimitive),
   'node-list?': new FunctionObj('node-list?', nodeListPredicate),
   'node-list-length': new FunctionObj('node-list-length', nodeListLengthPrimitive),
+  'node-list-count': new FunctionObj('node-list-count', nodeListLengthPrimitive),  // Alias for node-list-length
   'empty-node-list': new FunctionObj('empty-node-list', emptyNodeListPrimitive),
   'node-list-empty?': new FunctionObj('node-list-empty?', nodeListEmptyPredicate),
   'node-list-first': new FunctionObj('node-list-first', nodeListFirstPrimitive),
   'node-list-rest': new FunctionObj('node-list-rest', nodeListRestPrimitive),
   'node-list-reverse': new FunctionObj('node-list-reverse', nodeListReversePrimitive),
   'select-elements': new FunctionObj('select-elements', selectElementsPrimitive),
+  'node-list-map': new FunctionObj('node-list-map', nodeListMapPrimitive),
+  'node-list-contains?': new FunctionObj('node-list-contains?', nodeListContainsPredicate),
   'attributes': new FunctionObj('attributes', attributesPrimitive),
   'attribute-string': new FunctionObj('attribute-string', attributeStringPrimitive),
   'ancestors': new FunctionObj('ancestors', ancestorsPrimitive),
+  'ancestor': new FunctionObj('ancestor', ancestorPrimitive),
   'descendants': new FunctionObj('descendants', descendantsPrimitive),
   'child-number': new FunctionObj('child-number', childNumberPrimitive),
 
