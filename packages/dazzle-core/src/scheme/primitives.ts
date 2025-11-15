@@ -5835,13 +5835,44 @@ const elementWithIdPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj
  * Port from: primitive.h PRIMITIVE(Data, "data", 0, 1, 0)
  */
 const dataPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
-  if (args.length !== 1) {
-    throw new Error('data requires exactly 1 argument');
+  // Port from: OpenJade PRIMITIVE(Data, "data", 0, 1, 0)
+  // 0 required, 1 optional - can be called with 0 or 1 arguments
+  if (args.length > 1) {
+    throw new Error('data takes at most 1 argument');
   }
 
-  const node = args[0].asNode();
+  let nodeObj: ELObj;
+  if (args.length === 0) {
+    // Use current-node from VM context
+    const groveNode = vm.currentNode;
+    if (!groveNode) {
+      throw new Error('data: no current node');
+    }
+    nodeObj = makeNode(groveNode);
+  } else {
+    nodeObj = args[0];
+  }
+
+  // Check if it's a node
+  let node = nodeObj.asNode();
+
+  // If it's a node-list, extract the first node
   if (!node) {
-    throw new Error('data requires a node argument');
+    const nodeList = nodeObj.asNodeList();
+    if (nodeList) {
+      const first = nodeList.nodes.first();
+      if (!first) {
+        // Empty node-list
+        return theFalseObj;
+      }
+      // Use first node (whether single or multiple)
+      nodeObj = makeNode(first);
+      node = nodeObj.asNode();
+    }
+  }
+
+  if (!node) {
+    throw new Error('data requires a node or node-list argument');
   }
 
   const data = node.node.data();
@@ -5853,13 +5884,43 @@ const dataPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
  * Port from: primitive.h PRIMITIVE(Parent, "parent", 0, 1, 0)
  */
 const parentPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
-  if (args.length !== 1) {
-    throw new Error('parent requires exactly 1 argument');
+  // Port from: OpenJade PRIMITIVE(Parent, "parent", 0, 1, 0)
+  // 0 required, 1 optional - can be called with 0 or 1 arguments
+  if (args.length > 1) {
+    throw new Error('parent takes at most 1 argument');
   }
 
-  const node = args[0].asNode();
+  let nodeObj: ELObj;
+  if (args.length === 0) {
+    // Use current-node from VM context
+    const groveNode = vm.currentNode;
+    if (!groveNode) {
+      throw new Error('parent: no current node');
+    }
+    nodeObj = makeNode(groveNode);
+  } else {
+    nodeObj = args[0];
+  }
+
+  // Check if it's a node
+  let node = nodeObj.asNode();
+
+  // If it's a node-list, extract the first node
   if (!node) {
-    throw new Error('parent requires a node argument');
+    const nodeList = nodeObj.asNodeList();
+    if (nodeList) {
+      const first = nodeList.nodes.first();
+      if (!first) {
+        // Empty node-list
+        return theFalseObj;
+      }
+      nodeObj = makeNode(first);
+      node = nodeObj.asNode();
+    }
+  }
+
+  if (!node) {
+    throw new Error('parent requires a node or node-list argument');
   }
 
   const parent = node.node.parent();
@@ -6134,12 +6195,20 @@ const nodeListMapPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj =
       ? func.callPrimitive([nodeObj], vm)
       : callClosure(func, [nodeObj], vm);
 
-    // Result should be a node
+    // Result can be a node or a node-list
+    // If it's a node-list, add all its nodes (flattening)
     const resultNode = result.asNode();
     if (resultNode) {
       results.push(resultNode.node);
     } else {
-      throw new Error('node-list-map: function must return a node');
+      const resultNodeList = result.asNodeList();
+      if (resultNodeList) {
+        // Add all nodes from the returned node-list
+        const nodeArray = resultNodeList.nodes.toArray();
+        results.push(...nodeArray);
+      } else {
+        throw new Error('node-list-map: function must return a node or node-list');
+      }
     }
 
     const rest = current.rest();
@@ -6331,9 +6400,25 @@ const nodeListContainsPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): EL
     throw new Error('node-list-contains? requires a node-list as first argument');
   }
 
-  const searchNode = args[1].asNode();
+  // Second argument can be a node or node-list
+  let searchNodeObj = args[1];
+  let searchNode = searchNodeObj.asNode();
   if (!searchNode) {
-    throw new Error('node-list-contains? requires a node as second argument');
+    const searchNodeList = searchNodeObj.asNodeList();
+    if (searchNodeList) {
+      const first = searchNodeList.nodes.first();
+      if (!first) {
+        // Empty node-list - not found
+        return theFalseObj;
+      }
+      searchNodeObj = makeNode(first);
+      searchNode = searchNodeObj.asNode();
+      if (!searchNode) {
+        throw new Error('node-list-contains?: failed to extract node from node-list');
+      }
+    } else {
+      throw new Error('node-list-contains? requires a node or node-list as second argument');
+    }
   }
 
   // Search for the node in the list
