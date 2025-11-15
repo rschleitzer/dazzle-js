@@ -829,13 +829,26 @@ const stringAppendPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj 
     // Port from: OpenJade StringAppend - treats () and #f as empty string
     // This allows templates to use (if ...) and (case ...) without else clauses
     // AND allows attribute-string returning #f to be safely concatenated
-    if (arg.asNil() || (arg.asBoolean() !== null && !arg.asBoolean()!.value)) {
+    const argBool = arg.asBoolean();
+    if (arg.asNil() || (argBool !== null && !argBool.value)) {  // FIX: use .value
       continue; // Treat () and #f as empty string
     }
 
     const str = arg.asString();
     if (!str) {
-      throw new Error('string-append requires string arguments');
+      const argType = arg.constructor.name;
+      const argBool2 = arg.asBoolean();  // Check again for error message
+      const argValue = argBool2 !== null ? (argBool2.value ? '#t' : '#f') :
+                       arg.asNil() ? '()' : argType;
+      // Debug: show all args
+      const debugArgs = args.map((a, idx) => {
+        const str = a.asString();
+        const bool = a.asBoolean();
+        return str ? `"${str.value.substring(0, 30)}..."` :
+               bool !== null ? (bool.value ? '#t' : '#f') :
+               a.asNil() ? '()' : a.constructor.name;
+      }).join(', ');
+      throw new Error(`string-append requires string arguments, got ${argValue} at position ${i}. Args: [${debugArgs}]`);
     }
     result += str.value;
   }
@@ -5790,7 +5803,10 @@ const elementWithIdPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj
 
   const idStr = args[0].asString();
   if (!idStr) {
-    throw new Error('element-with-id requires a string as first argument');
+    const argType = args[0].constructor.name;
+    const argValue = args[0].asBoolean() !== null ? (args[0].asBoolean() ? '#t' : '#f') :
+                     args[0].asNil() ? '()' : argType;
+    throw new Error(`element-with-id requires a string as first argument, got ${argValue}`);
   }
 
   // Get the node to search from (defaults to current node)
