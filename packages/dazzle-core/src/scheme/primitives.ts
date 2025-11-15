@@ -6169,6 +6169,54 @@ const nodeListUnionPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj
 };
 
 /**
+ * Grove: node-list-some?
+ * Tests if any node in a node-list satisfies a predicate
+ * Port from: OpenJade extension (similar to Scheme's any)
+ */
+const nodeListSomePredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 2) {
+    throw new Error('node-list-some? requires exactly 2 arguments');
+  }
+
+  const func = args[0].asFunction();
+  if (!func) {
+    throw new Error('node-list-some? requires a function as first argument');
+  }
+
+  const nl = args[1].asNodeList();
+  if (!nl) {
+    throw new Error('node-list-some? requires a node-list as second argument');
+  }
+
+  // Test each node with the predicate
+  let current = nl.nodes;
+  while (true) {
+    const first = current.first();
+    if (!first) {
+      // No more nodes, none matched
+      return theFalseObj;
+    }
+
+    // Call predicate with node
+    const nodeObj = makeNode(first);
+    const result = func.isPrimitive()
+      ? func.callPrimitive([nodeObj], vm)
+      : callClosure(func, [nodeObj], vm);
+
+    // If result is true, return true immediately
+    if (result !== theFalseObj) {
+      return theTrueObj;
+    }
+
+    const rest = current.rest();
+    if (!rest) {
+      return theFalseObj;
+    }
+    current = rest;
+  }
+};
+
+/**
  * Grove: node-list=?
  * Tests if two node-lists contain the same nodes in the same order
  * Port from: OpenJade extension
@@ -6442,6 +6490,57 @@ const childNumberPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj =
   }
 
   return makeNumber(nodeObj.node.childNumber());
+};
+
+/**
+ * Grove: first-sibling?
+ * Port from: DSSSL standard (§9.6.5)
+ * Returns true if node is the first among its siblings
+ */
+const firstSiblingPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('first-sibling? requires exactly 1 argument');
+  }
+
+  const nodeObj = optSingletonNode(args[0]);
+  if (!nodeObj) {
+    throw new Error('first-sibling? requires a node or singleton node-list argument');
+  }
+
+  // Node is first sibling if child-number is 1
+  const childNum = nodeObj.childNumber();
+  return makeBoolean(childNum === 1);
+};
+
+/**
+ * Grove: last-sibling?
+ * Port from: DSSSL standard (§9.6.5)
+ * Returns true if node is the last among its siblings
+ */
+const lastSiblingPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('last-sibling? requires exactly 1 argument');
+  }
+
+  const nodeObj = optSingletonNode(args[0]);
+  if (!nodeObj) {
+    throw new Error('last-sibling? requires a node or singleton node-list argument');
+  }
+
+  // Get parent and check if this is the last child
+  const parent = nodeObj.parent();
+  if (!parent) {
+    // No parent - can't determine
+    return theFalseObj;
+  }
+
+  const siblings = parent.children().toArray();
+  if (siblings.length === 0) {
+    return theFalseObj;
+  }
+
+  // Check if this node is the last sibling
+  return makeBoolean(siblings[siblings.length - 1] === nodeObj);
 };
 
 // ============ Common List Accessors ============
@@ -8240,6 +8339,7 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   'select-elements': new FunctionObj('select-elements', selectElementsPrimitive),
   'node-list-map': new FunctionObj('node-list-map', nodeListMapPrimitive),
   'node-list-union': new FunctionObj('node-list-union', nodeListUnionPrimitive),
+  'node-list-some?': new FunctionObj('node-list-some?', nodeListSomePredicate),
   'node-list=?': new FunctionObj('node-list=?', nodeListEqualPredicate),
   'node-list-contains?': new FunctionObj('node-list-contains?', nodeListContainsPredicate),
   'attributes': new FunctionObj('attributes', attributesPrimitive),
@@ -8248,6 +8348,8 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   'ancestor': new FunctionObj('ancestor', ancestorPrimitive),
   'descendants': new FunctionObj('descendants', descendantsPrimitive),
   'child-number': new FunctionObj('child-number', childNumberPrimitive),
+  'first-sibling?': new FunctionObj('first-sibling?', firstSiblingPredicate),
+  'last-sibling?': new FunctionObj('last-sibling?', lastSiblingPredicate),
 
   // DSSSL processing primitives (§10)
   'current-node': new FunctionObj('current-node', currentNodePrimitive),
