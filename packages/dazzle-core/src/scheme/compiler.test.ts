@@ -2613,3 +2613,44 @@ describe("Compiler - Symbol Operations", () => {
   });
 });
 
+describe('Compiler - Letrec and Named Let', () => {
+  it('should support letrec with simple recursion', () => {
+    const globals = new GlobalEnvironment();
+    const compiler = new Compiler(globals);
+    const vm = new VM();
+    vm.globals = globals;
+
+    const expr = parseOne('(letrec ((factorial (lambda (n) (if (<= n 1) 1 (* n (factorial (- n 1))))))) (factorial 5))');
+    const compiled = compiler.compile(expr, new Environment());
+    const result = vm.eval(compiled);
+
+    expect(result.asNumber()?.value).toBe(120);
+  });
+
+  it('should support named let with simple counter recursion', () => {
+    const globals = new GlobalEnvironment();
+    const compiler = new Compiler(globals);
+    const vm = new VM();
+    vm.globals = globals;
+
+    const expr = parseOne('(let loop ((i 0)) (if (>= i 3) i (loop (+ i 1))))');
+    const compiled = compiler.compile(expr, new Environment());
+    const result = vm.eval(compiled);
+
+    expect(result.asNumber()?.value).toBe(3);
+  });
+
+  it('should support named let with outer let bindings', () => {
+    const globals = new GlobalEnvironment();
+    const compiler = new Compiler(globals);
+    const vm = new VM();
+    vm.globals = globals;
+
+    const expr = parseOne('(let ((limit 5)) (let loop ((i 0)) (if (>= i limit) i (loop (+ i 1)))))');
+    const compiled = compiler.compile(expr, new Environment());
+    const result = vm.eval(compiled);
+
+    expect(result.asNumber()?.value).toBe(5);
+  });
+});
+

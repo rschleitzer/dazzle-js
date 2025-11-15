@@ -220,13 +220,25 @@ export class CaseInsn extends Insn {
 export class FrameRefInsn extends Insn {
   constructor(
     private index: number,
-    private next: Insn | null
+    private next: Insn | null,
+    private forCapture: boolean = false // true if capturing for closure
   ) {
     super();
   }
 
   execute(vm: VM): Insn | null {
-    const value = vm.getFrame(this.index);
+    let value = vm.getFrame(this.index);
+
+    // Auto-unbox if this is a boxed value (for letrec variables)
+    // BUT don't unbox if we're capturing for a closure - closures need the box itself
+    // Port from: OpenJade - frame refs auto-unbox, but closures capture boxes
+    if (!this.forCapture) {
+      const box = value.asBox();
+      if (box) {
+        value = box.value;
+      }
+    }
+
     vm.push(value);
     return this.next;
   }
@@ -242,13 +254,25 @@ export class StackRefInsn extends Insn {
   constructor(
     private index: number,        // negative offset from sp
     private frameIndex: number,   // for debugging/validation
-    private next: Insn | null
+    private next: Insn | null,
+    private forCapture: boolean = false // true if capturing for closure
   ) {
     super();
   }
 
   execute(vm: VM): Insn | null {
-    const value = vm.getStackRelative(this.index);
+    let value = vm.getStackRelative(this.index);
+
+    // Auto-unbox if this is a boxed value (for letrec variables)
+    // BUT don't unbox if we're capturing for a closure - closures need the box itself
+    // Port from: OpenJade - stack refs auto-unbox, but closures capture boxes
+    if (!this.forCapture) {
+      const box = value.asBox();
+      if (box) {
+        value = box.value;
+      }
+    }
+
     vm.push(value);
     return this.next;
   }
@@ -269,7 +293,14 @@ export class ClosureRefInsn extends Insn {
   }
 
   execute(vm: VM): Insn | null {
-    const value = vm.getClosure(this.index);
+    let value = vm.getClosure(this.index);
+
+    // Auto-unbox if this is a boxed value (for letrec variables)
+    const box = value.asBox();
+    if (box) {
+      value = box.value;
+    }
+
     vm.push(value);
     return this.next;
   }
@@ -514,7 +545,8 @@ export class ClosureInsn extends Insn {
     const display: ELObj[] = [];
     for (let i = 0; i < this.displayLength; i++) {
       // Get values from bottom of the display region to top
-      display.push(vm.getStackValue(vm.stackSize() - this.displayLength + i));
+      const value = vm.getStackValue(vm.stackSize() - this.displayLength + i);
+      display.push(value);
     }
 
     // Create the closure object
@@ -613,9 +645,20 @@ export class SetImmediateInsn extends Insn {
     // Pop the value to store
     const value = vm.pop();
 
-    // Set the stack slot at -offset from current position
-    // Port from: OpenJade Insn.cxx: vm.sp[-n_] = *vm.sp (after --vm.sp)
-    vm.setStackRelative(-this.offset, value);
+    // Get the target location
+    const targetIndex = vm.stackSize() - this.offset;
+    const target = vm.getStackValue(targetIndex);
+
+    // Check if target is a box (for letrec variables)
+    // Port from: OpenJade SetBoxInsn
+    const box = target.asBox();
+    if (box) {
+      // Update the box contents instead of replacing the box
+      box.value = value;
+    } else {
+      // Normal case: replace the stack value
+      vm.setStackRelative(-this.offset, value);
+    }
 
     return this.next;
   }

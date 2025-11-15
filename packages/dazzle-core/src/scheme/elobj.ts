@@ -26,6 +26,7 @@ export abstract class ELObj {
   asNode(): NodeObj | null { return null; }
   asNodeList(): NodeListObj | null { return null; }
   asSosofo(): SosofoObj | null { return null; }
+  asBox(): BoxObj | null { return null; }
 
   /** Check if this is a proper list */
   isList(): boolean {
@@ -336,6 +337,25 @@ export function makeSymbol(name: string): SymbolObj {
 
 export function makeKeyword(name: string): KeywordObj {
   return new KeywordObj(name);
+}
+
+/**
+ * Box object - Mutable container for values
+ * Port from: OpenJade BoxObj
+ * Used for letrec variables that need to be captured before initialization
+ */
+export class BoxObj extends ELObj {
+  constructor(public value: ELObj) {
+    super();
+  }
+
+  asBox(): BoxObj | null {
+    return this;
+  }
+}
+
+export function makeBox(value: ELObj): BoxObj {
+  return new BoxObj(value);
 }
 
 export function makePair(car: ELObj, cdr: ELObj): PairObj {

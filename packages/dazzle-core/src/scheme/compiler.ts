@@ -11,6 +11,7 @@ import {
   PairObj,
   makeSymbol,
   makePair,
+  makeBox,
   theNilObj,
   theTrueObj,
   theFalseObj,
@@ -604,10 +605,6 @@ export class Compiler {
       }
     }
 
-    // DEBUG
-    if (paramNames.includes('xs')) {
-    }
-
     const lambdaEnv = env.enterLambda(paramNames, capturedVars);
 
     const bodyInsn = this.compile(body, lambdaEnv, 0, new ReturnInsn(paramNames.length));
@@ -634,7 +631,17 @@ export class Compiler {
     // 2. Create closure with those values
     let result: Insn = new ClosureInsn(signature, closureCode, capturedVars.length, next);
 
+    // Count how many stack/closure variables we'll push (frame vars don't get pushed)
+    let numStackVarsToPush = 0;
+    for (const varName of capturedVars) {
+      const binding = env.lookup(varName);
+      if (binding && (binding.kind === 'stack' || binding.kind === 'closure')) {
+        numStackVarsToPush++;
+      }
+    }
+
     // Push captured variables onto stack (right-to-left so they're in order)
+    let stackVarsPushedSoFar = 0;
     for (let i = capturedVars.length - 1; i >= 0; i--) {
       const varName = capturedVars[i];
       const binding = env.lookup(varName);
@@ -642,17 +649,26 @@ export class Compiler {
         throw new Error(`Variable ${varName} not found in environment`);
       }
 
-      // Compile a reference to this variable
+      // Compile a reference to this variable for closure capture
+      // Port from: OpenJade Expression.cxx compilePushVars
+      // Frame variables use FrameRefInsn, stack variables need offset calculation
       switch (binding.kind) {
         case 'frame':
-          result = new FrameRefInsn(binding.index, result);
+          // Frame variables (parameters) can be accessed directly
+          // Use forCapture=true so boxes aren't unboxed
+          result = new FrameRefInsn(binding.index, result, true);
           break;
         case 'stack':
-          const offset = binding.index - (stackPos + (capturedVars.length - 1 - i));
-          result = new StackRefInsn(offset, binding.index, result);
+          // Stack variables (let/letrec bindings) need offset from current stackPos
+          // IMPORTANT: Only count stack/closure vars that have been pushed, not frame vars!
+          const offset = binding.index - (stackPos + (numStackVarsToPush - 1 - stackVarsPushedSoFar));
+          // Use forCapture=true so boxes aren't unboxed
+          result = new StackRefInsn(offset, binding.index, result, true);
+          stackVarsPushedSoFar++;
           break;
         case 'closure':
           result = new ClosureRefInsn(binding.index, result);
+          stackVarsPushedSoFar++;
           break;
       }
     }
@@ -1032,8 +1048,10 @@ export class Compiler {
     }
 
     // Push placeholder values for all variables (to reserve stack slots)
+    // Port from: OpenJade - letrec variables are boxed to allow updates after capture
     for (let i = nVars - 1; i >= 0; i--) {
-      result = new ConstantInsn(theNilObj, result);
+      // Push a box containing nil as the placeholder
+      result = new ConstantInsn(makeBox(theNilObj), result);
     }
 
     return result;
