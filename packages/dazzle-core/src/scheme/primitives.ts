@@ -6128,6 +6128,122 @@ const nodeListMapPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj =
 };
 
 /**
+ * Grove: node-list-union
+ * Merges multiple node-lists, removing duplicates
+ * Port from: OpenJade extension
+ */
+const nodeListUnionPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length < 2) {
+    throw new Error('node-list-union requires at least 2 arguments');
+  }
+
+  // Collect all nodes from all lists, avoiding duplicates
+  const allNodes: Node[] = [];
+  const seenNodes = new Set<Node>();
+
+  for (const arg of args) {
+    const nl = arg.asNodeList();
+    if (!nl) {
+      throw new Error('node-list-union requires node-list arguments');
+    }
+
+    // Add nodes from this list, skipping duplicates
+    let current = nl.nodes;
+    while (true) {
+      const first = current.first();
+      if (!first) break;
+
+      // Only add if not seen before
+      if (!seenNodes.has(first)) {
+        seenNodes.add(first);
+        allNodes.push(first);
+      }
+
+      const rest = current.rest();
+      if (!rest) break;
+      current = rest;
+    }
+  }
+
+  return makeNodeList(nodeListFromArray(allNodes));
+};
+
+/**
+ * Grove: node-list=?
+ * Tests if two node-lists contain the same nodes in the same order
+ * Port from: OpenJade extension
+ */
+const nodeListEqualPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 2) {
+    throw new Error('node-list=? requires exactly 2 arguments');
+  }
+
+  // Arguments can be nodes or node-lists
+  const obj1 = args[0];
+  const obj2 = args[1];
+
+  // Convert to node-lists if needed
+  let nl1: NodeList;
+  let nl2: NodeList;
+
+  const node1 = obj1.asNode();
+  if (node1) {
+    nl1 = nodeListFromArray([node1.node]);
+  } else {
+    const list1 = obj1.asNodeList();
+    if (!list1) {
+      throw new Error('node-list=? requires node or node-list as first argument');
+    }
+    nl1 = list1.nodes;
+  }
+
+  const node2 = obj2.asNode();
+  if (node2) {
+    nl2 = nodeListFromArray([node2.node]);
+  } else {
+    const list2 = obj2.asNodeList();
+    if (!list2) {
+      throw new Error('node-list=? requires node or node-list as second argument');
+    }
+    nl2 = list2.nodes;
+  }
+
+  // Compare node-lists element by element
+  let current1 = nl1;
+  let current2 = nl2;
+
+  while (true) {
+    const first1 = current1.first();
+    const first2 = current2.first();
+
+    // Both empty - equal
+    if (!first1 && !first2) {
+      return theTrueObj;
+    }
+
+    // One empty, one not - not equal
+    if (!first1 || !first2) {
+      return theFalseObj;
+    }
+
+    // Different nodes - not equal
+    if (first1 !== first2) {
+      return theFalseObj;
+    }
+
+    // Move to next elements
+    const rest1 = current1.rest();
+    const rest2 = current2.rest();
+    if (!rest1 || !rest2) {
+      // One has more elements - check if both ended
+      return (!rest1 && !rest2) ? theTrueObj : theFalseObj;
+    }
+    current1 = rest1;
+    current2 = rest2;
+  }
+};
+
+/**
  * Grove: node-list-contains?
  * Helper primitive for checking if a node is in a node-list
  * Used in SchwebNet templates
@@ -8123,6 +8239,8 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   'node-list-reverse': new FunctionObj('node-list-reverse', nodeListReversePrimitive),
   'select-elements': new FunctionObj('select-elements', selectElementsPrimitive),
   'node-list-map': new FunctionObj('node-list-map', nodeListMapPrimitive),
+  'node-list-union': new FunctionObj('node-list-union', nodeListUnionPrimitive),
+  'node-list=?': new FunctionObj('node-list=?', nodeListEqualPredicate),
   'node-list-contains?': new FunctionObj('node-list-contains?', nodeListContainsPredicate),
   'attributes': new FunctionObj('attributes', attributesPrimitive),
   'attribute-string': new FunctionObj('attribute-string', attributeStringPrimitive),
