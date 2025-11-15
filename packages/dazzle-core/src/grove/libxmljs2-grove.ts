@@ -131,7 +131,11 @@ class LibxmljsNode implements Node {
   // ============ Navigation ============
 
   parent(): Node | null {
-    return wrapNode(this.native.parent() as libxmljs2.Node);
+    // Check if parent exists and is a function (some node types like document don't have parent)
+    if (typeof this.native.parent === 'function') {
+      return wrapNode(this.native.parent() as libxmljs2.Node);
+    }
+    return null;
   }
 
   children(): NodeList {
@@ -167,6 +171,7 @@ class LibxmljsNode implements Node {
   }
 
   followingSibling(): Node | null {
+    if (typeof this.native.parent !== 'function') return null;
     const parent = this.native.parent();
     if (!parent) return null;
 
@@ -182,6 +187,7 @@ class LibxmljsNode implements Node {
   }
 
   precedingSibling(): Node | null {
+    if (typeof this.native.parent !== 'function') return null;
     const parent = this.native.parent();
     if (!parent) return null;
 
@@ -369,6 +375,7 @@ class LibxmljsNode implements Node {
   }
 
   childNumber(): number {
+    if (typeof this.native.parent !== 'function') return 0;
     const parent = this.native.parent();
     if (!parent) return 0;
 
@@ -401,6 +408,7 @@ class LibxmljsNode implements Node {
   elementNumber(): number {
     if (this.native.type() !== 'element') return 0;
 
+    if (typeof this.native.parent !== 'function') return 0;
     const parent = this.native.parent();
     if (!parent) return 0;
 

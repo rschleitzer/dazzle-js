@@ -5871,16 +5871,41 @@ const parentPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
  * Port from: primitive.h PRIMITIVE(Children, "children", 0, 1, 0)
  */
 const childrenPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
-  if (args.length !== 1) {
-    throw new Error('children requires exactly 1 argument');
+  // Takes 0 or 1 argument - if 0, uses current-node
+  // Argument can be a node or node-list
+  if (args.length > 1) {
+    throw new Error('children takes at most 1 argument');
   }
 
-  const node = args[0].asNode();
-  if (!node) {
-    throw new Error('children requires a node argument');
+  if (args.length === 0) {
+    // Use current-node from VM context
+    const groveNode = vm.currentNode;
+    if (!groveNode) {
+      throw new Error('children: no current node');
+    }
+    return makeNodeList(groveNode.children());
   }
 
-  return makeNodeList(node.node.children());
+  // Check if argument is a node
+  const nodeObj = args[0].asNode();
+  if (nodeObj) {
+    return makeNodeList(nodeObj.node.children());
+  }
+
+  // Check if argument is a node-list
+  const nodeListObj = args[0].asNodeList();
+  if (nodeListObj) {
+    // Return children of all nodes in the list
+    const allChildren: Node[] = [];
+    const nodeArray = nodeListObj.nodes.toArray();
+    for (const node of nodeArray) {
+      const children = node.children().toArray();
+      allChildren.push(...children);
+    }
+    return makeNodeList(nodeListFromArray(allChildren));
+  }
+
+  throw new Error('children requires a node or node-list argument');
 };
 
 /**
