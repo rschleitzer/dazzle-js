@@ -76,8 +76,8 @@ export class Environment {
   /**
    * Extend environment with new stack variables (for let)
    */
-  extendStack(vars: string[]): Environment {
-    const baseStackPos = this.stackDepth;
+  extendStack(vars: string[], stackPos: number): Environment {
+    const baseStackPos = stackPos;
     const newEnv = new Environment(baseStackPos + vars.length);
 
     // Copy existing bindings unchanged (stack indices are absolute positions)
@@ -889,7 +889,7 @@ export class Compiler {
       : this.makeBegin(bodyExprs);
 
     // Compile body with extended environment
-    const bodyEnv = env.extendStack(vars);
+    const bodyEnv = env.extendStack(vars, stackPos);
     const bodyStackPos = stackPos + vars.length;
     let result = this.compile(body, bodyEnv, bodyStackPos, new PopBindingsInsn(vars.length, next));
 
@@ -993,7 +993,7 @@ export class Compiler {
     }
 
     // Create extended environment with all variables visible
-    const bodyEnv = env.extendStack(vars);
+    const bodyEnv = env.extendStack(vars, stackPos);
     const bodyStackPos = stackPos + nVars;
 
     // Compile body with extended environment
