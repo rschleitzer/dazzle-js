@@ -359,14 +359,6 @@ export class ReturnInsn extends Insn {
     // Push result back on stack for caller
     vm.push(result);
 
-    // DEBUG: Check if stack grew unexpectedly
-    const stackAfter = vm.stackSize();
-    const expectedDelta = 1 - this.totalArgs; // pop args, push result
-    const actualDelta = stackAfter - stackBefore;
-    if (actualDelta > expectedDelta + 5) {
-      console.log(`ReturnInsn: Stack grew unexpectedly! before=${stackBefore}, after=${stackAfter}, expected delta=${expectedDelta}, actual=${actualDelta}, totalArgs=${this.totalArgs}`);
-    }
-
     return next;
   }
 
@@ -396,22 +388,6 @@ export class PrimitiveCallInsn extends Insn {
     const func = this.primitive.asFunction();
     if (!func || !func.isPrimitive()) {
       throw new Error('PrimitiveCallInsn requires a primitive function');
-    }
-
-    // DEBUG: Track apply primitive calls
-    if (func.name === 'apply') {
-      const val0 = vm.getStackValue(vm.stackSize() - this.nArgs);
-      const val0Func = val0.asFunction();
-      const isBad = val0Func && !val0Func.isPrimitive();
-      if (isBad) {
-        console.log(`PrimitiveCallInsn(apply) BAD CALL - stack[0] is anonymous closure!`);
-        console.log(`  Dumping stack from bottom (most recent pushes at end):`);
-        for (let i = 0; i < vm.stackSize(); i++) {
-          const val = vm.getStackValue(i);
-          const valFunc = val.asFunction();
-          console.log(`    [${i}]:`, val.constructor.name, valFunc ? `(${valFunc.name || 'anonymous'}, isPrimitive: ${valFunc.isPrimitive()})` : '');
-        }
-      }
     }
 
     // Gather arguments from stack (they're at sp - nArgs .. sp - 1)
@@ -604,18 +580,6 @@ export class VarargsInsn extends Insn {
       } else {
         // No extra args, push empty list for rest parameter
         vm.push(theNilObj);
-      }
-
-      // DEBUG: Check stack transformation
-      const stackAfter = vm.stackSize();
-      const expectedAfter = stackBefore - nExtra + 1;  // pop nExtra, push 1
-      if (nExtra === 0) {
-        // No pops, just push 1
-        if (stackAfter !== stackBefore + 1) {
-          console.log(`VarargsInsn BUG (nExtra=0): stack before=${stackBefore}, after=${stackAfter}, expected=${stackBefore + 1}`);
-        }
-      } else if (stackAfter !== expectedAfter) {
-        console.log(`VarargsInsn BUG: stack before=${stackBefore}, after=${stackAfter}, expected=${expectedAfter}, nExtra=${nExtra}`);
       }
     }
 

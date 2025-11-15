@@ -117,18 +117,7 @@ function optSingletonNode(obj: ELObj): Node | null {
   }
 
   // Not a node or node-list - ERROR
-  const error = new Error('expected node or node-list');
-  // Add stack trace for debugging
-  console.error('optSingletonNode error - object type:', obj.constructor.name);
-  if (obj.asString()) {
-    console.error('  String value:', obj.asString()?.value);
-  } else if (obj.asSymbol()) {
-    console.error('  Symbol:', obj.asSymbol()?.name);
-  } else {
-    console.error('  Value:', obj);
-  }
-  console.error('Stack trace:', error.stack);
-  throw error;
+  throw new Error('expected node or node-list');
 }
 
 /**
