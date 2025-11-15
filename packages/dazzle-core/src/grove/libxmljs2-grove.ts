@@ -375,7 +375,26 @@ class LibxmljsNode implements Node {
     const siblings = (parent as libxmljs2.Element).childNodes();
     if (!siblings) return 0;
 
-    const index = siblings.indexOf(this.native);
+    // DSSSL §9.6.5: child-number counts siblings of the same type (same gi)
+    const myType = this.gi();
+    if (!myType) return 0;
+
+    // Filter siblings: same type, and exclude whitespace-only text nodes
+    const sametypeSiblings = siblings.filter((node) => {
+      // Skip whitespace-only text nodes
+      if (node.type() === 'text') {
+        const text = (node as libxmljs2.Text).text();
+        return text && text.trim().length > 0;
+      }
+      // For elements, check if they have the same gi
+      if (node.type() === 'element') {
+        return (node as libxmljs2.Element).name() === myType;
+      }
+      // Keep other node types
+      return true;
+    });
+
+    const index = sametypeSiblings.indexOf(this.native);
     return index === -1 ? 0 : index + 1; // 1-based
   }
 
