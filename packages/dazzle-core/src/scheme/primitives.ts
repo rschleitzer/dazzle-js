@@ -5747,7 +5747,8 @@ const giPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   }
 
   const gi = node.gi();
-  return gi ? makeString(gi) : theFalseObj;
+  // Port from: OpenJade returns StringObj even for empty string, only #f for null
+  return gi !== null ? makeString(gi) : theFalseObj;
 };
 
 /**
@@ -5769,7 +5770,8 @@ const idPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   }
 
   const id = node.id();
-  return id ? makeString(id) : theFalseObj;
+  // Port from: OpenJade returns StringObj even for empty string, only #f for null
+  return id !== null ? makeString(id) : theFalseObj;
 };
 
 /**
@@ -5876,7 +5878,8 @@ const dataPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   }
 
   const data = node.node.data();
-  return data ? makeString(data) : theFalseObj;
+  // Port from: OpenJade returns StringObj even for empty string, only #f for null
+  return data !== null ? makeString(data) : theFalseObj;
 };
 
 /**
@@ -6484,7 +6487,10 @@ const attributeStringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELO
 
   const attrName = args[0].asString()?.value || args[0].asSymbol()?.name || '';
   const value = node.attributeString(attrName);
-  return value ? makeString(value) : theFalseObj;
+
+  // Port from: OpenJade returns StringObj even for empty string, only #f for missing attribute
+  // IMPORTANT: Empty string "" is different from missing attribute (null)
+  return value !== null ? makeString(value) : theFalseObj;
 };
 
 /**
