@@ -5750,19 +5750,6 @@ const giPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
     throw new Error('gi requires exactly 1 argument');
   }
 
-  // Debug: Log the type of argument being passed
-  const argType = args[0].constructor.name;
-  const isNodeList = args[0].asNodeList() !== null;
-  const isNode = args[0].asNode() !== null;
-  const isBool = args[0].asBoolean() !== null;
-
-  if (isBool) {
-    const boolVal = args[0].asBoolean()!.value;
-    console.error(`DEBUG gi: Received BooleanObj(${boolVal})`);
-  } else if (!isNode && !isNodeList) {
-    console.error(`DEBUG gi: Received ${argType} (not a node or node-list)`);
-  }
-
   // Port from: OpenJade Gi primitive uses optSingletonNodeList
   // Accepts nodes, singleton node-lists, and empty node-lists
   const node = optSingletonNode(args[0]);
@@ -6062,6 +6049,10 @@ const nodeListEmptyPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj
 /**
  * Grove: node-list-first
  * Port from: primitive.h PRIMITIVE(NodeListFirst, "node-list-first", 0, 1, 0)
+ * Port from: primitive.cxx line 3828-3836
+ *
+ * Returns a node-list (singleton or empty), NOT #f
+ * OpenJade: return new (interp) NodePtrNodeListObj(nd);
  */
 const nodeListFirstPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
@@ -6073,8 +6064,16 @@ const nodeListFirstPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj
     throw new Error('node-list-first requires a node-list argument');
   }
 
+  // Port from: OpenJade returns NodePtrNodeListObj(nd) where nd might be null
+  // If null, it's an empty node-list, not #f
   const first = nl.nodes.first();
-  return first ? makeNode(first) : theFalseObj;
+  if (first) {
+    // Return singleton node-list containing the first node
+    return makeNodeList(nodeListFromArray([first]));
+  } else {
+    // Return empty node-list (NOT #f)
+    return makeNodeList(EMPTY_NODE_LIST);
+  }
 };
 
 /**
