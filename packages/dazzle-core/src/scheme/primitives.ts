@@ -116,8 +116,9 @@ function optSingletonNode(obj: ELObj): Node | null {
     return first;
   }
 
-  // Not a node or node-list - ERROR
-  throw new Error('expected node or node-list');
+  // Not a node or node-list - error (OpenJade behavior)
+  // Port from: OpenJade returns false from optSingletonNodeList, causing argError
+  throw new Error(`not an optional singleton node: ${obj.constructor.name}`);
 }
 
 /**

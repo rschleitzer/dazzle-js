@@ -152,14 +152,15 @@ class LibxmljsNode implements Node {
 
     // Port from: OpenJade grove behavior - filter whitespace-only text nodes
     // This matches SGML/XML processing where formatting whitespace is ignored
+    // Port from: OpenJade only includes element nodes and non-whitespace data nodes
     const filtered = childNodes.filter((node) => {
       if (node.type() === 'text') {
         const text = (node as libxmljs2.Text).text();
         // Keep text nodes that have non-whitespace content
         return text && text.trim().length > 0;
       }
-      // Keep all non-text nodes (elements, comments, etc.)
-      return true;
+      // Port from: OpenJade - only include element nodes (not comments, PIs, etc.)
+      return node.type() === 'element';
     });
 
     if (filtered.length === 0) {
