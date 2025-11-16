@@ -5750,6 +5750,19 @@ const giPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
     throw new Error('gi requires exactly 1 argument');
   }
 
+  // Debug: Log the type of argument being passed
+  const argType = args[0].constructor.name;
+  const isNodeList = args[0].asNodeList() !== null;
+  const isNode = args[0].asNode() !== null;
+  const isBool = args[0].asBoolean() !== null;
+
+  if (isBool) {
+    const boolVal = args[0].asBoolean()!.value;
+    console.error(`DEBUG gi: Received BooleanObj(${boolVal})`);
+  } else if (!isNode && !isNodeList) {
+    console.error(`DEBUG gi: Received ${argType} (not a node or node-list)`);
+  }
+
   // Port from: OpenJade Gi primitive uses optSingletonNodeList
   // Accepts nodes, singleton node-lists, and empty node-lists
   const node = optSingletonNode(args[0]);
@@ -6214,21 +6227,17 @@ const nodeListMapPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj =
       ? func.callPrimitive([nodeObj], vm)
       : callClosure(func, [nodeObj], vm);
 
-    // Result can be a node or a node-list
-    // If it's a node-list, add all its nodes (flattening)
-    const resultNode = result.asNode();
-    if (resultNode) {
-      results.push(resultNode.node);
-    } else {
-      const resultNodeList = result.asNodeList();
-      if (resultNodeList) {
-        // Add all nodes from the returned node-list
-        const nodeArray = resultNodeList.nodes.toArray();
-        results.push(...nodeArray);
-      } else {
-        throw new Error('node-list-map: function must return a node or node-list');
-      }
+    // Result must be a node-list (OpenJade MapNodeListObj::mapNext behavior)
+    // Port from: OpenJade checks mapped_ = ret->asNodeList() and errors if null
+    const resultNodeList = result.asNodeList();
+    if (!resultNodeList) {
+      // Port from: OpenJade logs InterpreterMessages::returnNotNodeList and stops
+      throw new Error('node-list-map: function must return a node-list, got ' + result.constructor.name);
     }
+
+    // Add all nodes from the returned node-list (flattening)
+    const nodeArray = resultNodeList.nodes.toArray();
+    results.push(...nodeArray);
 
     const rest = current.rest();
     if (!rest) {
