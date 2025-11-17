@@ -346,8 +346,26 @@ export function makeChar(value: string): CharObj {
   return new CharObj(value);
 }
 
+/**
+ * Symbol table for interning symbols
+ * Port from: OpenJade Interpreter::symbolTable_
+ * Ensures that symbols with the same name are the same object (for === equality)
+ */
+const symbolTable = new Map<string, SymbolObj>();
+
+/**
+ * Create or retrieve an interned symbol
+ * Port from: OpenJade Interpreter::makeSymbol
+ */
 export function makeSymbol(name: string): SymbolObj {
-  return new SymbolObj(name);
+  // Check if symbol already exists in table
+  let sym = symbolTable.get(name);
+  if (!sym) {
+    // Create new symbol and intern it
+    sym = new SymbolObj(name);
+    symbolTable.set(name, sym);
+  }
+  return sym;
 }
 
 export function makeKeyword(name: string): KeywordObj {
