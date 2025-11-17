@@ -79,23 +79,26 @@ export class Environment {
 
   /**
    * Extend environment with new stack variables (for let)
+   * Port from: OpenJade Environment::augmentFrame
    */
   extendStack(vars: string[], stackPos: number): Environment {
     const baseStackPos = stackPos;
     const newEnv = new Environment(baseStackPos + vars.length);
 
-    // Copy existing bindings unchanged (stack indices are absolute positions)
+    // Copy existing bindings unchanged
     this.bindings.forEach((binding, name) => {
       newEnv.bindings.set(name, binding);
     });
 
-    // Add new stack variables at absolute positions
-    // We push inits right-to-left, so vars[n-1] is at baseStackPos+0, vars[0] is at baseStackPos+n-1
+    // Add new stack variables at frame-relative positions
+    // Port from: OpenJade uses frame-relative positions, not absolute
+    // vars[0] at frame position stackPos+0, vars[1] at stackPos+1, etc.
     for (let i = 0; i < vars.length; i++) {
+      const framePos = baseStackPos + i;
       newEnv.bindings.set(vars[i], {
         name: vars[i],
         kind: 'stack',
-        index: baseStackPos + (vars.length - 1 - i),  // Absolute stack position
+        index: framePos,  // Frame-relative position (NOT reversed!)
       });
     }
 
@@ -622,18 +625,32 @@ export class Compiler {
     const freeVars = this.findFreeVariables(body, new Set(paramNames));
     const capturedVars: string[] = [];
 
+    // Debug: log free variables found
+    if (process.env.DEBUG_CLOSURE && freeVars.size > 0) {
+      console.error(`findFreeVariables found: ${Array.from(freeVars).join(', ')}`);
+    }
+
     // Capture all free variables that are in the outer environment
     // (frame, stack, or closure variables - anything that's not global)
     for (const varName of freeVars) {
       const binding = env.lookup(varName);
       if (binding) {
         capturedVars.push(varName);
+      } else if (process.env.DEBUG_CLOSURE) {
+        console.error(`  ${varName}: NOT FOUND in environment (skipped)`);
       }
+    }
+
+    if (process.env.DEBUG_CLOSURE && capturedVars.length > 0) {
+      console.error(`  Capturing: ${capturedVars.join(', ')}`);
     }
 
     const lambdaEnv = env.enterLambda(paramNames, capturedVars);
 
-    const bodyInsn = this.compile(body, lambdaEnv, 0, new ReturnInsn(paramNames.length));
+    // CRITICAL: Compile lambda body with stackPos = nParams (frame-relative addressing)
+    // Port from: OpenJade Expression.cxx LambdaExpression::compile
+    // Parameters are at frame positions 0..nParams-1, so body starts at nParams
+    const bodyInsn = this.compile(body, lambdaEnv, paramNames.length, new ReturnInsn(paramNames.length));
 
     // Calculate required args (excluding rest arg if present)
     const nRequiredArgs = hasRestArg ? paramNames.length - 1 : paramNames.length;
@@ -675,6 +692,11 @@ export class Compiler {
         throw new Error(`Variable ${varName} not found in environment`);
       }
 
+      // Debug: log binding details for path
+      if (process.env.DEBUG_CLOSURE && varName === 'path') {
+        console.error(`  Generating capture instruction for 'path': kind=${binding.kind}, index=${binding.index}, stackPos=${stackPos}, numStackVarsToPush=${numStackVarsToPush}, stackVarsPushedSoFar=${stackVarsPushedSoFar}`);
+      }
+
       // Compile a reference to this variable for closure capture
       // Port from: OpenJade Expression.cxx compilePushVars
       // Frame variables use FrameRefInsn, stack variables need offset calculation
@@ -683,6 +705,9 @@ export class Compiler {
           // Frame variables (parameters) can be accessed directly
           // Use forCapture=true so boxes aren't unboxed
           result = new FrameRefInsn(binding.index, result, true);
+          if (process.env.DEBUG_CLOSURE && varName === 'path') {
+            console.error(`    Created FrameRefInsn[${binding.index}]`);
+          }
           break;
         case 'stack':
           // Stack variables (let/letrec bindings) need offset from current stackPos
@@ -690,10 +715,16 @@ export class Compiler {
           const offset = binding.index - (stackPos + (numStackVarsToPush - 1 - stackVarsPushedSoFar));
           // Use forCapture=true so boxes aren't unboxed
           result = new StackRefInsn(offset, binding.index, result, true);
+          if (process.env.DEBUG_CLOSURE && varName === 'path') {
+            console.error(`    Created StackRefInsn[${offset}] (binding.index=${binding.index})`);
+          }
           stackVarsPushedSoFar++;
           break;
         case 'closure':
           result = new ClosureRefInsn(binding.index, result);
+          if (process.env.DEBUG_CLOSURE && varName === 'path') {
+            console.error(`    Created ClosureRefInsn[${binding.index}]`);
+          }
           stackVarsPushedSoFar++;
           break;
       }
@@ -1049,11 +1080,6 @@ export class Compiler {
       ? bodyExprs[0]
       : this.makeBegin(bodyExprs);
 
-    // DEBUG
-    const bodySym = body.asSymbol();
-    if (bodySym) {
-    }
-
     // Create extended environment with all variables visible
     const bodyEnv = env.extendStack(vars, stackPos);
     const bodyStackPos = stackPos + nVars;
@@ -1390,6 +1416,9 @@ export class Compiler {
       // Symbol - check if it's free
       const sym = e.asSymbol();
       if (sym) {
+        if (process.env.DEBUG_CLOSURE && sym.name === 'path') {
+          console.error(`  Found 'path' symbol: bound=${b.has('path')}, global=${!!this.globals.lookup('path')}`);
+        }
         if (!b.has(sym.name) && !this.globals.lookup(sym.name)) {
           free.add(sym.name);
         }

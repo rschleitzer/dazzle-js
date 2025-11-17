@@ -271,16 +271,26 @@ export class StackRefInsn extends Insn {
   }
 
   execute(vm: VM): Insn | null {
-    let value = vm.getStackRelative(this.index);
+    // Port from: OpenJade Insn.cxx StackRefInsn::execute
+    // ASSERT(vm.sp - vm.frame == frameIndex_ - index_);
+    // *vm.sp = vm.sp[index_];
+    //
+    // OpenJade uses frame-relative addressing:
+    // - index is negative offset from current sp
+    // - frameIndex is positive offset from frame base
+    // - vm.sp[index] is equivalent to vm.frame[frameIndex]
+    //
+    // Use frame-relative access for correctness across different call depths
+    let value = vm.getFrame(this.frameIndex);
 
     // Auto-unbox if this is a boxed value (for letrec variables)
-    // BUT don't unbox if we're capturing for a closure - closures need the box itself
-    // Port from: OpenJade - stack refs auto-unbox, but closures capture boxes
-    if (!this.forCapture) {
-      const box = value.asBox();
-      if (box) {
-        value = box.value;
-      }
+    // Port from: OpenJade - stack refs auto-unbox
+    // CRITICAL: Do NOT unbox if forCapture=true (for closure capture)
+    // When capturing for closure, we need to capture the box itself,
+    // not the value inside it, so that updates to the box are visible
+    const box = value.asBox();
+    if (box && !this.forCapture) {
+      value = box.value;
     }
 
     vm.push(value);
@@ -493,7 +503,14 @@ export class CallInsn extends Insn {
     const func = funcObj.asFunction();
 
     if (!func) {
-      throw new Error('Cannot call non-function');
+      const str = funcObj.asString();
+      const num = funcObj.asNumber();
+      const bool = funcObj.asBoolean();
+      const type = str ? `string "${str.value}"` :
+                   num ? `number ${num.value}` :
+                   bool !== null ? `boolean ${bool.value}` :
+                   funcObj.constructor.name;
+      throw new Error(`Cannot call non-function: got ${type} at ${this.loc.file}:${this.loc.line}`);
     }
 
     // Gather arguments from stack (they're at sp - nArgs .. sp - 1)
@@ -667,12 +684,16 @@ export class SetImmediateInsn extends Insn {
   }
 
   execute(vm: VM): Insn | null {
+    // Port from: OpenJade Insn.cxx SetImmediateInsn::execute
+    // --vm.sp;
+    // vm.sp[-n_] = *vm.sp;
+    //
     // Pop the value to store
     const value = vm.pop();
 
-    // Get the target location
-    const targetIndex = vm.stackSize() - this.offset;
-    const target = vm.getStackValue(targetIndex);
+    // Get the target location (sp-relative, not absolute!)
+    // OpenJade uses vm.sp[-n_] which is sp-relative addressing
+    const target = vm.getStackRelative(-this.offset);
 
     // Check if target is a box (for letrec variables)
     // Port from: OpenJade SetBoxInsn

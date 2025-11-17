@@ -471,7 +471,9 @@ const greaterThanOrEqualPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): 
     const a = args[i].asNumber();
     const b = args[i + 1].asNumber();
     if (!a || !b) {
-      throw new Error('>= requires numeric arguments');
+      const aType = !a ? args[i].constructor.name : 'Number';
+      const bType = !b ? args[i + 1].constructor.name : 'Number';
+      throw new Error(`>= requires numeric arguments, got ${aType} and ${bType}`);
     }
     if (!(a.value >= b.value)) {
       return theFalseObj;
@@ -6153,6 +6155,33 @@ const nodeListLengthPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
 };
 
 /**
+ * Grove: node-list->list
+ * Convert a node-list to a Scheme list
+ * Port from: OpenJade extension for interoperability
+ */
+const nodeListToListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('node-list->list requires exactly 1 argument');
+  }
+
+  const nl = args[0].asNodeList();
+  if (!nl) {
+    throw new Error('node-list->list requires a node-list argument');
+  }
+
+  // Convert node-list to proper Scheme list
+  let result: ELObj = theNilObj;
+  const nodesArray = nl.nodes.toArray();
+
+  // Build list in reverse order (cons from end to start)
+  for (let i = nodesArray.length - 1; i >= 0; i--) {
+    result = makePair(makeNode(nodesArray[i]), result);
+  }
+
+  return result;
+};
+
+/**
  * Grove: empty-node-list
  * Port from: primitive.h PRIMITIVE(EmptyNodeList, "empty-node-list", 0, 0, 0)
  */
@@ -8608,6 +8637,7 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   'node-list?': new FunctionObj('node-list?', nodeListPredicate),
   'node-list-length': new FunctionObj('node-list-length', nodeListLengthPrimitive),
   'node-list-count': new FunctionObj('node-list-count', nodeListLengthPrimitive),  // Alias for node-list-length
+  'node-list->list': new FunctionObj('node-list->list', nodeListToListPrimitive),
   'empty-node-list': new FunctionObj('empty-node-list', emptyNodeListPrimitive),
   'node-list-empty?': new FunctionObj('node-list-empty?', nodeListEmptyPredicate),
   'node-list-first': new FunctionObj('node-list-first', nodeListFirstPrimitive),
