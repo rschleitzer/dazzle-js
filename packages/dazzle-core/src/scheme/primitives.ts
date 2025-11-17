@@ -6832,8 +6832,8 @@ const firstSiblingPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj 
 
 /**
  * Grove: last-sibling?
- * Port from: DSSSL standard (§9.6.5)
- * Returns true if node is the last among its siblings
+ * Port from: DSSSL standard (§9.6.5) and OpenJade primitive.cxx IsLastSibling
+ * Returns true if node has no following sibling that is an element with the same GI
  */
 const lastSiblingPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
@@ -6845,20 +6845,42 @@ const lastSiblingPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj =
     throw new Error('last-sibling? requires a node or singleton node-list argument');
   }
 
-  // Get parent and check if this is the last child
+  // Get GI (generic identifier / element name) of this node
+  const gi = nodeObj.gi();
+  if (!gi) {
+    // Not an element, can't determine
+    return theFalseObj;
+  }
+
+  // Get parent to access siblings
   const parent = nodeObj.parent();
   if (!parent) {
-    // No parent - can't determine
-    return theFalseObj;
+    // No parent - no siblings
+    return theTrueObj;
   }
 
+  // Check all following siblings - if any have the same GI, return false
   const siblings = parent.children().toArray();
-  if (siblings.length === 0) {
-    return theFalseObj;
+  let foundCurrent = false;
+
+  for (const sibling of siblings) {
+    if (sibling === nodeObj) {
+      foundCurrent = true;
+      continue;
+    }
+
+    // Only check siblings that come after current node
+    if (foundCurrent) {
+      const siblingGi = sibling.gi();
+      if (siblingGi === gi) {
+        // Found a following sibling with same GI
+        return theFalseObj;
+      }
+    }
   }
 
-  // Check if this node is the last sibling
-  return makeBoolean(siblings[siblings.length - 1] === nodeObj);
+  // No following siblings with same GI
+  return theTrueObj;
 };
 
 // ============ Common List Accessors ============
