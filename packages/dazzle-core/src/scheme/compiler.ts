@@ -37,6 +37,7 @@ import {
   CallInsn,
   ClosureInsn,
   VarargsInsn,
+  ErrorInsn,
 } from './insn.js';
 
 import { VM } from './vm.js';
@@ -1145,9 +1146,10 @@ export class Compiler {
     const keyExpr = argsArray[0];
     const clauses = argsArray.slice(1);
 
-    // Compile failure case (no match) - return unspecified
-    // Must pop the key from stack before continuing
-    let failInsn: Insn = new PopInsn(new ConstantInsn(theNilObj, next));
+    // Compile failure case (no match) - throw error
+    // Port from: OpenJade behavior - case without else clause throws error if no match
+    // ErrorInsn will peek at stack to show the unmatched value, then PopInsn pops it
+    let failInsn: Insn = new PopInsn(new ErrorInsn('case: no matching clause', true));
 
     // Compile clauses from right to left
     for (let i = clauses.length - 1; i >= 0; i--) {

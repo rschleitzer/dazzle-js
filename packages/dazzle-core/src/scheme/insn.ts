@@ -760,6 +760,33 @@ export class PopBindingsInsn extends Insn {
   }
 }
 
+/**
+ * Error instruction - throws an error
+ * Used for case expressions without else clause when no clause matches
+ */
+export class ErrorInsn extends Insn {
+  constructor(
+    public message: string,
+    public includeStackTop: boolean = false
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    if (this.includeStackTop) {
+      // For case errors, show what value didn't match
+      const value = vm.peek();
+      const valueStr = value.asString()?.value ||
+                       value.asSymbol()?.name ||
+                       value.asBoolean()?.value.toString() ||
+                       value.asNumber()?.value.toString() ||
+                       value.constructor.name;
+      throw new Error(`${this.message}: ${valueStr}`);
+    }
+    throw new Error(this.message);
+  }
+}
+
 // More instruction types will be added as we implement the compiler:
 // - AppendInsn (list append - more complex, will add when needed)
 // - FunctionCallInsn (user-defined function calls)
