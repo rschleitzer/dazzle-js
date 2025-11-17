@@ -6011,18 +6011,32 @@ const dataPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   // Check if it's a node
   let node = nodeObj.asNode();
 
-  // If it's a node-list, extract the first node
+  // If it's a node-list, concatenate data from all nodes (DSSSL spec)
   if (!node) {
     const nodeList = nodeObj.asNodeList();
     if (nodeList) {
-      const first = nodeList.nodes.first();
-      if (!first) {
-        // Empty node-list
+      // Empty node-list returns #f
+      if (nodeList.nodes.isEmpty()) {
         return theFalseObj;
       }
-      // Use first node (whether single or multiple)
-      nodeObj = makeNode(first);
-      node = nodeObj.asNode();
+
+      // Concatenate data from all nodes in the list
+      // Per DSSSL spec: "Returns a string containing the concatenation of the data of each member of nl"
+      const parts: string[] = [];
+      let current: NodeList | null = nodeList.nodes;
+
+      while (current && !current.isEmpty()) {
+        const firstNode = current.first();
+        if (firstNode) {
+          const data = firstNode.data();
+          if (data !== null) {
+            parts.push(data);
+          }
+        }
+        current = current.rest();
+      }
+
+      return parts.length > 0 ? makeString(parts.join('')) : theFalseObj;
     }
   }
 
