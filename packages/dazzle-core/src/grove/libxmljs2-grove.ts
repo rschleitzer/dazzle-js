@@ -115,9 +115,18 @@ class LibxmljsNode implements Node {
   }
 
   data(): string | null {
-    return this.native.type() === 'text'
-      ? (this.native as any).text()  // Text node has text() method
-      : null;
+    const nodeType = this.native.type();
+
+    if (nodeType === 'text') {
+      // Text node - return its text content
+      return (this.native as any).text();
+    } else if (nodeType === 'element') {
+      // Element node - return concatenated text of all text node children
+      // This matches OpenJade's behavior for the (data) primitive
+      return (this.native as any).text() || null;
+    }
+
+    return null;
   }
 
   systemData(): string | null {
