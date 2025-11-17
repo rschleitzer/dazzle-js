@@ -52,6 +52,7 @@ program
       const searchPaths = (options.searchPath || []).map((p: string) => path.resolve(p));
       const templateResult = loadTemplate(templatePath, searchPaths);
       const templateContent = templateResult.schemeCode;
+      const sourceMap = templateResult.sourceMap;
 
       // Read input XML
       const inputPath = path.resolve(inputFile);
@@ -69,11 +70,31 @@ program
       const outputDir = path.resolve(options.output);
       const backend = createTransformBackend(outputDir);
 
-      // Parse template into S-expressions
-      const exprs = parse(templateContent);
+      // Parse template into S-expressions with source file tracking and source map
+      const exprs = parse(templateContent, templatePath, sourceMap);
 
       if (process.env.DEBUG_TEMPLATE) {
         console.log('Template content:\n', templateContent);
+      }
+
+      // Build line number map for each expression
+      // Simple heuristic: count newlines before each top-level '('
+      const exprLineNumbers: number[] = [];
+      let line = 1;
+      let inExpr = 0;
+      for (let i = 0; i < templateContent.length; i++) {
+        const ch = templateContent[i];
+        if (ch === '\n') {
+          line++;
+        } else if (ch === '(') {
+          if (inExpr === 0) {
+            // Starting a new top-level expression
+            exprLineNumbers.push(line);
+          }
+          inExpr++;
+        } else if (ch === ')') {
+          inExpr--;
+        }
       }
 
       // Create global environment and compiler
@@ -86,6 +107,7 @@ program
       vm.globals = globals;
       vm.grove = grove;
       vm.currentNode = grove.root();
+      vm.currentFile = templatePath;
 
       // Create ProcessContext for sosofo execution
       const processContext = new ProcessContext(backend, vm);
@@ -93,6 +115,15 @@ program
       // Execute each expression (defines rules, functions, etc.)
       for (let i = 0; i < exprs.length; i++) {
         const expr = exprs[i];
+
+        // Update compiler location for proper source tracking in instructions
+        // Port from: OpenJade threads location through compilation
+        compiler.currentFile = templatePath;
+        compiler.currentLine = exprLineNumbers[i] || 0;
+
+        // Also update VM location for initial context
+        vm.currentLine = exprLineNumbers[i] || 0;
+        vm.currentColumn = 0;  // Column tracking not yet implemented
 
         // Compile expression to bytecode
         const bytecode = compiler.compile(expr, env, 0, null);

@@ -22,6 +22,8 @@ import {
   theFalseObj,
 } from './elobj.js';
 
+import type { SourceMapEntry } from '../dsssl/template-loader.js';
+
 /**
  * Token types
  * Port from: SchemeParser.cxx enum Token
@@ -57,6 +59,7 @@ interface Token {
  * Location in source
  */
 interface Location {
+  file: string;
   line: number;
   column: number;
 }
@@ -71,9 +74,13 @@ export class Parser {
   private line: number = 1;
   private column: number = 1;
   private currentToken?: Token;
+  private file: string;
+  private sourceMap: SourceMapEntry[] | null;
 
-  constructor(input: string) {
+  constructor(input: string, file: string = '<unknown>', sourceMap: SourceMapEntry[] | null = null) {
     this.input = input;
+    this.file = file;
+    this.sourceMap = sourceMap;
   }
 
   /**
@@ -107,7 +114,7 @@ export class Parser {
     }
 
     const c = this.peek();
-    const currentToken = this.currentLocation();
+    const loc = this.currentLocation();
 
     // Self-evaluating
     if (c === '#') {
@@ -129,7 +136,9 @@ export class Parser {
       if (!quoted) {
         throw this.error('Expected expression after quote');
       }
-      return makePair(makeSymbol('quote'), makePair(quoted, theNilObj));
+      const pair = makePair(makeSymbol('quote'), makePair(quoted, theNilObj));
+      pair.location = loc;
+      return pair;
     }
 
     if (c === '`') {
@@ -138,7 +147,9 @@ export class Parser {
       if (!quoted) {
         throw this.error('Expected expression after quasiquote');
       }
-      return makePair(makeSymbol('quasiquote'), makePair(quoted, theNilObj));
+      const pair = makePair(makeSymbol('quasiquote'), makePair(quoted, theNilObj));
+      pair.location = loc;
+      return pair;
     }
 
     if (c === ',') {
@@ -148,7 +159,9 @@ export class Parser {
       if (!quoted) {
         throw this.error(`Expected expression after ${symbol}`);
       }
-      return makePair(makeSymbol(symbol), makePair(quoted, theNilObj));
+      const pair = makePair(makeSymbol(symbol), makePair(quoted, theNilObj));
+      pair.location = loc;
+      return pair;
     }
 
     // Lists
@@ -369,6 +382,7 @@ export class Parser {
    * Port from: SchemeParser::parseDatum handling tokenOpenParen
    */
   private parseList(): ELObj {
+    const listLoc = this.currentLocation();
     this.expect('(');
     this.skipWhitespaceAndComments();
 
@@ -385,6 +399,7 @@ export class Parser {
     }
 
     let head = makePair(first, theNilObj);
+    head.location = listLoc; // Attach location to first pair (the list itself)
     let tail = head;
 
     while (true) {
@@ -415,6 +430,7 @@ export class Parser {
       }
 
       const newPair = makePair(datum, theNilObj);
+      newPair.location = this.currentLocation();
       tail.asPair()!.cdr = newPair;
       tail = newPair;
     }
@@ -550,7 +566,23 @@ export class Parser {
   }
 
   private currentLocation(): Location {
-    return { line: this.line, column: this.column };
+    // Look up actual source file from source map
+    if (this.sourceMap) {
+      for (const entry of this.sourceMap) {
+        if (this.line >= entry.startLine && this.line <= entry.endLine) {
+          // Found the source map entry for this line
+          const offsetInEntry = this.line - entry.startLine;
+          return {
+            file: entry.sourceFile,
+            line: entry.sourceLine + offsetInEntry + 1, // Convert to 1-based
+            column: this.column,
+          };
+        }
+      }
+    }
+
+    // Fallback: no source map or line not found
+    return { file: this.file, line: this.line, column: this.column };
   }
 
   private error(message: string): Error {
@@ -562,8 +594,8 @@ export class Parser {
 /**
  * Parse Scheme source code
  */
-export function parse(source: string): ELObj[] {
-  const parser = new Parser(source);
+export function parse(source: string, file: string = '<unknown>', sourceMap: SourceMapEntry[] | null = null): ELObj[] {
+  const parser = new Parser(source, file, sourceMap);
   return parser.parse();
 }
 

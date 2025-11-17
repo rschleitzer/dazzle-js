@@ -33,11 +33,22 @@ interface Entity {
 }
 
 /**
+ * Source map entry - tracks which lines came from which file
+ */
+export interface SourceMapEntry {
+  startLine: number;  // Start line in concatenated content (1-based)
+  endLine: number;    // End line in concatenated content (1-based, inclusive)
+  sourceFile: string; // Original source file path
+  sourceLine: number; // Line offset in original file (0-based)
+}
+
+/**
  * Template loader result
  */
 export interface TemplateResult {
   schemeCode: string;
   entities: Entity[];
+  sourceMap: SourceMapEntry[]; // Maps concatenated lines to source files
 }
 
 /**
@@ -54,12 +65,19 @@ export function loadTemplate(templatePath: string, searchPaths: string[] = []): 
   // Detect format
   if (content.trim().startsWith('<?xml') || content.trim().startsWith('<')) {
     // XML format - parse and extract
-    return loadXmlTemplate(content, templateDir, searchPaths);
+    return loadXmlTemplate(content, templatePath, templateDir, searchPaths);
   } else {
-    // Plain Scheme format
+    // Plain Scheme format - single file, simple source map
+    const lineCount = content.split('\n').length;
     return {
       schemeCode: content,
       entities: [],
+      sourceMap: [{
+        startLine: 1,
+        endLine: lineCount,
+        sourceFile: templatePath,
+        sourceLine: 0,
+      }],
     };
   }
 }
@@ -67,14 +85,20 @@ export function loadTemplate(templatePath: string, searchPaths: string[] = []): 
 /**
  * Load XML-wrapped template
  */
-function loadXmlTemplate(content: string, baseDir: string, searchPaths: string[]): TemplateResult {
+function loadXmlTemplate(content: string, templatePath: string, baseDir: string, searchPaths: string[]): TemplateResult {
   // Parse DOCTYPE for entity declarations
   const entities = parseEntities(content);
 
   // Resolve entity references in content
   let schemeCode = extractStyleSpecification(content);
 
-  // Replace entity references with file contents
+  // Build source map as we replace entity references
+  const sourceMap: SourceMapEntry[] = [];
+  let currentLine = 1;
+
+  // Track all entity references and their positions
+  const entityReplacements: Array<{ ref: string; content: string; path: string }> = [];
+
   for (const entity of entities) {
     const entityPath = resolveEntityPath(entity.systemId, baseDir, searchPaths);
     let entityContent = fs.readFileSync(entityPath, 'utf-8');
@@ -83,14 +107,60 @@ function loadXmlTemplate(content: string, baseDir: string, searchPaths: string[]
     // Transform: <![CDATA[content]]> → content
     entityContent = entityContent.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
 
-    // Replace &entityName; with content
     const entityRef = `&${entity.name};`;
-    schemeCode = schemeCode.replace(new RegExp(entityRef, 'g'), entityContent);
+    entityReplacements.push({ ref: entityRef, content: entityContent, path: entityPath });
+  }
+
+  // Replace entity references and build source map
+  // Process line by line to track line numbers
+  const lines = schemeCode.split('\n');
+  const resultLines: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+    let wasReplaced = false;
+
+    // Check if this line contains entity references
+    for (const replacement of entityReplacements) {
+      if (line.includes(replacement.ref)) {
+        // Replace entity reference with content
+        const entityLines = replacement.content.split('\n');
+
+        // Add source map entry for the entity content
+        if (entityLines.length > 0) {
+          sourceMap.push({
+            startLine: currentLine,
+            endLine: currentLine + entityLines.length - 1,
+            sourceFile: replacement.path,
+            sourceLine: 0,
+          });
+        }
+
+        // Add entity lines to result
+        resultLines.push(...entityLines);
+        currentLine += entityLines.length;
+        wasReplaced = true;
+        break; // Only one entity per line
+      }
+    }
+
+    if (!wasReplaced) {
+      // No entity reference, track as coming from template file
+      sourceMap.push({
+        startLine: currentLine,
+        endLine: currentLine,
+        sourceFile: templatePath,
+        sourceLine: i,
+      });
+      resultLines.push(line);
+      currentLine++;
+    }
   }
 
   return {
-    schemeCode,
+    schemeCode: resultLines.join('\n'),
     entities,
+    sourceMap,
   };
 }
 

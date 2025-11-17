@@ -8,10 +8,25 @@
 import type { Node, NodeList } from '../grove/index.js';
 
 /**
+ * Source location (forward declaration from insn.ts to avoid circular dependency)
+ */
+export interface Location {
+  file: string;
+  line: number;
+  column: number;
+}
+
+/**
  * Base class for all Scheme values
  * Port from: ELObj.h class ELObj
  */
 export abstract class ELObj {
+  /**
+   * Source location where this value was parsed
+   * Port from: OpenJade ELObj location tracking
+   */
+  public location: Location = { file: '<unknown>', line: 0, column: 0 };
+
   /** Type predicates - return specific subclass or null */
   asNil(): NilObj | null { return null; }
   asBoolean(): BooleanObj | null { return null; }

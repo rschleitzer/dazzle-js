@@ -86,6 +86,14 @@ export class VM {
    */
   public globals: any = null;
 
+  /**
+   * Current source location for error messages and debug output
+   * Port from: Interpreter.h Location nextLocation
+   */
+  public currentFile: string = '<unknown>';
+  public currentLine: number = 0;
+  public currentColumn: number = 0;
+
   constructor() {
     this.initStack();
   }

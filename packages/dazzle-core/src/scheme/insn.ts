@@ -11,6 +11,16 @@ import type { VM } from './vm.js';
 import { FunctionObj, type Signature, theNilObj, makePair } from './elobj.js';
 
 /**
+ * Source location information
+ * Port from: OpenJade Location.h struct Location
+ */
+export interface Location {
+  file: string;
+  line: number;
+  column: number;
+}
+
+/**
  * Base class for all instructions
  * Port from: Insn.h class Insn
  */
@@ -409,12 +419,19 @@ export class PrimitiveCallInsn extends Insn {
   constructor(
     private nArgs: number,
     private primitive: ELObj, // Must be FunctionObj with primitive
+    private loc: Location,
     private next: Insn | null
   ) {
     super();
   }
 
   execute(vm: VM): Insn | null {
+    // Update VM location for error reporting and debug output
+    // Port from: OpenJade PrimitiveCallInsn passes loc_ to primitiveCall
+    vm.currentFile = this.loc.file;
+    vm.currentLine = this.loc.line;
+    vm.currentColumn = this.loc.column;
+
     // Get the function object
     const func = this.primitive.asFunction();
     if (!func || !func.isPrimitive()) {
@@ -428,6 +445,7 @@ export class PrimitiveCallInsn extends Insn {
     }
 
     // Call the primitive with VM context
+    // Port from: OpenJade passes location to primitiveCall
     const result = func.callPrimitive(args, vm);
 
     // Pop all arguments
@@ -457,12 +475,19 @@ export class PrimitiveCallInsn extends Insn {
 export class CallInsn extends Insn {
   constructor(
     private nArgs: number,
+    private loc: Location,
     private next: Insn | null
   ) {
     super();
   }
 
   execute(vm: VM): Insn | null {
+    // Update VM location for error reporting and debug output
+    // Port from: OpenJade CallInsn has location
+    vm.currentFile = this.loc.file;
+    vm.currentLine = this.loc.line;
+    vm.currentColumn = this.loc.column;
+
     // Pop function from top of stack
     const funcObj = vm.pop();
     const func = funcObj.asFunction();

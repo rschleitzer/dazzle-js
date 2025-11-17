@@ -19,6 +19,7 @@ import {
 
 import {
   type Insn,
+  type Location,
   ConstantInsn,
   TestInsn,
   OrInsn,
@@ -39,6 +40,7 @@ import {
   VarargsInsn,
   ErrorInsn,
 } from './insn.js';
+
 
 import { VM } from './vm.js';
 import { standardPrimitives } from './primitives.js';
@@ -381,7 +383,30 @@ export class GlobalEnvironment {
  * Compiler - compiles S-expressions to bytecode
  */
 export class Compiler {
+  /** Current source file being compiled */
+  public currentFile: string = '<unknown>';
+  /** Current line number being compiled */
+  public currentLine: number = 0;
+
   constructor(private globals: GlobalEnvironment) {}
+
+  /**
+   * Create location for current compilation position
+   * Port from: OpenJade tracks location through compilation
+   *
+   * If expr is provided and has location info, use that.
+   * Otherwise fall back to compiler's current file/line.
+   */
+  private makeLocation(expr?: ELObj): Location {
+    if (expr && expr.location.file !== '<unknown>') {
+      return expr.location;
+    }
+    return {
+      file: this.currentFile,
+      line: this.currentLine,
+      column: 0,
+    };
+  }
 
   /**
    * Compile an S-expression to bytecode
@@ -474,7 +499,7 @@ export class Compiler {
       }
 
       // Function call
-      return this.compileCall(car, this.listToArray(pair.cdr), env, stackPos, next);
+      return this.compileCall(car, this.listToArray(pair.cdr), env, stackPos, next, expr);
     }
 
     throw new Error(`Cannot compile expression: ${expr}`);
@@ -1287,7 +1312,7 @@ export class Compiler {
     // 3. Return first instruction in chain
 
     // Start with the call instruction
-    let insn: Insn | null = new PrimitiveCallInsn(argsArray.length, primitive, next);
+    let insn: Insn | null = new PrimitiveCallInsn(argsArray.length, primitive, this.makeLocation(), next);
 
     // Compile arguments in reverse order (right-to-left for stack)
     for (let i = argsArray.length - 1; i >= 1; i--) {
@@ -1303,14 +1328,14 @@ export class Compiler {
   /**
    * Compile function call
    */
-  private compileCall(fn: ELObj, args: ELObj[], env: Environment, stackPos: number, next: Insn | null): Insn {
+  private compileCall(fn: ELObj, args: ELObj[], env: Environment, stackPos: number, next: Insn | null, expr: ELObj): Insn {
     // Check if fn is a known primitive at compile time
     const fnSym = fn.asSymbol();
     if (fnSym) {
       const primitive = this.globals.lookup(fnSym.name);
       if (primitive && primitive.asFunction()?.isPrimitive()) {
-        // Compile as primitive call
-        let result: Insn = new PrimitiveCallInsn(args.length, primitive, next);
+        // Compile as primitive call with location from call site
+        let result: Insn = new PrimitiveCallInsn(args.length, primitive, this.makeLocation(expr), next);
 
         // Compile arguments - last arg compiled executes first
         // We want to evaluate left-to-right: args[0], ..., args[n-1]
@@ -1334,7 +1359,7 @@ export class Compiler {
     //   Compile: arg0 first (pushes first) → ... → argN-1 → fn last (pushes last) → CallInsn
     // Build chain: CallInsn ← fn ← argN-1 ← ... ← arg0
 
-    let result: Insn = new CallInsn(args.length, next);
+    let result: Insn = new CallInsn(args.length, this.makeLocation(expr), next);
 
     // Compile function - it will execute after all args, so will be on top
     result = this.compile(fn, env, stackPos + args.length, result);

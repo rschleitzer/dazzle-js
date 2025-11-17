@@ -33,6 +33,34 @@ import { EMPTY_NODE_LIST, nodeListFromArray } from '../grove/index.js';
 import { CallInsn } from './insn.js';
 
 /**
+ * Helper: Make file path relative to current working directory
+ */
+function makeRelativePath(filePath: string): string {
+  // Handle special case for unknown files
+  if (filePath === '<unknown>' || !filePath) {
+    return filePath;
+  }
+
+  // For Node.js environment
+  if (typeof process !== 'undefined' && process.cwd) {
+    try {
+      // Simple relative path calculation
+      const cwd = process.cwd();
+      if (filePath.startsWith(cwd)) {
+        const relative = filePath.slice(cwd.length);
+        // Remove leading slash
+        return relative.startsWith('/') ? relative.slice(1) : relative;
+      }
+    } catch (e) {
+      // Fall back to absolute path if something goes wrong
+    }
+  }
+
+  // Return absolute path as fallback
+  return filePath;
+}
+
+/**
  * Helper: Call a closure from within a primitive
  * Creates necessary bytecode to invoke the closure with arguments
  */
@@ -54,7 +82,7 @@ function callClosure(func: FunctionObj, args: ELObj[], vm: VM): ELObj {
   vm.push(func);
 
   // Create and execute CallInsn
-  const callInsn = new CallInsn(args.length, null);
+  const callInsn = new CallInsn(args.length, { file: '<apply>', line: 0, column: 0 }, null);
   let next = callInsn.execute(vm);
 
   // Execute the continuation until completion
@@ -5335,6 +5363,112 @@ const errorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   throw new Error(fullMsg);
 };
 
+/**
+ * debug - Output debug information and return the value
+ * Port from: OpenJade external procedure debug (primitive.cxx line 4407)
+ * Port from: ELObjMessageArg calls obj->print() to convert any type
+ *
+ * This is used for debugging DSSSL code. It outputs the value to stderr
+ * with location information and returns the value unchanged (pass-through).
+ *
+ * Usage: (debug expr) - outputs expr's value and returns expr
+ */
+const debugPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('debug requires exactly 1 argument');
+  }
+
+  const value = args[0];
+
+  // Format the value using print representation (like OpenJade's obj->print())
+  // Port from: ELObjMessageArg::convert calls obj->print(interp, os)
+  let valueStr: string;
+
+  const str = value.asString();
+  if (str) {
+    // Strings are shown with surrounding quotes
+    valueStr = `"${str.value}"`;
+  } else {
+    const num = value.asNumber();
+    const bool = value.asBoolean();
+    const sym = value.asSymbol();
+    const node = value.asNode();
+    const nodeList = value.asNodeList();
+
+    if (num) {
+      valueStr = num.value.toString();
+    } else if (bool !== null) {
+      valueStr = bool.value ? '#t' : '#f';
+    } else if (sym) {
+      valueStr = sym.name;
+    } else if (value.asNil()) {
+      valueStr = '()';
+    } else if (node) {
+      // Show node with gi
+      const gi = node.node.gi();
+      valueStr = gi ? `#<node ${gi}>` : '#<node>';
+    } else if (nodeList) {
+      valueStr = `#<node-list length=${nodeList.nodes.length()}>`;
+    } else {
+      // For other types, show type name
+      valueStr = `#<${value.constructor.name}>`;
+    }
+  }
+
+  // Output in OpenJade format: dazzle:file:line:col:I: debug "value"
+  // Port from: OpenJade outputs "openjade:file:line:col:I: debug value"
+  const file = makeRelativePath(vm.currentFile);
+  const line = vm.currentLine;
+  const col = vm.currentColumn;
+  console.error(`dazzle:${file}:${line}:${col}:I: debug ${valueStr}`);
+
+  // Return the value unchanged (pass-through)
+  // Port from: OpenJade returns argv[0]
+  return value;
+};
+
+/**
+ * external-procedure - Look up an external procedure by public ID
+ * Port from: OpenJade primitive.cxx line 2115
+ *
+ * External procedures are registered with public IDs like:
+ * - "ISO/IEC 10179:1996//Procedure::<name>" for DSSSL standard procedures
+ * - "UNREGISTERED::James Clark//Procedure::<name>" for James Clark extensions
+ * - "UNREGISTERED::OpenJade//Procedure::<name>" for OpenJade extensions
+ *
+ * Usage: (external-procedure "UNREGISTERED::James Clark//Procedure::debug")
+ * Returns: The function object if found, #f otherwise
+ */
+const externalProcedurePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('external-procedure requires exactly 1 argument');
+  }
+
+  const str = args[0].asString();
+  if (!str) {
+    throw new Error('external-procedure requires a string argument');
+  }
+
+  const pubid = str.value;
+
+  // Look up the procedure in the external procedure table
+  // Port from: OpenJade lookupExternalProc (Interpreter.h line 704)
+  const func = externalProcTable.get(pubid);
+
+  if (func) {
+    return func;
+  }
+
+  // Return #f if not found
+  // Port from: OpenJade returns 0 (null), which becomes #f
+  return makeBoolean(false);
+};
+
+// External procedure table
+// Port from: OpenJade externalProcTable_ (Interpreter.h line 483)
+// Maps public IDs to function objects
+const externalProcTable = new Map<string, FunctionObj>();
+
 // ============ Additional List Utilities ============
 
 /**
@@ -8418,6 +8552,8 @@ export const standardPrimitives: Record<string, FunctionObj> = {
 
   // Error handling
   'error': new FunctionObj('error', errorPrimitive),
+  'debug': new FunctionObj('debug', debugPrimitive),
+  'external-procedure': new FunctionObj('external-procedure', externalProcedurePrimitive),
 
   // Numeric utilities
   'clamp': new FunctionObj('clamp', clampPrimitive),
@@ -8503,6 +8639,11 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   'sosofo-append': new FunctionObj('sosofo-append', sosofoAppendPrimitive),
   'make-flow-object': new FunctionObj('make-flow-object', makeFlowObjectPrimitive),
 };
+
+// Register external procedures in the external procedure table
+// Port from: OpenJade installXPrimitive (primitive.cxx line 5326-5328)
+// XPRIMITIVE procedures use "UNREGISTERED::James Clark//Procedure::" prefix
+externalProcTable.set('UNREGISTERED::James Clark//Procedure::debug', standardPrimitives['debug']);
 
 /**
  * Get a primitive by name
