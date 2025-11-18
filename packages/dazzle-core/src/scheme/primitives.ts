@@ -65,7 +65,7 @@ function makeRelativePath(filePath: string): string {
  * Helper: Call a closure from within a primitive
  * Creates necessary bytecode to invoke the closure with arguments
  */
-function callClosure(func: FunctionObj, args: ELObj[], vm: VM): ELObj {
+export function callClosure(func: FunctionObj, args: ELObj[], vm: VM): ELObj {
   if (!func.isClosure()) {
     throw new Error('callClosure requires a closure');
   }
@@ -8179,14 +8179,17 @@ const processRootPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj 
   vm.currentNode = rootNode;
 
   try {
-    if (rule) {
-      // Explicit root rule exists - use it
-      const func = rule.func!.asFunction();
-      if (!func || !func.isClosure()) {
+    if (rule && rule.insn) {
+      // Explicit root rule exists - evaluate it to get closure, then call it
+      // Port from: ProcessContext.cxx:115 vm().eval(insn.pointer())
+      // The insn evaluates to a closure (lambda), which we then need to call
+      const closure = vm.eval(rule.insn);
+      const func = closure.asFunction();
+      if (!func) {
         throw new Error('process-root: root rule must be a function');
       }
 
-      // Call the rule with no arguments
+      // Call the closure with no arguments
       const result = callClosure(func, [], vm);
 
       // Result should be a sosofo
@@ -8202,14 +8205,14 @@ const processRootPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj 
       const docElement = rootNode.gi();
       if (docElement) {
         const elementRule = vm.globals.ruleRegistry.findRule(docElement, mode, vm.globals);
-        if (elementRule) {
-          const func = elementRule.func!.asFunction();
-          if (!func || !func.isClosure()) {
-            throw new Error(`process-root: rule for '${docElement}' must be a function`);
+        if (elementRule && elementRule.insn) {
+          // Evaluate to get closure, then call it
+          const closure = vm.eval(elementRule.insn);
+          const func = closure.asFunction();
+          if (func) {
+            const result = callClosure(func, [], vm);
+            return result;
           }
-
-          const result = callClosure(func, [], vm);
-          return result;
         }
       }
 

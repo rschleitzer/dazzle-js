@@ -26,6 +26,7 @@ export class FotBackend implements FotBuilder {
   private indentLevel: number = 0;
   private inText: boolean = false;
   private anchorCounter: number = 0;
+  private pendingNodes: Node[] = [];
 
   constructor() {
     // Write XML header and root element
@@ -38,6 +39,10 @@ export class FotBackend implements FotBuilder {
    */
   characters(data: string): void {
     if (!data) return;
+
+    // Flush pending anchors before outputting text
+    // Port from: SgmlFOTBuilder.cxx:633 characters()
+    this.flushPendingNodes();
 
     // If not already in a text element, start one
     if (!this.inText) {
@@ -85,20 +90,20 @@ export class FotBackend implements FotBuilder {
   }
 
   /**
-   * Start processing a node - generate anchor
+   * Start processing a node - add to pending anchors
+   * Port from: SgmlFOTBuilder.cxx:2748 startNode()
    */
-  startNode(_node: Node, _processingMode: string): void {
-    this.closeText();
-    this.writeIndent();
-    this.output += `<a name="${this.anchorCounter}"/>\n`;
-    this.anchorCounter++;
+  startNode(node: Node, _processingMode: string): void {
+    // Don't output anchor immediately - add to pending list
+    // Anchors will be flushed when content is output
+    this.pendingNodes.push(node);
   }
 
   /**
    * End processing a node
    */
   endNode(): void {
-    // Nothing to do
+    // Nothing to do - pending anchors are managed by flushPendingNodes()
   }
 
   /**
@@ -214,6 +219,26 @@ export class FotBackend implements FotBuilder {
    */
   getOutput(): string {
     return this.output;
+  }
+
+  /**
+   * Flush pending node anchors
+   * Port from: SgmlFOTBuilder.cxx:2807 flushPendingElements()
+   */
+  private flushPendingNodes(): void {
+    if (this.pendingNodes.length === 0) {
+      return;
+    }
+
+    // Output anchor for each pending node
+    for (const _node of this.pendingNodes) {
+      this.writeIndent();
+      this.output += `<a name="${this.anchorCounter}"/>\n`;
+      this.anchorCounter++;
+    }
+
+    // Clear pending nodes
+    this.pendingNodes = [];
   }
 
   /**

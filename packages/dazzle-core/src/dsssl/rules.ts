@@ -27,9 +27,10 @@ export interface ConstructionRule {
   mode: string;
 
   /**
-   * Compiled function (closure) - cached after first compilation
+   * Compiled bytecode (insn) - cached after first compilation
+   * Port from: OpenJade stores insn, not the evaluated closure
    */
-  func?: ELObj;
+  insn?: any;
 
   /**
    * Uncompiled lambda expression - compiled on first match
@@ -53,7 +54,7 @@ export class RuleRegistry {
    * Register a construction rule with compiled function
    * Port from: Interpreter::addConstructionRule()
    */
-  addRule(elementName: string, mode: string, func: ELObj): void {
+  addRule(elementName: string, mode: string, insn: any): void {
     // Check if rule already exists for this element+mode
     const existing = this.rules.findIndex(
       r => r.elementName === elementName && r.mode === mode
@@ -61,10 +62,10 @@ export class RuleRegistry {
 
     if (existing >= 0) {
       // Replace existing rule (later definition wins)
-      this.rules[existing] = { elementName, mode, func };
+      this.rules[existing] = { elementName, mode, insn };
     } else {
       // Add new rule
-      this.rules.push({ elementName, mode, func });
+      this.rules.push({ elementName, mode, insn });
     }
   }
 
@@ -107,7 +108,7 @@ export class RuleRegistry {
     if (!rule) return null;
 
     // Already compiled
-    if (rule.func) return rule;
+    if (rule.insn) return rule;
 
     // Need to compile from lambda expression
     if (rule.lambdaExpr) {
@@ -122,16 +123,12 @@ export class RuleRegistry {
       rule.beingCompiled = true;
       try {
         // Compile lambda expression to bytecode
+        // Port from: OpenJade stores the insn, not the evaluated closure
         const compiler = new Compiler(globals);
         const insn = compiler.compile(rule.lambdaExpr, new Environment(), 0, null);
 
-        // Execute to get the closure
-        const vm = new VM();
-        vm.globals = globals;
-        const func = vm.eval(insn);
-
-        // Cache the compiled function
-        rule.func = func;
+        // Cache the compiled bytecode (not the evaluated result!)
+        rule.insn = insn;
         delete rule.lambdaExpr;  // Free the AST
         delete rule.beingCompiled;
 

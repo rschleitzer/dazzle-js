@@ -9,6 +9,8 @@
 import type { FotBuilder } from '../fot.js';
 import type { VM } from '../scheme/vm.js';
 import { SosofoObj } from '../scheme/elobj.js';
+import { callClosure } from '../scheme/primitives.js';
+import { NodeType } from '../grove/grove.js';
 
 /**
  * ProcessContext - manages sosofo processing
@@ -162,19 +164,43 @@ export class ProcessContext {
       this.vm.currentNode = child;
 
       try {
-        // Find rule for this element
-        const elementName = child.gi() || '';
-        const rule = this.vm.globals.ruleRegistry.findRule(elementName, processingMode, this.vm.globals);
-
-        if (rule) {
-          // Execute rule to get sosofo
-          const sosofo = this.vm.eval(rule.action);
-          const sosofoObj = sosofo?.asSosofo();
-          if (sosofoObj) {
-            this.process(sosofoObj);
+        // Port from: ProcessContext.cxx:66-73 processNode()
+        // Check if this is a text node - if so, output characters directly
+        const nodeType = child.nodeType();
+        if (nodeType === NodeType.Text) {
+          const text = child.data();
+          if (text) {
+            this.fotBuilder.charactersFromNode(child, text);
           }
+          continue;
         }
-        // If no rule found, just skip this node (OpenJade behavior)
+
+        // Element node - call startNode, match rules, call endNode
+        // Port from: ProcessContext.cxx:80
+        this.fotBuilder.startNode(child, processingMode);
+
+        try {
+          // Find rule for this element
+          const elementName = child.gi() || '';
+          const rule = this.vm.globals.ruleRegistry.findRule(elementName, processingMode, this.vm.globals);
+
+          if (rule && rule.insn) {
+            // Port from: ProcessContext.cxx:115 vm().eval(insn.pointer())
+            // The insn evaluates to a closure, which we then call
+            const closure = this.vm.eval(rule.insn);
+            const func = closure?.asFunction();
+            if (func) {
+              const sosofo = callClosure(func, [], this.vm);
+              const sosofoObj = sosofo?.asSosofo();
+              if (sosofoObj) {
+                this.process(sosofoObj);
+              }
+            }
+          }
+          // If no rule found, just skip this node (OpenJade behavior)
+        } finally {
+          this.fotBuilder.endNode();
+        }
       } finally {
         // Restore previous node
         this.vm.currentNode = previousNode;

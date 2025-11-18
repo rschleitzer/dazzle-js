@@ -145,16 +145,18 @@ program
       // Port from: OpenJade jade.cxx - automatically starts root processing
 
       const processRootFunc = globals.lookup('process-root');
-      if (processRootFunc) {
-        const func = processRootFunc.asFunction();
-        if (func && func.isPrimitive()) {
-          const sosofo = func.callPrimitive([], vm);
+      if (!processRootFunc) {
+        throw new Error('process-root primitive not found - primitives may not be loaded');
+      }
 
-          // Process the resulting sosofo through the backend
-          const sosofoParsed = sosofo.asSosofo();
-          if (sosofoParsed) {
-            processContext.process(sosofoParsed);
-          }
+      const func = processRootFunc.asFunction();
+      if (func && func.isPrimitive()) {
+        const sosofo = func.callPrimitive([], vm);
+
+        // Process the resulting sosofo through the backend
+        const sosofoParsed = sosofo.asSosofo();
+        if (sosofoParsed) {
+          processContext.process(sosofoParsed);
         }
       }
 
