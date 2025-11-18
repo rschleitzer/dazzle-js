@@ -119,7 +119,10 @@ class LibxmljsNode implements Node {
 
     if (nodeType === 'text') {
       // Text node - return its text content
-      return (this.native as any).text();
+      // Port from: OpenJade/OpenSP normalizes whitespace in element content
+      // SGML record boundaries (newlines) are typically normalized away
+      const text = (this.native as any).text();
+      return text ? text.trim() : null;
     } else if (nodeType === 'element') {
       // Element node - return concatenated text of all text node children
       // This matches OpenJade's behavior for the (data) primitive

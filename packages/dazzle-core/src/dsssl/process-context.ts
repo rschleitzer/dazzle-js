@@ -196,8 +196,11 @@ export class ProcessContext {
                 this.process(sosofoObj);
               }
             }
+          } else {
+            // Port from: OpenJade - If no rule found, process children recursively
+            // This ensures text content is still output even without explicit rules
+            this.processChildren(processingMode);
           }
-          // If no rule found, just skip this node (OpenJade behavior)
         } finally {
           this.fotBuilder.endNode();
         }
