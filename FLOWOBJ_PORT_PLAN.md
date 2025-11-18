@@ -180,17 +180,6 @@ Expected output: 8 lines, margins converted to pt
 - **Time Estimate**: 3-4 weeks part-time (assuming 10-15 hours/week)
 - **Complexity**: High - requires deep understanding of DSSSL processing model
 
-## Alternative: Incremental Approach
-
-Start with simplified implementation for test cases only:
-
-### Simplified Phase 1 (Week 1)
-- [ ] Hardcode flow objects as special cases in `make` primitive
-- [ ] Pass simple property dictionaries instead of NIC structures
-- [ ] Minimal FOT backend that just outputs XML
-
-This gets us to working test cases faster, but diverges from OpenJade architecture.
-
 ## Recommendation
 
 Given the scope, I recommend:
