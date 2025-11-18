@@ -6255,6 +6255,45 @@ const nodeListFirstPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj
 };
 
 /**
+ * Grove: node-list-last
+ * Port from: DSSSL primitive - returns a singleton node-list containing the last node
+ */
+const nodeListLastPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('node-list-last requires exactly 1 argument');
+  }
+
+  const nl = args[0].asNodeList();
+  if (!nl) {
+    throw new Error('node-list-last requires a node-list argument');
+  }
+
+  // Traverse to the last node
+  let current = nl.nodes;
+  let lastNode: Node | null = null;
+
+  while (true) {
+    const first = current.first();
+    if (!first) break;
+
+    lastNode = first;
+
+    const rest = current.rest();
+    if (!rest) break;
+
+    current = rest;
+  }
+
+  if (!lastNode) {
+    // Return empty node-list (NOT #f)
+    return makeNodeList(EMPTY_NODE_LIST);
+  }
+
+  // Return singleton node-list containing the last node
+  return makeNodeList(nodeListFromArray([lastNode]));
+};
+
+/**
  * Grove: node-list-rest
  * Port from: primitive.h PRIMITIVE(NodeListRest, "node-list-rest", 0, 1, 0)
  */
@@ -6698,18 +6737,51 @@ const attributeStringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELO
 /**
  * Grove: ancestors
  * Port from: primitive.h PRIMITIVE(Ancestors, "ancestors", 0, 1, 0)
+ * Port from: primitive.cxx - uses optSingletonNodeList, maps over node-lists
+ * Takes optional node/node-list argument; uses current-node if not specified
  */
 const ancestorsPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
-  if (args.length !== 1) {
-    throw new Error('ancestors requires exactly 1 argument');
+  if (args.length > 1) {
+    throw new Error('ancestors takes at most 1 argument');
   }
 
+  if (args.length === 0) {
+    // No argument - use current-node
+    if (!vm.currentNode) {
+      throw new Error('ancestors: no current node in processing context');
+    }
+    return makeNodeList(vm.currentNode.ancestors());
+  }
+
+  // Try as a single node first
   const node = args[0].asNode();
-  if (!node) {
-    throw new Error('ancestors requires a node argument');
+  if (node) {
+    return makeNodeList(node.node.ancestors());
   }
 
-  return makeNodeList(node.node.ancestors());
+  // Try as a node-list - map ancestors over all nodes
+  const nodeList = args[0].asNodeList();
+  if (nodeList) {
+    // Map ancestors over all nodes in the list and combine
+    const results: Node[] = [];
+    let current = nodeList.nodes;
+    while (true) {
+      const first = current.first();
+      if (!first) break;
+
+      // Get ancestors of this node
+      const ancestors = first.ancestors();
+      results.push(...ancestors.toArray());
+
+      const rest = current.rest();
+      if (!rest) break;
+
+      current = rest;
+    }
+    return makeNodeList(nodeListFromArray(results));
+  }
+
+  throw new Error('ancestors requires a node or node-list argument');
 };
 
 /**
@@ -6756,6 +6828,23 @@ const ancestorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
 
   // No matching ancestor found
   return makeNodeList(EMPTY_NODE_LIST);
+};
+
+/**
+ * Grove: tree-root
+ * Port from: DSSSL primitive - returns the root node of the grove/tree
+ */
+const treeRootPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 1) {
+    throw new Error('tree-root requires exactly 1 argument');
+  }
+
+  if (!vm.grove) {
+    throw new Error('tree-root: no grove in processing context');
+  }
+
+  // Return the root node of the grove
+  return makeNode(vm.grove.root());
 };
 
 /**
@@ -8123,8 +8212,10 @@ const processRootPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj 
         }
       }
 
-      // No rule found - return empty sosofo
-      return makeSosofo('empty');
+      // No rule found for root element - apply default rule (process children)
+      // Port from: OpenJade - when no matching rule, default is to process-children
+      const children = rootNode.children();
+      return processNodeListHelper(children, vm);
     }
   } finally {
     // Restore current node
@@ -8218,15 +8309,18 @@ function processNodeListHelper(nodeList: NodeList, vm: VM): ELObj {
   while (current) {
     // Find construction rule for this element
     const gi = current.gi();
+    if (process.env.DEBUG_PROCESS) {
+      console.error(`[processNodeList] Processing <${gi}> in mode '${mode}'`);
+    }
     if (gi) {
       const rule = vm.globals.ruleRegistry.findRule(gi, mode, vm.globals);
 
-      if (rule) {
-        // Save current node
-        const savedNode = vm.currentNode;
-        vm.currentNode = current;
+      // Save current node
+      const savedNode = vm.currentNode;
+      vm.currentNode = current;
 
-        try {
+      try {
+        if (rule) {
           // Execute the rule's lambda
           const func = rule.func!.asFunction();
           if (!func || !func.isClosure()) {
@@ -8243,12 +8337,17 @@ function processNodeListHelper(nodeList: NodeList, vm: VM): ELObj {
           }
 
           sosofos.push(result);
-        } finally {
-          // Restore current node
-          vm.currentNode = savedNode;
+        } else {
+          // No rule found - apply default rule (process children)
+          // Port from: OpenJade - when no matching rule, default is to process-children
+          const children = current.children();
+          const result = processNodeListHelper(children, vm);
+          sosofos.push(result);
         }
+      } finally {
+        // Restore current node
+        vm.currentNode = savedNode;
       }
-      // If no rule found, skip this node (default behavior)
     }
 
     // Move to next node
@@ -8718,6 +8817,7 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   'empty-node-list': new FunctionObj('empty-node-list', emptyNodeListPrimitive),
   'node-list-empty?': new FunctionObj('node-list-empty?', nodeListEmptyPredicate),
   'node-list-first': new FunctionObj('node-list-first', nodeListFirstPrimitive),
+  'node-list-last': new FunctionObj('node-list-last', nodeListLastPrimitive),
   'node-list-rest': new FunctionObj('node-list-rest', nodeListRestPrimitive),
   'node-list-reverse': new FunctionObj('node-list-reverse', nodeListReversePrimitive),
   'select-elements': new FunctionObj('select-elements', selectElementsPrimitive),
@@ -8730,6 +8830,7 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   'attribute-string': new FunctionObj('attribute-string', attributeStringPrimitive),
   'ancestors': new FunctionObj('ancestors', ancestorsPrimitive),
   'ancestor': new FunctionObj('ancestor', ancestorPrimitive),
+  'tree-root': new FunctionObj('tree-root', treeRootPrimitive),
   'descendants': new FunctionObj('descendants', descendantsPrimitive),
   'child-number': new FunctionObj('child-number', childNumberPrimitive),
   'first-sibling?': new FunctionObj('first-sibling?', firstSiblingPredicate),

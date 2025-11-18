@@ -172,16 +172,16 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
 function parseEntities(content: string): Entity[] {
   const entities: Entity[] = [];
 
-  // Match DOCTYPE declaration - more flexible with whitespace
-  const doctypeMatch = content.match(/<!DOCTYPE[\s\S]*?\[([\s\S]*?)\]/);
+  // Match DOCTYPE declaration - case-insensitive, more flexible with whitespace
+  const doctypeMatch = content.match(/<!DOCTYPE[\s\S]*?\[([\s\S]*?)\]/i);
   if (!doctypeMatch) {
     return entities;
   }
 
   const doctype = doctypeMatch[1];
 
-  // Match entity declarations: <!ENTITY name SYSTEM "file"> (with optional whitespace)
-  const entityRegex = /<!ENTITY\s+(\w+)\s+SYSTEM\s+"([^"]+)"\s*>/g;
+  // Match entity declarations: <!ENTITY name SYSTEM "file"> (case-insensitive, optional whitespace)
+  const entityRegex = /<!ENTITY\s+(\w+)\s+SYSTEM\s+"([^"]+)"\s*>/gi;
   let match;
 
   while ((match = entityRegex.exec(doctype)) !== null) {
