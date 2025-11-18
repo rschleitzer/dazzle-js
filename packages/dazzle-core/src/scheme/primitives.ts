@@ -31,6 +31,7 @@ import type { VM } from './vm.js';
 import type { Node, NodeList } from '../grove/index.js';
 import { EMPTY_NODE_LIST, nodeListFromArray } from '../grove/index.js';
 import { CallInsn } from './insn.js';
+import { createFlowObj } from '../flowobj.js';
 
 /**
  * Helper: Make file path relative to current working directory
@@ -8468,10 +8469,50 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
       });
     }
 
-    default:
-      // For now, unsupported flow object types return empty sosofo
-      // TODO: Implement other flow object types (paragraph, sequence, etc.)
-      return makeSosofo('empty');
+    default: {
+      // Try to create a print flow object (simple-page-sequence, scroll, paragraph, etc.)
+      const flowObj = createFlowObj(flowObjectType);
+      if (!flowObj) {
+        // Unknown flow object type, return empty sosofo
+        return makeSosofo('empty');
+      }
+
+      // Set characteristics (non-inherited)
+      for (const [name, value] of Object.entries(characteristics)) {
+        if (flowObj.hasNonInheritedC(name)) {
+          flowObj.setNonInheritedC(name, value as ELObj);
+        }
+      }
+
+      // Set content (child sosofos) - only for compound flow objects
+      if (content.length > 0 && 'setContent' in flowObj) {
+        // If multiple content items, wrap in sosofo-append
+        let childSosofo: SosofoObj;
+        if (content.length === 1) {
+          const c = content[0].asSosofo();
+          if (!c) {
+            throw new Error('make: content must be a sosofo');
+          }
+          childSosofo = c;
+        } else {
+          // Multiple content items - create append sosofo
+          const sosofos: SosofoObj[] = [];
+          for (const item of content) {
+            const s = item.asSosofo();
+            if (!s) {
+              throw new Error('make: content must be sosofos');
+            }
+            sosofos.push(s);
+          }
+          childSosofo = makeSosofo('append', sosofos);
+        }
+        (flowObj as any).setContent(childSosofo);
+      }
+
+      // Return FlowObj directly - it IS a SosofoObj
+      // Port from: OpenJade - FlowObj extends SosofoObj, so we return the FlowObj*
+      return flowObj;
+    }
   }
 };
 

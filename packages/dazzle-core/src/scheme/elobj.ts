@@ -299,20 +299,37 @@ export class QuantityObj extends ELObj {
 
 /**
  * Sosofo (Specification of a Sequence of Flow Objects)
- * Port from: ELObj.h SosofoObj
+ * Port from: OpenJade style/SosofoObj.h class SosofoObj : public ELObj
  *
  * A sosofo represents the result of DSSSL processing - a specification
  * of formatting objects that can be passed to a backend for output.
+ *
+ * In OpenJade, this is an abstract base class. FlowObj extends SosofoObj.
+ * Here we use it both as a base class and for simple sosofo types.
  */
 export class SosofoObj extends ELObj {
-  constructor(
-    public type: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'flowobj',
-    public data?: unknown
-  ) {
+  public type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal';
+  public data?: unknown;
+
+  constructor(type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal', data?: unknown) {
     super();
+    this.type = type;
+    this.data = data;
   }
 
   asSosofo(): SosofoObj { return this; }
+
+  /**
+   * Process this sosofo with a ProcessContext
+   * Port from: OpenJade SosofoObj::process()
+   *
+   * Must be implemented by subclasses (like FlowObj)
+   * Base implementation handles simple types
+   */
+  process(_context: any): void {
+    // Base implementation - subclasses override
+    // Simple sosofos (empty, literal, etc.) are handled by ProcessContext
+  }
 
   /**
    * Check if this is an empty sosofo
@@ -339,38 +356,6 @@ export class SosofoObj extends ELObj {
       return this.data;
     }
     return null;
-  }
-
-  /**
-   * Get FlowObj (for flow object sosofos)
-   */
-  asFlowObj(): any | null {
-    if (this.type === 'flowobj') {
-      return this.data;
-    }
-    return null;
-  }
-
-  /**
-   * Process this sosofo with a ProcessContext
-   * Port from: OpenJade SosofoObj::process()
-   */
-  process(context: any): void {
-    // Import FlowObj dynamically to avoid circular dependency
-    const flowObj = this.asFlowObj();
-    if (flowObj && typeof flowObj.process === 'function') {
-      flowObj.process(context);
-      return;
-    }
-
-    // For append, process all children
-    if (this.type === 'append') {
-      const children = this.children();
-      for (const child of children) {
-        child.process(context);
-      }
-    }
-    // Other sosofo types don't need processing in FOT backend
   }
 }
 
@@ -465,6 +450,6 @@ export function makeQuantity(value: number, unit: string): QuantityObj {
   return new QuantityObj(value, unit);
 }
 
-export function makeSosofo(type: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'flowobj', data?: unknown): SosofoObj {
+export function makeSosofo(type: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal', data?: unknown): SosofoObj {
   return new SosofoObj(type, data);
 }

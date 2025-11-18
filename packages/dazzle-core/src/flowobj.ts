@@ -7,46 +7,33 @@
  * methods to generate output.
  */
 
-import type { ELObj } from './scheme/elobj';
-import type { VM } from './scheme/vm';
-import type { FotBuilder } from './fot';
-
-/**
- * Process context - manages processing state
- * Port from: OpenJade style/ProcessContext.h
- */
-export class ProcessContext {
-  private fotBuilder: FotBuilder;
-  private vm: VM;
-
-  constructor(fotBuilder: FotBuilder, vm: VM) {
-    this.fotBuilder = fotBuilder;
-    this.vm = vm;
-  }
-
-  currentFOTBuilder(): FotBuilder {
-    return this.fotBuilder;
-  }
-
-  getVM(): VM {
-    return this.vm;
-  }
-}
+import { SosofoObj, type ELObj } from './scheme/elobj.js';
+import type { ProcessContext } from './dsssl/process-context.js';
 
 /**
  * Base FlowObj class
- * Port from: OpenJade style/FlowObj.cxx FlowObj class
+ * Port from: OpenJade style/SosofoObj.h:111 class FlowObj : public SosofoObj
  *
+ * In OpenJade, FlowObj extends SosofoObj - flow objects ARE sosofos.
  * All flow objects inherit from this base class.
  */
-export abstract class FlowObj {
+export abstract class FlowObj extends SosofoObj {
   protected hasSubObjects: boolean = false;
 
   /**
+   * Return this as a sosofo (it already is one)
+   */
+  asSosofo(): SosofoObj {
+    return this;
+  }
+
+  /**
    * Process this flow object
-   * Port from: FlowObj::process()
+   * Port from: FlowObj.cxx:32 FlowObj::process()
    */
   process(context: ProcessContext): void {
+    // OpenJade calls: context.startFlowObj(), pushStyle(), processInner(), popStyle(), endFlowObj()
+    // For now, simplified to just processInner()
     this.processInner(context);
   }
 
@@ -81,10 +68,10 @@ export abstract class FlowObj {
 
 /**
  * Compound FlowObj - has child content
- * Port from: OpenJade style/FlowObj.cxx CompoundFlowObj class
+ * Port from: OpenJade style/SosofoObj.h:135 class CompoundFlowObj : public FlowObj
  */
 export abstract class CompoundFlowObj extends FlowObj {
-  protected content: ELObj | null = null;
+  protected content_: SosofoObj | null = null;
 
   constructor() {
     super();
@@ -93,23 +80,22 @@ export abstract class CompoundFlowObj extends FlowObj {
 
   /**
    * Set the content (child sosofo) of this flow object
+   * Port from: SosofoObj.h:140 void setContent(SosofoObj *content)
    */
-  setContent(content: ELObj): void {
-    this.content = content;
+  setContent(content: SosofoObj): void {
+    this.content_ = content;
   }
 
   /**
    * Process the inner content
-   * Port from: CompoundFlowObj::processInner()
+   * Port from: FlowObj.cxx:183 CompoundFlowObj::processInner()
    */
   protected processInner(context: ProcessContext): void {
-    if (this.content) {
-      // Process child content
-      const sosofo = this.content.asSosofo();
-      if (sosofo) {
-        sosofo.process(context);
-      }
+    if (this.content_) {
+      this.content_.process(context);
     }
+    // OpenJade also calls: context.processChildren(...) if no content
+    // We'll add that later when we implement full DSSSL processing
   }
 }
 
@@ -233,7 +219,7 @@ export class SimplePageSequenceFlowObj extends CompoundFlowObj {
     copy.rightMargin = this.rightMargin;
     copy.topMargin = this.topMargin;
     copy.bottomMargin = this.bottomMargin;
-    copy.content = this.content;
+    copy.content_ = this.content_;
     return copy;
   }
 }
@@ -268,7 +254,7 @@ export class ScrollFlowObj extends CompoundFlowObj {
 
   copy(): FlowObj {
     const copy = new ScrollFlowObj();
-    copy.content = this.content;
+    copy.content_ = this.content_;
     return copy;
   }
 }
@@ -303,7 +289,7 @@ export class ParagraphFlowObj extends CompoundFlowObj {
 
   copy(): FlowObj {
     const copy = new ParagraphFlowObj();
-    copy.content = this.content;
+    copy.content_ = this.content_;
     return copy;
   }
 }
