@@ -156,7 +156,12 @@ program
         // Process the resulting sosofo through the backend
         const sosofoParsed = sosofo.asSosofo();
         if (sosofoParsed) {
+          // Call startNode for the root element before processing
+          // Port from: OpenJade pattern where root processing generates an anchor
+          const rootNode = vm.grove.root();
+          backend.startNode(rootNode, '');
           processContext.process(sosofoParsed);
+          backend.endNode();
         }
       }
 
