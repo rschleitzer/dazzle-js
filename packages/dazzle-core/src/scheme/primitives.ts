@@ -6784,12 +6784,12 @@ const descendantsPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj =
       const first = current.first();
       if (!first) break;
 
-      const rest = current.rest();
-      if (!rest) break;
-
       // Get descendants of this node
       const descendants = first.descendants();
       results.push(...descendants.toArray());
+
+      const rest = current.rest();
+      if (!rest) break;
 
       current = rest;
     }
