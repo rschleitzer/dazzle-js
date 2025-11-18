@@ -1,0 +1,10 @@
+<!DOCTYPE demo [
+<!ELEMENT demo (p*)>
+<!ELEMENT p (#PCDATA)>
+]>
+<demo>
+<p>
+The first paragraph.</p>
+<p>
+The second paragraph.</p>
+</demo>

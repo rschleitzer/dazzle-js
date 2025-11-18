@@ -1,0 +1,9 @@
+<!DOCTYPE prova [
+<!ELEMENT prova (p*)>
+<!ELEMENT p (#PCDATA)>
+]>
+
+<prova>
+<p>
+Hola aixo es una prova.</p>
+</prova>
