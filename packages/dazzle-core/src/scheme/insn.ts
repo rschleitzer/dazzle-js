@@ -242,7 +242,7 @@ export class FrameRefInsn extends Insn {
     // Auto-unbox if this is a boxed value (for letrec variables)
     // BUT don't unbox if we're capturing for a closure - closures need the box itself
     // Port from: OpenJade - frame refs auto-unbox, but closures capture boxes
-    if (!this.forCapture) {
+    if (!this.forCapture && value && typeof value.asBox === 'function') {
       const box = value.asBox();
       if (box) {
         value = box.value;
@@ -288,9 +288,11 @@ export class StackRefInsn extends Insn {
     // CRITICAL: Do NOT unbox if forCapture=true (for closure capture)
     // When capturing for closure, we need to capture the box itself,
     // not the value inside it, so that updates to the box are visible
-    const box = value.asBox();
-    if (box && !this.forCapture) {
-      value = box.value;
+    if (!this.forCapture && value && typeof value.asBox === 'function') {
+      const box = value.asBox();
+      if (box) {
+        value = box.value;
+      }
     }
 
     vm.push(value);
@@ -316,7 +318,7 @@ export class ClosureRefInsn extends Insn {
     let value = vm.getClosure(this.index);
 
     // Auto-unbox if this is a boxed value (for letrec variables)
-    const box = value.asBox();
+    const box = value?.asBox();
     if (box) {
       value = box.value;
     }

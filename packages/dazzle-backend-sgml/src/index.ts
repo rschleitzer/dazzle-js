@@ -101,6 +101,15 @@ interface OpenFile {
 }
 
 /**
+ * Directory entry (for stack)
+ * Custom extension for directory structure generation
+ */
+interface OpenDirectory {
+  path: string;
+  savedOutputDir: string;
+}
+
+/**
  * Transform FOT Builder - Code generation backend
  *
  * Port from: OpenJade jade/TransformFOTBuilder.cxx
@@ -109,6 +118,7 @@ export class TransformFotBuilder implements FotBuilder {
   private currentStream: OutputStream;
   private defaultStream: OutputStream;
   private fileStack: OpenFile[] = [];
+  private directoryStack: OpenDirectory[] = [];
   private outputDir: string = '.';
 
   /**
@@ -230,6 +240,51 @@ export class TransformFotBuilder implements FotBuilder {
   }
 
   /**
+   * Start a directory flow object (creates directory)
+   * Custom extension for directory structure generation
+   *
+   * This creates a directory and changes the output directory context.
+   * All subsequent entity (file) outputs will be relative to this directory.
+   */
+  startDirectory(dirPath: string): void {
+    // Resolve directory path relative to current output directory
+    const fullPath = path.resolve(this.outputDir, dirPath);
+
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(fullPath)) {
+      fs.mkdirSync(fullPath, { recursive: true });
+    }
+
+    // Push current output directory to stack
+    const openDir: OpenDirectory = {
+      path: dirPath,
+      savedOutputDir: this.outputDir,
+    };
+    this.directoryStack.push(openDir);
+
+    // Change output directory to the new directory
+    this.outputDir = fullPath;
+  }
+
+  /**
+   * End a directory flow object
+   * Custom extension for directory structure generation
+   *
+   * Restores the previous output directory context.
+   */
+  endDirectory(): void {
+    if (this.directoryStack.length === 0) {
+      throw new Error('endDirectory called without matching startDirectory');
+    }
+
+    // Pop directory from stack
+    const openDir = this.directoryStack.pop()!;
+
+    // Restore previous output directory
+    this.outputDir = openDir.savedOutputDir;
+  }
+
+  /**
    * Finish output and cleanup
    * Port from: TransformFOTBuilder destructor
    */
@@ -237,6 +292,11 @@ export class TransformFotBuilder implements FotBuilder {
     // Close any remaining open files (shouldn't happen in well-formed stylesheets)
     while (this.fileStack.length > 0) {
       this.endEntity();
+    }
+
+    // Close any remaining open directories (shouldn't happen in well-formed stylesheets)
+    while (this.directoryStack.length > 0) {
+      this.endDirectory();
     }
 
     // Flush default stream

@@ -86,6 +86,30 @@ export class ProcessContext {
         break;
       }
 
+      case 'directory': {
+        // Directory flow object - create directory, process content, restore context
+        const dirData = sosofo.data as { path: string; content: any[] };
+        if (dirData && dirData.path) {
+          this.fotBuilder.startDirectory(dirData.path);
+
+          // Process content (if any)
+          // Content items are ELObj values that may be sosofos
+          if (dirData.content && Array.isArray(dirData.content)) {
+            for (const item of dirData.content) {
+              const sosofoItem = item.asSosofo?.();
+              if (sosofoItem) {
+                this.process(sosofoItem);
+              } else {
+                throw new Error(`make directory: content must be sosofos, got non-sosofo item`);
+              }
+            }
+          }
+
+          this.fotBuilder.endDirectory();
+        }
+        break;
+      }
+
       case 'append': {
         // Append sosofo - process children in sequence
         const children = sosofo.children();

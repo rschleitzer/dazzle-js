@@ -75,6 +75,18 @@ export interface FotBuilder {
   endEntity(): void;
 
   /**
+   * Start a directory flow object (directory creation for code generation)
+   * Custom extension for file system structure generation
+   */
+  startDirectory(path: string): void;
+
+  /**
+   * End a directory flow object
+   * Custom extension for file system structure generation
+   */
+  endDirectory(): void;
+
+  /**
    * Finish output and cleanup
    * Port from: FOTBuilder destructor
    */

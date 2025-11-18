@@ -284,7 +284,7 @@ export class NodeListObj extends ELObj {
  */
 export class SosofoObj extends ELObj {
   constructor(
-    public type: 'empty' | 'append' | 'entity' | 'formatting-instruction' | 'literal',
+    public type: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal',
     public data?: unknown
   ) {
     super();
@@ -407,6 +407,6 @@ export function makeNodeList(nodes: NodeList): NodeListObj {
   return new NodeListObj(nodes);
 }
 
-export function makeSosofo(type: 'empty' | 'append' | 'entity' | 'formatting-instruction' | 'literal', data?: unknown): SosofoObj {
+export function makeSosofo(type: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal', data?: unknown): SosofoObj {
   return new SosofoObj(type, data);
 }

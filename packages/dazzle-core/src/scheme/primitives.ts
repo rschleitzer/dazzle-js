@@ -6760,19 +6760,43 @@ const ancestorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
 
 /**
  * Grove: descendants
- * Port from: primitive.h PRIMITIVE(Descendants, "descendants", 0, 1, 0)
+ * Port from: primitive.h PRIMITIVE(Descendants, "descendants", 1, 0, 0)
+ * Port from: primitive.cxx - uses optSingletonNodeList, maps over node-lists
  */
 const descendantsPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length !== 1) {
     throw new Error('descendants requires exactly 1 argument');
   }
 
+  // Try as a single node first
   const node = args[0].asNode();
-  if (!node) {
-    throw new Error('descendants requires a node argument');
+  if (node) {
+    return makeNodeList(node.node.descendants());
   }
 
-  return makeNodeList(node.node.descendants());
+  // Try as a node-list - map descendants over all nodes
+  const nodeList = args[0].asNodeList();
+  if (nodeList) {
+    // Map descendants over all nodes in the list and combine
+    const results: Node[] = [];
+    let current = nodeList.nodes;
+    while (true) {
+      const first = current.first();
+      if (!first) break;
+
+      const rest = current.rest();
+      if (!rest) break;
+
+      // Get descendants of this node
+      const descendants = first.descendants();
+      results.push(...descendants.toArray());
+
+      current = rest;
+    }
+    return makeNodeList(nodeListFromArray(results));
+  }
+
+  throw new Error('descendants requires a node or node-list argument');
 };
 
 /**
@@ -8325,6 +8349,23 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
 
       return makeSosofo('formatting-instruction', {
         data: data.value,
+      });
+    }
+
+    case 'directory': {
+      // (make directory path: "dir" content...)
+      const pathValue = characteristics['path'];
+      if (!pathValue) {
+        throw new Error('make directory requires path: characteristic');
+      }
+      const path = (pathValue as ELObj).asString();
+      if (!path) {
+        throw new Error('make directory path: must be a string');
+      }
+
+      return makeSosofo('directory', {
+        path: path.value,
+        content,
       });
     }
 
