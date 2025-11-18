@@ -19,6 +19,7 @@
   "dependencies": {
     "dazzle-core": "*",
     "dazzle-backend-sgml": "*",
+    "dazzle-backend-fot": "*",
     "commander": "^11.0.0"
   },
   "devDependencies": {

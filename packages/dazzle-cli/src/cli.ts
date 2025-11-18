@@ -8,8 +8,9 @@
 import { Command } from 'commander';
 import * as fs from 'fs';
 import * as path from 'path';
-import { parseXmlGrove, parse, Compiler, GlobalEnvironment, Environment, VM, ProcessContext, loadTemplate } from 'dazzle-core';
+import { parseXmlGrove, parse, Compiler, GlobalEnvironment, Environment, VM, ProcessContext, loadTemplate, type FotBuilder } from 'dazzle-core';
 import { createTransformBackend } from 'dazzle-backend-sgml';
+import { createFotBackend } from 'dazzle-backend-fot';
 
 const program = new Command();
 
@@ -66,9 +67,17 @@ program
         dtdattr: true,   // Apply DTD default attributes
       });
 
-      // Create backend
+      // Create backend based on type
       const outputDir = path.resolve(options.output);
-      const backend = createTransformBackend(outputDir);
+      let backend: FotBuilder;
+      if (options.backend === 'fot') {
+        backend = createFotBackend();
+      } else if (options.backend === 'sgml') {
+        backend = createTransformBackend(outputDir);
+      } else {
+        console.error(`Error: Unknown backend type: ${options.backend}`);
+        process.exit(1);
+      }
 
       // Parse template into S-expressions with source file tracking and source map
       const exprs = parse(templateContent, templatePath, sourceMap);
@@ -151,6 +160,11 @@ program
 
       // Finish backend processing
       backend.end();
+
+      // For FOT backend, output the generated XML to stdout
+      if (options.backend === 'fot' && backend.getOutput) {
+        console.log(backend.getOutput());
+      }
 
     } catch (error) {
       if (error instanceof Error) {

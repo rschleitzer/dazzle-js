@@ -39,6 +39,14 @@ export class ProcessContext {
    * Port from: ProcessContext.cxx various SosofoObj::process() methods
    */
   process(sosofo: SosofoObj): void {
+    // FlowObj sosofos don't have a type - they handle their own processing
+    // Port from: OpenJade - FlowObj::process() is called polymorphically
+    if (!sosofo.type) {
+      // This is a FlowObj - call its process() method
+      sosofo.process(this);
+      return;
+    }
+
     switch (sosofo.type) {
       case 'empty':
         // Empty sosofo - nothing to do

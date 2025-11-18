@@ -197,6 +197,7 @@ function parseEntities(content: string): Entity[] {
 /**
  * Extract content from <style-specification> tag
  * Case-insensitive to match OpenJade behavior
+ * Also handles optional <style-specification-body> nested tag
  */
 function extractStyleSpecification(content: string): string {
   // Match <style-specification>...</style-specification> (case-insensitive)
@@ -206,7 +207,15 @@ function extractStyleSpecification(content: string): string {
     throw new Error('XML template must contain <style-specification> tag');
   }
 
-  return match[1];
+  let extracted = match[1];
+
+  // If there's a <style-specification-body> tag, extract its content
+  const bodyMatch = extracted.match(/<style-specification-body[^>]*>([\s\S]*?)<\/style-specification-body>/i);
+  if (bodyMatch) {
+    extracted = bodyMatch[1];
+  }
+
+  return extracted;
 }
 
 /**
