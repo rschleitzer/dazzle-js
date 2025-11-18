@@ -31,7 +31,7 @@ program
         process.exit(1);
       }
 
-      if (!inputFile) {
+      if (!inputFile || inputFile.trim() === '') {
         console.error('Error: Input XML file is required');
         process.exit(1);
       }

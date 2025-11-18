@@ -1402,8 +1402,52 @@ export class Compiler {
   // ============ Helpers ============
 
   /**
+   * Built-in keywords and primitives that can never be shadowed
+   * These are excluded from free variable detection for performance
+   *
+   * Note: This list includes common primitives and helpers that are used frequently
+   * but are extremely unlikely to be shadowed by parameter names in real code.
+   */
+  private static readonly UNSHADOWABLE_BUILTINS = new Set([
+    // Special forms
+    'quote', 'if', 'lambda', 'let', 'let*', 'letrec', 'define', 'set!',
+    'begin', 'and', 'or', 'cond', 'case', 'make',
+    // Common Scheme primitives
+    'cons', 'car', 'cdr', 'cadr', 'caddr', 'cadddr',
+    'list', 'null?', 'pair?', 'list?',
+    'eq?', 'eqv?', 'equal?', 'not',
+    '+', '-', '*', '/', 'quotient', 'remainder', 'modulo',
+    '<', '>', '<=', '>=', '=',
+    'string-append', 'string=?', 'string<?', 'string>?',
+    'number?', 'string?', 'symbol?', 'boolean?', 'procedure?',
+    'map', 'for-each', 'append', 'reverse', 'length', 'member', 'assoc',
+    'substring', 'string-length', 'string-ref',
+    'vector', 'vector-ref', 'vector-set!', 'vector-length',
+    // DSSSL specific
+    'process-children', 'process-node-list', 'process-root', 'next-match',
+    'empty-sosofo', 'sosofo-append', 'literal',
+    'current-node', 'node-list-first', 'node-list-rest', 'node-list-length',
+    'empty-node-list', 'node-list',
+    'gi', 'data', 'attribute-string', 'inherited-attribute-string',
+    'children', 'parent', 'ancestors', 'descendants', 'siblings',
+    'select-elements', 'select-children', 'element-with-id',
+    'first-sibling?', 'last-sibling?',
+    // Common helper functions from templates (these are rarely shadowed)
+    '$', 'for', 'sql-go', 'file',
+  ]);
+
+  /**
    * Find free variables in an expression
    * Port from: OpenJade style/Expression.cxx freeVariables analysis
+   *
+   * CRITICAL: Proper lexical scoping with shadowing support
+   *
+   * We mark variables as free even if they're globals, UNLESS they're unshadowable built-ins.
+   * This allows a parameter in an outer lambda to shadow a global function with the same name.
+   *
+   * The capture phase (in compileLambda) then checks if free variables exist in the environment:
+   * - If found in environment: captured (shadows any global)
+   * - If not in environment: looked up as global at runtime
    *
    * @param expr Expression to analyze
    * @param bound Set of bound variables (parameters, let bindings)
@@ -1416,10 +1460,11 @@ export class Compiler {
       // Symbol - check if it's free
       const sym = e.asSymbol();
       if (sym) {
-        if (process.env.DEBUG_CLOSURE && sym.name === 'path') {
-          console.error(`  Found 'path' symbol: bound=${b.has('path')}, global=${!!this.globals.lookup('path')}`);
-        }
-        if (!b.has(sym.name) && !this.globals.lookup(sym.name)) {
+        // Variable is free if:
+        // 1. Not bound in this lambda's parameters/let bindings
+        // 2. Not an unshadowable built-in
+        // Note: We DON'T exclude all globals! This enables lexical shadowing.
+        if (!b.has(sym.name) && !Compiler.UNSHADOWABLE_BUILTINS.has(sym.name)) {
           free.add(sym.name);
         }
         return;
