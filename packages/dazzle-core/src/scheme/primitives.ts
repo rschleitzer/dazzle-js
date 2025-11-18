@@ -12,6 +12,7 @@ import {
   FunctionObj,
   PairObj,
   SosofoObj,
+  QuantityObj,
   makeNumber,
   makeBoolean,
   makePair,
@@ -214,21 +215,37 @@ const minusPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
  * Port from: primitive.cxx Times::primitiveCall
  */
 const timesPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
-  let product = 1;
+  // Handle quantity multiplication: number * quantity or quantity * number
+  let quantity: QuantityObj | null = null;
+  let numericProduct = 1;
   let exact = true;
 
   for (const arg of args) {
-    const num = arg.asNumber();
-    if (!num) {
-      throw new Error('* requires numeric arguments');
-    }
-    product *= num.value;
-    if (!num.exact) {
-      exact = false;
+    const q = arg.asQuantity();
+    if (q) {
+      if (quantity) {
+        // Multiple quantities - not supported yet
+        throw new Error('* does not support multiplying multiple quantities');
+      }
+      quantity = q;
+    } else {
+      const num = arg.asNumber();
+      if (!num) {
+        throw new Error('* requires numeric or quantity arguments');
+      }
+      numericProduct *= num.value;
+      if (!num.exact) {
+        exact = false;
+      }
     }
   }
 
-  return makeNumber(product, exact);
+  // If we found a quantity, return scaled quantity
+  if (quantity) {
+    return new QuantityObj(quantity.value * numericProduct, quantity.unit);
+  }
+
+  return makeNumber(numericProduct, exact);
 };
 
 /**
@@ -8521,10 +8538,23 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
 };
 
 /**
- * Standard primitive registry
- * Maps primitive names to function objects
+ * DSSSL Quantity Units
+ * Port from: DSSSL spec - length units
+ * Define as ELObj values (QuantityObj instances)
  */
-export const standardPrimitives: Record<string, FunctionObj> = {
+const cm = new QuantityObj(1, 'cm');
+const mm = new QuantityObj(1, 'mm');
+const inch = new QuantityObj(1, 'in');
+const pt = new QuantityObj(1, 'pt');
+const pc = new QuantityObj(1, 'pc');
+const px = new QuantityObj(1, 'px');
+const em = new QuantityObj(1, 'em');
+
+/**
+ * Standard primitive registry
+ * Maps primitive names to function objects and constants
+ */
+export const standardPrimitives: Record<string, ELObj> = {
   // Arithmetic - basic
   '+': new FunctionObj('+', plusPrimitive),
   '-': new FunctionObj('-', minusPrimitive),
@@ -8891,16 +8921,27 @@ export const standardPrimitives: Record<string, FunctionObj> = {
   'literal': new FunctionObj('literal', literalPrimitive),
   'sosofo-append': new FunctionObj('sosofo-append', sosofoAppendPrimitive),
   'make-flow-object': new FunctionObj('make-flow-object', makeFlowObjectPrimitive),
+
+  // DSSSL Quantity Units (length measurements)
+  // Port from: DSSSL spec - these are constants representing unit quantities
+  'cm': cm,
+  'mm': mm,
+  'in': inch,
+  'pt': pt,
+  'pc': pc,
+  'px': px,
+  'em': em,
 };
 
 // Register external procedures in the external procedure table
 // Port from: OpenJade installXPrimitive (primitive.cxx line 5326-5328)
 // XPRIMITIVE procedures use "UNREGISTERED::James Clark//Procedure::" prefix
-externalProcTable.set('UNREGISTERED::James Clark//Procedure::debug', standardPrimitives['debug']);
+externalProcTable.set('UNREGISTERED::James Clark//Procedure::debug', standardPrimitives['debug'] as FunctionObj);
 
 /**
  * Get a primitive by name
+ * Returns a function or constant value (like quantity units)
  */
-export function getPrimitive(name: string): FunctionObj | undefined {
+export function getPrimitive(name: string): ELObj | undefined {
   return standardPrimitives[name];
 }
