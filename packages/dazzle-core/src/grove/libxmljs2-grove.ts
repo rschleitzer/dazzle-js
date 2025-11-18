@@ -193,7 +193,23 @@ class LibxmljsNode implements Node {
       return null;
     }
 
-    return wrapNode(siblings[index + 1]);
+    // Port from: OpenJade - skip over non-element nodes (comments, PIs, etc.)
+    // Find next element sibling
+    for (let i = index + 1; i < siblings.length; i++) {
+      const sibling = siblings[i];
+      if (sibling.type() === 'element') {
+        return wrapNode(sibling);
+      }
+      // Skip text nodes that are whitespace-only
+      if (sibling.type() === 'text') {
+        const text = (sibling as libxmljs2.Text).text();
+        if (text && text.trim().length > 0) {
+          return wrapNode(sibling);
+        }
+      }
+    }
+
+    return null;
   }
 
   precedingSibling(): Node | null {
@@ -209,7 +225,23 @@ class LibxmljsNode implements Node {
       return null;
     }
 
-    return wrapNode(siblings[index - 1]);
+    // Port from: OpenJade - skip over non-element nodes (comments, PIs, etc.)
+    // Find previous element sibling
+    for (let i = index - 1; i >= 0; i--) {
+      const sibling = siblings[i];
+      if (sibling.type() === 'element') {
+        return wrapNode(sibling);
+      }
+      // Skip text nodes that are whitespace-only
+      if (sibling.type() === 'text') {
+        const text = (sibling as libxmljs2.Text).text();
+        if (text && text.trim().length > 0) {
+          return wrapNode(sibling);
+        }
+      }
+    }
+
+    return null;
   }
 
   ancestors(): NodeList {
@@ -397,18 +429,19 @@ class LibxmljsNode implements Node {
     if (!myType) return 0;
 
     // Filter siblings: same type, and exclude whitespace-only text nodes
+    // Port from: OpenJade - exclude comments, PIs, and other non-data nodes
     const sametypeSiblings = siblings.filter((node) => {
-      // Skip whitespace-only text nodes
-      if (node.type() === 'text') {
-        const text = (node as libxmljs2.Text).text();
-        return text && text.trim().length > 0;
-      }
       // For elements, check if they have the same gi
       if (node.type() === 'element') {
         return (node as libxmljs2.Element).name() === myType;
       }
-      // Keep other node types
-      return true;
+      // Keep non-whitespace text nodes
+      if (node.type() === 'text') {
+        const text = (node as libxmljs2.Text).text();
+        return text && text.trim().length > 0;
+      }
+      // Exclude comments, PIs, and other non-data nodes
+      return false;
     });
 
     const index = sametypeSiblings.indexOf(this.native);
