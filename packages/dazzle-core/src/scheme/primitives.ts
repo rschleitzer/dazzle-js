@@ -8184,7 +8184,7 @@ const processRootPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj 
       // Port from: ProcessContext.cxx:115 vm().eval(insn.pointer())
       // The insn evaluates to a closure (lambda), which we then need to call
       const closure = vm.eval(rule.insn);
-      const func = closure.asFunction();
+      const func = closure?.asFunction();
       if (!func) {
         throw new Error('process-root: root rule must be a function');
       }
@@ -8208,7 +8208,7 @@ const processRootPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj 
         if (elementRule && elementRule.insn) {
           // Evaluate to get closure, then call it
           const closure = vm.eval(elementRule.insn);
-          const func = closure.asFunction();
+          const func = closure?.asFunction();
           if (func) {
             const result = callClosure(func, [], vm);
             return result;
@@ -8324,9 +8324,10 @@ function processNodeListHelper(nodeList: NodeList, vm: VM): ELObj {
       vm.currentNode = current;
 
       try {
-        if (rule) {
-          // Execute the rule's lambda
-          const func = rule.func!.asFunction();
+        if (rule && rule.insn) {
+          // Execute the rule's lambda - eval insn to get closure, then call it
+          const closure = vm.eval(rule.insn);
+          const func = closure?.asFunction();
           if (!func || !func.isClosure()) {
             throw new Error(`processNodeList: rule for '${gi}' must be a function`);
           }
