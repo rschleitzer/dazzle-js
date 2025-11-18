@@ -93,9 +93,11 @@ export abstract class CompoundFlowObj extends FlowObj {
   protected processInner(context: ProcessContext): void {
     if (this.content_) {
       this.content_.process(context);
+    } else {
+      // No explicit content - process children of current node
+      // Port from: FlowObj.cxx:188 context.processChildren(...)
+      context.processChildren();
     }
-    // OpenJade also calls: context.processChildren(...) if no content
-    // We'll add that later when we implement full DSSSL processing
   }
 }
 

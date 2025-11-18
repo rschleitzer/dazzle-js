@@ -138,7 +138,47 @@ export class ProcessContext {
    * Port from: ProcessContext.cxx ProcessChildrenSosofoObj::process()
    */
   processChildren(mode?: string): void {
-    // TODO: Implement full rule-based processing
-    // For now, this is a stub
+    // Get current node from VM
+    const currentNode = this.vm.currentNode;
+    if (!currentNode) {
+      return;
+    }
+
+    // Get children of current node
+    const children = currentNode.children();
+    if (!children) {
+      return;
+    }
+
+    // Process each child node
+    const processingMode = mode || '';
+    const previousNode = this.vm.currentNode;
+
+    for (let i = 0; i < children.length(); i++) {
+      const child = children.nth(i);
+      if (!child) continue;
+
+      // Set current node in VM
+      this.vm.currentNode = child;
+
+      try {
+        // Find rule for this element
+        const elementName = child.gi() || '';
+        const rule = this.vm.globals.ruleRegistry.findRule(elementName, processingMode, this.vm.globals);
+
+        if (rule) {
+          // Execute rule to get sosofo
+          const sosofo = this.vm.eval(rule.action);
+          const sosofoObj = sosofo?.asSosofo();
+          if (sosofoObj) {
+            this.process(sosofoObj);
+          }
+        }
+        // If no rule found, just skip this node (OpenJade behavior)
+      } finally {
+        // Restore previous node
+        this.vm.currentNode = previousNode;
+      }
+    }
   }
 }
