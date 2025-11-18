@@ -94,8 +94,40 @@ export class VM {
   public currentLine: number = 0;
   public currentColumn: number = 0;
 
+  /**
+   * Unit registry - maps unit names to conversion factors (in inches)
+   * Port from: Interpreter.h Unit registry
+   */
+  public unitRegistry: Map<string, number>;
+
   constructor() {
     this.initStack();
+    this.unitRegistry = this.initUnitRegistry();
+  }
+
+  /**
+   * Initialize unit registry with standard units
+   * Port from: Interpreter.cxx Interpreter::installUnits()
+   *
+   * OpenJade converts all units to "units per inch" internally.
+   * From Interpreter.cxx lines 2291-2308
+   */
+  private initUnitRegistry(): Map<string, number> {
+    const registry = new Map<string, number>();
+
+    // Port from: OpenJade Interpreter.cxx installUnits()
+    // unitsPerInch_ is 1000 in OpenJade, but we use 1 inch = 1.0 for simplicity
+    registry.set('m', 100 / 2.54);      // 1 meter = 100cm = 39.37 inches
+    registry.set('cm', 1 / 2.54);        // 1 cm = 0.3937 inches
+    registry.set('mm', 1 / 25.4);        // 1 mm = 0.03937 inches
+    registry.set('in', 1);               // 1 inch = 1 inch
+    registry.set('pt', 1 / 72);          // 1 point = 1/72 inch
+    registry.set('pica', 1 / 6);         // 1 pica = 1/6 inch
+    registry.set('pc', 1 / 6);           // 1 pc = 1/6 inch (DSSSL2)
+    registry.set('px', 1 / 96);          // 1 pixel = 1/96 inch (CSS)
+    registry.set('em', 1 / 6);           // 1 em = 1 pica (approximate)
+
+    return registry;
   }
 
   /**

@@ -175,15 +175,30 @@ export class SimplePageSequenceFlowObj extends CompoundFlowObj {
 
   /**
    * Convert characteristic value to string (with unit conversion)
+   * Port from: OpenJade - QuantityObj stores values in inches internally
    */
   private characteristicToString(value: ELObj): string | null {
     // Check if it's a quantity (length with unit)
     const qty = value.asQuantity?.();
     if (qty) {
-      // Convert to points (OpenJade standard unit)
-      // 1cm = 28.3464pt, 1in = 72pt, 1mm = 2.83464pt
-      const val = qty.value;
-      const unit = qty.unit;
+      // Port from: OpenJade stores all quantities as "units per inch" internally
+      // After resolution, qty.value is already in inches, so we just convert to points
+      const valueInInches = qty.value;
+      const pts = valueInInches * 72;  // 1 inch = 72 points
+
+      // Truncate to 3 decimal places (thousandths of a point) to match OpenJade
+      const truncated = Math.floor(pts * 1000) / 1000;
+
+      // Remove trailing zeros and unnecessary decimal point
+      const formatted = truncated.toString().replace(/\.?0+$/, '');
+      return `${formatted}pt`;
+    }
+
+    // Handle old code path (before proper unit resolution) - can be removed later
+    // This is kept for backwards compatibility with any remaining cases
+    if (false) {
+      const val = qty!.value;
+      const unit = qty!.unit;
 
       let pts: number;
       switch (unit) {

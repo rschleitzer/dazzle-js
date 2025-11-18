@@ -17,6 +17,7 @@ import {
   makeChar,
   makePair,
   makeVector,
+  makeUnresolvedQuantity,
   theNilObj,
   theTrueObj,
   theFalseObj,
@@ -346,7 +347,38 @@ export class Parser {
       throw this.error(`Invalid number: ${numStr}`);
     }
 
-    // Check if exact (integer)
+    // Port from: OpenJade Interpreter::convertNumber and scanUnit
+    // Check for unit suffix (e.g., 10cm, 12pt, 1.5in)
+    let unitName = '';
+    while (!this.isAtEnd() && this.isIdentifierChar(this.peek()) && !this.isDigit(this.peek())) {
+      unitName += this.advance();
+    }
+
+    if (unitName) {
+      // Parse optional unit exponent (e.g., cm2, m-1)
+      let unitExp = 1;
+      if (!this.isAtEnd() && (this.peek() === '-' || this.peek() === '+' || this.isDigit(this.peek()))) {
+        let expStr = '';
+        const negativeExp = this.peek() === '-';
+        if (this.peek() === '-' || this.peek() === '+') {
+          expStr += this.advance();
+        }
+        while (this.isDigit(this.peek())) {
+          expStr += this.advance();
+        }
+        if (expStr) {
+          unitExp = parseInt(expStr, 10);
+          if (isNaN(unitExp)) {
+            unitExp = 1;
+          }
+        }
+      }
+
+      // Return unresolved quantity - will be resolved later
+      return makeUnresolvedQuantity(value, unitName, unitExp);
+    }
+
+    // Plain number without unit
     const exact = Number.isInteger(value);
     return makeNumber(value, exact);
   }

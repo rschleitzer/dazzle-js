@@ -211,7 +211,7 @@ export class FotBackend implements FotBuilder {
    */
   end(): void {
     this.closeText();
-    this.output += '</fot>\n';
+    this.output += '</fot>';
   }
 
   /**

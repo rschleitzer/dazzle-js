@@ -9,6 +9,7 @@ import {
   type ELObj,
   type Signature,
   PairObj,
+  UnresolvedQuantityObj,
   makeSymbol,
   makePair,
   makeBox,
@@ -422,7 +423,8 @@ export class Compiler {
    */
   compile(expr: ELObj, env: Environment, stackPos: number = 0, next: Insn | null = null): Insn {
     // Self-evaluating constants
-    if (expr.asNumber() || expr.asString() || expr.asBoolean() || expr.asChar() || expr.asKeyword()) {
+    // Port from: OpenJade - UnresolvedQuantityObj is a literal that evaluates to itself
+    if (expr.asNumber() || expr.asString() || expr.asBoolean() || expr.asChar() || expr.asKeyword() || expr instanceof UnresolvedQuantityObj) {
       return new ConstantInsn(expr, next);
     }
 

@@ -13,6 +13,7 @@ import {
   PairObj,
   SosofoObj,
   QuantityObj,
+  UnresolvedQuantityObj,
   makeNumber,
   makeBoolean,
   makePair,
@@ -8424,9 +8425,19 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
         throw new Error(`make: keyword ${keyword.name}: requires a value`);
       }
       i++;
-      const value = args[i];
+      let value = args[i];
 
-      // Store characteristic (for now, store the raw value)
+      // Port from: OpenJade resolveQuantities
+      // Resolve unresolved quantities to quantities
+      if (value instanceof UnresolvedQuantityObj) {
+        const resolved = value.resolve(vm.unitRegistry);
+        if (!resolved) {
+          throw new Error(`make: unknown unit '${value.unitName}'`);
+        }
+        value = resolved;
+      }
+
+      // Store characteristic
       characteristics[keyword.name] = value;
       contentStart = i + 1;
     } else {

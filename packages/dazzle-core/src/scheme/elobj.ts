@@ -298,6 +298,50 @@ export class QuantityObj extends ELObj {
 }
 
 /**
+ * Unresolved Quantity - Port from OpenJade UnresolvedQuantityObj
+ *
+ * Represents a quantity literal like "10cm" before unit resolution.
+ * OpenJade stores these and resolves them later via resolveQuantities().
+ *
+ * Port from: ELObj.h class UnresolvedQuantityObj
+ */
+export class UnresolvedQuantityObj extends ELObj {
+  constructor(
+    public value: number,
+    public unitName: string,
+    public unitExp: number = 1
+  ) {
+    super();
+  }
+
+  /**
+   * Resolve this unresolved quantity to a QuantityObj
+   * Port from: OpenJade UnresolvedQuantityObj::resolveQuantities
+   *
+   * @param unitRegistry Map of unit names to conversion factors (to inches)
+   */
+  resolve(unitRegistry: Map<string, number>): QuantityObj | null {
+    const unitValue = unitRegistry.get(this.unitName);
+    if (unitValue === undefined) {
+      return null;  // Unknown unit
+    }
+
+    // Calculate value in inches (OpenJade's internal representation)
+    const valueInInches = this.value * Math.pow(unitValue, this.unitExp);
+
+    // Return QuantityObj with original unit for display
+    return new QuantityObj(valueInInches, this.unitName);
+  }
+
+  toString(): string {
+    if (this.unitExp === 1) {
+      return `${this.value}${this.unitName}`;
+    }
+    return `${this.value}${this.unitName}${this.unitExp}`;
+  }
+}
+
+/**
  * Sosofo (Specification of a Sequence of Flow Objects)
  * Port from: OpenJade style/SosofoObj.h class SosofoObj : public ELObj
  *
@@ -448,6 +492,10 @@ export function makeNodeList(nodes: NodeList): NodeListObj {
 
 export function makeQuantity(value: number, unit: string): QuantityObj {
   return new QuantityObj(value, unit);
+}
+
+export function makeUnresolvedQuantity(value: number, unitName: string, unitExp: number = 1): UnresolvedQuantityObj {
+  return new UnresolvedQuantityObj(value, unitName, unitExp);
 }
 
 export function makeSosofo(type: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal', data?: unknown): SosofoObj {
