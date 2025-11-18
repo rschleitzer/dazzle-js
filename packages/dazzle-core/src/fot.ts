@@ -91,4 +91,47 @@ export interface FotBuilder {
    * Port from: FOTBuilder destructor
    */
   end(): void;
+
+  // ============ Print Flow Objects (optional) ============
+  // Port from: OpenJade jade/SgmlFOTBuilder.cxx
+  // These are used by print backends (FOT, RTF, PDF) but not by SGML backend
+
+  /**
+   * Start a simple-page-sequence flow object
+   * Port from: SgmlFOTBuilder.cxx
+   */
+  startSimplePageSequence?(properties?: Record<string, string>): void;
+
+  /**
+   * End a simple-page-sequence flow object
+   */
+  endSimplePageSequence?(): void;
+
+  /**
+   * Start a scroll flow object
+   * Port from: SgmlFOTBuilder.cxx
+   */
+  startScroll?(): void;
+
+  /**
+   * End a scroll flow object
+   */
+  endScroll?(): void;
+
+  /**
+   * Start a paragraph flow object
+   * Port from: SgmlFOTBuilder.cxx
+   */
+  startParagraph?(properties?: Record<string, string>): void;
+
+  /**
+   * End a paragraph flow object
+   */
+  endParagraph?(): void;
+
+  /**
+   * Get the generated output (for backends that buffer output)
+   * Used by FOT backend to retrieve the complete XML output
+   */
+  getOutput?(): string;
 }
