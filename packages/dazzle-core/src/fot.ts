@@ -130,6 +130,13 @@ export interface FotBuilder {
   endParagraph?(): void;
 
   /**
+   * Page number sosofo - outputs current page number
+   * Port from: OpenJade ProcessContext.cxx PageNumberSosofoObj::process()
+   * Port from: OpenJade FOTBuilder.h currentNodePageNumber
+   */
+  pageNumber?(): void;
+
+  /**
    * Get the generated output (for backends that buffer output)
    * Used by FOT backend to retrieve the complete XML output
    */

@@ -32,6 +32,13 @@ export interface ConstructionRule {
   func?: ELObj;
 
   /**
+   * Compiled bytecode instruction - cached after first compilation
+   * Port from: OpenJade stores both the closure (func) and the bytecode (insn)
+   * The bytecode is re-evaluated each time to create a fresh closure with correct stack frames
+   */
+  insn?: any;
+
+  /**
    * Uncompiled lambda expression - compiled on first match
    */
   lambdaExpr?: ELObj;
@@ -133,12 +140,15 @@ export class RuleRegistry {
         const compiler = new Compiler(globals);
         const insn = compiler.compile(rule.lambdaExpr, new Environment(), 0, null);
 
-        // Execute to get the closure
+        // Execute to get the closure (for backwards compatibility)
         const vm = new VM();
         vm.globals = globals;
         const func = vm.eval(insn);
 
-        // Cache the compiled function
+        // Cache BOTH the bytecode instruction AND the function
+        // Port from: OpenJade caches the instruction so it can be re-evaluated
+        // to create fresh closures with correct stack frames
+        rule.insn = insn;
         rule.func = func;
         delete rule.lambdaExpr;  // Free the AST
         delete rule.beingCompiled;

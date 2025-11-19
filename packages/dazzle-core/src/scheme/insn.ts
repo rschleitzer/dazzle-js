@@ -281,6 +281,9 @@ export class StackRefInsn extends Insn {
     // - vm.sp[index] is equivalent to vm.frame[frameIndex]
     //
     // Use frame-relative access for correctness across different call depths
+    if (process.env.DEBUG_INSN) {
+      console.error(`[StackRefInsn] Accessing frame[${this.frameIndex}], frameIndex=${vm.frameIndex}, sp=${vm.sp}`);
+    }
     let value = vm.getFrame(this.frameIndex);
 
     // Auto-unbox if this is a boxed value (for letrec variables)

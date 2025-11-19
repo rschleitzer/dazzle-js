@@ -403,10 +403,10 @@ export class ColorObj extends ELObj {
  * Here we use it both as a base class and for simple sosofo types.
  */
 export class SosofoObj extends ELObj {
-  public type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal';
+  public type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'page-number';
   public data?: unknown;
 
-  constructor(type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal', data?: unknown) {
+  constructor(type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'page-number', data?: unknown) {
     super();
     this.type = type;
     this.data = data;
@@ -549,7 +549,7 @@ export function makeUnresolvedQuantity(value: number, unitName: string, unitExp:
   return new UnresolvedQuantityObj(value, unitName, unitExp);
 }
 
-export function makeSosofo(type: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal', data?: unknown): SosofoObj {
+export function makeSosofo(type: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'page-number', data?: unknown): SosofoObj {
   return new SosofoObj(type, data);
 }
 

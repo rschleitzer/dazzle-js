@@ -129,6 +129,15 @@ export class ProcessContext {
         break;
       }
 
+      case 'page-number': {
+        // Page number sosofo - call pageNumber() on backend
+        // Port from: OpenJade ProcessContext.cxx PageNumberSosofoObj::process()
+        if (this.fotBuilder.pageNumber) {
+          this.fotBuilder.pageNumber();
+        }
+        break;
+      }
+
       default:
         // Unknown sosofo type - ignore
         break;

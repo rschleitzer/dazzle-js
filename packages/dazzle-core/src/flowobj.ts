@@ -312,6 +312,96 @@ export class ParagraphFlowObj extends CompoundFlowObj {
 }
 
 /**
+ * Entity FlowObj - Opens a file for output
+ * Port from: OpenJade TransformFOTBuilder entity handling
+ *
+ * Used by SGML backend for code generation - opens a file specified by system-id.
+ */
+export class EntityFlowObj extends CompoundFlowObj {
+  private systemId: string | null = null;
+
+  /**
+   * Set the system-id characteristic (file path)
+   */
+  setNonInheritedC(name: string, value: ELObj): void {
+    if (name === 'system-id') {
+      const str = value.asString();
+      this.systemId = str ? str.value : null;
+    }
+  }
+
+  hasNonInheritedC(name: string): boolean {
+    return name === 'system-id';
+  }
+
+  /**
+   * Process this flow object
+   */
+  protected processInner(context: ProcessContext): void {
+    const fotb = context.currentFOTBuilder();
+
+    if (fotb.startEntity && this.systemId) {
+      fotb.startEntity(this.systemId);
+    }
+
+    // Process child content
+    super.processInner(context);
+
+    if (fotb.endEntity) {
+      fotb.endEntity();
+    }
+  }
+
+  copy(): FlowObj {
+    const copy = new EntityFlowObj();
+    copy.systemId = this.systemId;
+    copy.content_ = this.content_;
+    return copy;
+  }
+}
+
+/**
+ * FormattingInstruction FlowObj - Writes raw text output
+ * Port from: OpenJade TransformFOTBuilder formatting-instruction handling
+ *
+ * Used by SGML backend for code generation - writes raw text to current output stream.
+ */
+export class FormattingInstructionFlowObj extends FlowObj {
+  private dataContent: string | null = null;
+
+  /**
+   * Set the data characteristic (text to write)
+   */
+  setNonInheritedC(name: string, value: ELObj): void {
+    if (name === 'data') {
+      const str = value.asString();
+      this.dataContent = str ? str.value : null;
+    }
+  }
+
+  hasNonInheritedC(name: string): boolean {
+    return name === 'data';
+  }
+
+  /**
+   * Process this flow object
+   */
+  protected processInner(context: ProcessContext): void {
+    const fotb = context.currentFOTBuilder();
+
+    if (fotb.formattingInstruction && this.dataContent) {
+      fotb.formattingInstruction(this.dataContent);
+    }
+  }
+
+  copy(): FlowObj {
+    const copy = new FormattingInstructionFlowObj();
+    copy.dataContent = this.dataContent;
+    return copy;
+  }
+}
+
+/**
  * Flow object factory
  * Creates flow objects by class name
  */
@@ -323,6 +413,10 @@ export function createFlowObj(className: string): FlowObj | null {
       return new ScrollFlowObj();
     case 'paragraph':
       return new ParagraphFlowObj();
+    case 'entity':
+      return new EntityFlowObj();
+    case 'formatting-instruction':
+      return new FormattingInstructionFlowObj();
     default:
       return null;
   }
