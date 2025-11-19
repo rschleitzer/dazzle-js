@@ -232,12 +232,35 @@ export class Parser {
    * Parse character literal
    * Port from: SchemeParser::parseDatum handling #\
    *
-   * Supports DSSSL SGML entity references: #\&NAME
-   * where NAME is an SGML function character name (RE, RS, SPACE, TAB)
+   * Supports:
+   * - Unicode literals: #\U-XXXX (4 hex digits)
+   * - DSSSL SGML entity references: #\&NAME
+   * - Named characters: #\newline, #\space, etc.
+   * - Single characters: #\a, #\b, etc.
    */
   private parseChar(): ELObj {
     const start = this.pos;
     const ch = this.peek();
+
+    // Unicode character literal: #\U-XXXX
+    // Port from: OpenJade Unicode character support
+    if (ch === 'U' && this.peekAhead(1) === '-') {
+      this.advance(); // skip 'U'
+      this.advance(); // skip '-'
+
+      // Read 4 hex digits
+      let hexStr = '';
+      for (let i = 0; i < 4; i++) {
+        const digit = this.peek();
+        if (!this.isHexDigit(digit)) {
+          throw this.error(`Expected 4 hex digits after U-, got: ${hexStr + digit}`);
+        }
+        hexStr += this.advance();
+      }
+
+      const codePoint = parseInt(hexStr, 16);
+      return makeChar(String.fromCharCode(codePoint));
+    }
 
     // DSSSL SGML entity reference: #\&name
     // Port from: OpenJade SGML function character support

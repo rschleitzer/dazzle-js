@@ -282,7 +282,7 @@ export class StackRefInsn extends Insn {
     //
     // Use frame-relative access for correctness across different call depths
     if (process.env.DEBUG_INSN) {
-      console.error(`[StackRefInsn] Accessing frame[${this.frameIndex}], frameIndex=${vm.frameIndex}, sp=${vm.sp}`);
+      console.error(`[StackRefInsn] Accessing frame[${this.frameIndex}], frameIndex=${vm.frameIndex}`);
     }
     let value = vm.getFrame(this.frameIndex);
 

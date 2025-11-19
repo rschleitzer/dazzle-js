@@ -8748,6 +8748,87 @@ const entityGeneratedSystemIdPrimitive: PrimitiveFunction = (_args: ELObj[], _vm
 };
 
 /**
+ * entity-notation - Get notation for an entity
+ * Port from: primitive.cxx EntityNotation
+ */
+const entityNotationPrimitive: PrimitiveFunction = (_args: ELObj[], _vm: VM): ELObj => {
+  // TODO: Implement proper entity notation if needed
+  return theFalseObj;
+};
+
+/**
+ * sgml-parse - Parse SGML/XML string into grove
+ * Port from: OpenJade extension (not in DSSSL standard)
+ */
+const sgmlParsePrimitive: PrimitiveFunction = (_args: ELObj[], _vm: VM): ELObj => {
+  // TODO: Implement dynamic SGML/XML parsing if needed
+  // For now, return #f since most stylesheets don't use this
+  return theFalseObj;
+};
+
+/**
+ * absolute-first-sibling? - Check if node is the first child of its parent
+ * Port from: OpenJade extension (likely defined in print stylesheets)
+ */
+const absoluteFirstSiblingPrimitive: PrimitiveFunction = (args: ELObj[], _vm: VM): ELObj => {
+  if (args.length !== 1) {
+    throw new Error(`absolute-first-sibling?: expected 1 argument, got ${args.length}`);
+  }
+
+  const nodeObj = args[0].asNode();
+  if (!nodeObj) {
+    throw new Error('absolute-first-sibling?: argument must be a node');
+  }
+
+  const node = nodeObj.node;
+  const parent = node.parent();
+  if (!parent) {
+    return theFalseObj;  // Root has no siblings
+  }
+
+  const children = parent.children();
+  const first = children.first();
+
+  return makeBoolean(first === node);
+};
+
+/**
+ * absolute-last-sibling? - Check if node is the last child of its parent
+ * Port from: OpenJade extension (likely defined in print stylesheets)
+ */
+const absoluteLastSiblingPrimitive: PrimitiveFunction = (args: ELObj[], _vm: VM): ELObj => {
+  if (args.length !== 1) {
+    throw new Error(`absolute-last-sibling?: expected 1 argument, got ${args.length}`);
+  }
+
+  const nodeObj = args[0].asNode();
+  if (!nodeObj) {
+    throw new Error('absolute-last-sibling?: argument must be a node');
+  }
+
+  const node = nodeObj.node;
+  const parent = node.parent();
+  if (!parent) {
+    return theFalseObj;  // Root has no siblings
+  }
+
+  let childList = parent.children();
+
+  // Find the last child by iterating through the list
+  let last: Node | null = null;
+  let current = childList.first();
+  while (current !== null) {
+    last = current;
+    const rest = childList.rest();
+    if (rest === null) break;
+    childList = rest;
+    current = childList.first();
+  }
+
+  return makeBoolean(last === node);
+};
+
+/**
  * process-root - Start DSSSL processing from the document root
  * Port from: primitive.cxx ProcessRoot::primitiveCall
  *
@@ -9529,6 +9610,10 @@ export const standardPrimitives: Record<string, ELObj> = {
   'sosofo-append': new FunctionObj('sosofo-append', sosofoAppendPrimitive),
   'page-number-sosofo': new FunctionObj('page-number-sosofo', pageNumberSosofoPrimitive),
   'entity-generated-system-id': new FunctionObj('entity-generated-system-id', entityGeneratedSystemIdPrimitive),
+  'entity-notation': new FunctionObj('entity-notation', entityNotationPrimitive),
+  'sgml-parse': new FunctionObj('sgml-parse', sgmlParsePrimitive),
+  'absolute-first-sibling?': new FunctionObj('absolute-first-sibling?', absoluteFirstSiblingPrimitive),
+  'absolute-last-sibling?': new FunctionObj('absolute-last-sibling?', absoluteLastSiblingPrimitive),
   'make-flow-object': new FunctionObj('make-flow-object', makeFlowObjectPrimitive),
 
   // DSSSL color primitives

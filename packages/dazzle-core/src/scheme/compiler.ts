@@ -967,7 +967,14 @@ export class Compiler {
       for (const binding of bindings) {
         const bindingList = this.listToArray(binding);
         if (bindingList.length !== 2) {
-          throw new Error('let binding must have exactly 2 elements');
+          const elements = bindingList.map(e => {
+            const sym = e.asSymbol();
+            if (sym) return sym.name;
+            const str = e.asString();
+            if (str) return `"${str.value}"`;
+            return e.constructor.name;
+          }).join(', ');
+          throw new Error(`let binding must have exactly 2 elements, got ${bindingList.length}: (${elements})`);
         }
         const varSym = bindingList[0].asSymbol();
         if (!varSym) {
@@ -1014,7 +1021,7 @@ export class Compiler {
       }
       const bindingList = this.listToArray(binding);
       if (bindingList.length !== 2) {
-        throw new Error('let binding must have exactly 2 elements');
+        throw new Error(`let binding must have exactly 2 elements, got ${bindingList.length}`);
       }
 
       const name = bindingList[0].asSymbol();
