@@ -717,6 +717,22 @@ export class Compiler {
     // Parameters are at frame positions 0..nParams-1, so body starts at nParams
     const bodyInsn = this.compile(body, lambdaEnv, paramNames.length, new ReturnInsn(paramNames.length));
 
+    // Compile optional parameter default value expressions
+    // Port from: OpenJade compiles default expressions to instructions
+    const compiledDefaults: Insn[] = [];
+    for (const defaultExpr of optionalDefaults) {
+      if (!defaultExpr || defaultExpr === theFalseObj) {
+        // No default value specified or explicitly #f, use #f
+        compiledDefaults.push(new ConstantInsn(theFalseObj, null));
+      } else {
+        // Compile the default expression
+        // Default expressions are evaluated in the lambda's environment
+        // but BEFORE the parameters are bound, so use the outer environment
+        const defaultInsn = this.compile(defaultExpr, env, stackPos, null);
+        compiledDefaults.push(defaultInsn);
+      }
+    }
+
     // Build signature
     // Port from: OpenJade Expression.cxx parseFormalArguments signature building
     const signature: Signature = {
@@ -724,14 +740,13 @@ export class Compiler {
       nOptionalArgs: nOptionalParams,
       restArg: hasRestArg,
       nKeyArgs: 0,
+      optionalDefaults: compiledDefaults.length > 0 ? compiledDefaults : undefined,
     };
 
     // Port from: OpenJade Expression.cxx lines 602-636
     // If function has optional args or rest arg, wrap body with VarargsInsn
     let closureCode: Insn | null = bodyInsn;
     if (hasRestArg || nOptionalParams > 0) {
-      // TODO: Handle optional parameter defaults
-      // For now, VarargsInsn will fill in missing optional params with #f
       closureCode = new VarargsInsn(signature, bodyInsn);
     }
 

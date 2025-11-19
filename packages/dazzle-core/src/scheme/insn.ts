@@ -671,12 +671,29 @@ export class VarargsInsn extends Insn {
       const nOptionalProvided = Math.max(0, Math.min(nOptional, nActual - nRequired));
       const nOptionalMissing = nOptional - nOptionalProvided;
 
-      // Fill in missing optional parameters with #f
-      // Port from: OpenJade - default optional args to #f
+      // Fill in missing optional parameters
+      // Port from: OpenJade evaluates default value expressions for missing optional args
       // Stack layout (top to bottom): [opt_n ... opt_1] [req_n ... req_1]
-      // We need to insert #f for missing optional args
+      // We need to evaluate default expressions for missing optional args
       for (let i = 0; i < nOptionalMissing; i++) {
-        vm.push(theFalseObj);
+        // Get the default value instruction for this optional parameter
+        // Optional parameters are indexed from the first missing one
+        const defaultIndex = nOptionalProvided + i;
+
+        if (this.signature.optionalDefaults && defaultIndex < this.signature.optionalDefaults.length) {
+          // Execute the default value instruction
+          const defaultInsn = this.signature.optionalDefaults[defaultIndex];
+          let currentInsn: Insn | null = defaultInsn;
+
+          // Execute instruction chain until we get the value
+          while (currentInsn) {
+            currentInsn = currentInsn.execute(vm);
+          }
+          // The value is now on the stack
+        } else {
+          // No default value expression, use #f
+          vm.push(theFalseObj);
+        }
       }
     }
 
