@@ -121,6 +121,13 @@ export function callClosure(func: FunctionObj, args: ELObj[], vm: VM): ELObj {
   // Result is now on top of stack
   const result = vm.pop();
 
+  if (process.env.DEBUG_RULES) {
+    const sosofo = result.asSosofo();
+    if (sosofo) {
+      console.error(`callClosure result: ${result.constructor.name}, type: ${sosofo.type || 'FlowObj'}`);
+    }
+  }
+
   // CRITICAL FIX: Restore stack to initial state
   // The closure execution might have left values on the stack (e.g. in nested calls)
   // We need to pop everything down to the initial stack size
