@@ -130,6 +130,17 @@ export interface FotBuilder {
   endParagraph?(): void;
 
   /**
+   * Start a display-group flow object
+   * Port from: OpenJade FOTBuilder.h
+   */
+  startDisplayGroup?(properties?: Record<string, string>): void;
+
+  /**
+   * End a display-group flow object
+   */
+  endDisplayGroup?(): void;
+
+  /**
    * Page number sosofo - outputs current page number
    * Port from: OpenJade ProcessContext.cxx PageNumberSosofoObj::process()
    * Port from: OpenJade FOTBuilder.h currentNodePageNumber

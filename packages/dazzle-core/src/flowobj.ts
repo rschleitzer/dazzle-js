@@ -445,6 +445,42 @@ export class SequenceFlowObj extends CompoundFlowObj {
 }
 
 /**
+ * DisplayGroup FlowObj
+ * Port from: OpenJade style/FlowObj.cxx DisplayGroupFlowObj
+ *
+ * Display block container - like sequence but represents a display-level block.
+ * Used for grouping content that should be kept together.
+ */
+export class DisplayGroupFlowObj extends CompoundFlowObj {
+  /**
+   * Process this flow object
+   * Port from: DisplayGroupFlowObj::processInner()
+   */
+  protected processInner(context: ProcessContext): void {
+    const fotb = context.currentFOTBuilder();
+
+    // Start display group
+    if (fotb.startDisplayGroup) {
+      fotb.startDisplayGroup();
+    }
+
+    // Process child content
+    super.processInner(context);
+
+    // End display group
+    if (fotb.endDisplayGroup) {
+      fotb.endDisplayGroup();
+    }
+  }
+
+  copy(): FlowObj {
+    const copy = new DisplayGroupFlowObj();
+    copy.content_ = this.content_;
+    return copy;
+  }
+}
+
+/**
  * Flow object factory
  * Creates flow objects by class name
  */
@@ -458,6 +494,8 @@ export function createFlowObj(className: string): FlowObj | null {
       return new ScrollFlowObj();
     case 'paragraph':
       return new ParagraphFlowObj();
+    case 'display-group':
+      return new DisplayGroupFlowObj();
     case 'entity':
       return new EntityFlowObj();
     case 'formatting-instruction':
