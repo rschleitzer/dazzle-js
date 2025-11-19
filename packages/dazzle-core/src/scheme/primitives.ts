@@ -8996,6 +8996,27 @@ const processChildrenPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELO
 };
 
 /**
+ * process-children-trim - Process children with whitespace trimming
+ * Port from: primitive.h PRIMITIVE(ProcessChildrenTrim, "process-children-trim", 0, 0, 0)
+ * Port from: primitive.cxx ProcessChildrenTrim::primitiveCall
+ *
+ * Like process-children, but trims leading and trailing whitespace from text nodes.
+ */
+const processChildrenTrimPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 0) {
+    throw new Error('process-children-trim takes no arguments');
+  }
+
+  if (!vm.processingMode) {
+    throw new Error('process-children-trim: no current processing mode');
+  }
+
+  // Return a sosofo that will trim children during processing
+  // Port from: OpenJade returns new ProcessChildrenTrimSosofoObj(context.processingMode)
+  return makeSosofo('process-children-trim', { mode: vm.processingMode });
+};
+
+/**
  * process-node-list - Process a node list
  * Port from: primitive.cxx ProcessNodeList::primitiveCall
  */
@@ -9689,6 +9710,7 @@ export const standardPrimitives: Record<string, ELObj> = {
   'current-node': new FunctionObj('current-node', currentNodePrimitive),
   'process-root': new FunctionObj('process-root', processRootPrimitive),
   'process-children': new FunctionObj('process-children', processChildrenPrimitive),
+  'process-children-trim': new FunctionObj('process-children-trim', processChildrenTrimPrimitive),
   'process-node-list': new FunctionObj('process-node-list', processNodeListPrimitive),
   'next-match': new FunctionObj('next-match', nextMatchPrimitive),
   'empty-sosofo': new FunctionObj('empty-sosofo', emptySosofoPrimitive),
