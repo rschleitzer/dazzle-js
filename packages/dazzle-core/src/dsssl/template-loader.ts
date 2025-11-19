@@ -23,13 +23,15 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { Catalog } from './catalog.js';
 
 /**
  * Entity declaration from DOCTYPE
  */
 interface Entity {
   name: string;
-  systemId: string;
+  systemId?: string;  // SYSTEM identifier (file path) - optional for PUBLIC-only entities
+  publicId?: string;  // PUBLIC identifier - optional
 }
 
 /**
@@ -55,17 +57,22 @@ export interface TemplateResult {
  * Load and process a DSSSL template
  *
  * @param templatePath Path to template file
- * @param searchPaths Additional search paths for entity resolution
+ * @param searchPaths Additional search paths for entity resolution and catalog loading
  * @returns Scheme code ready for parsing
  */
 export function loadTemplate(templatePath: string, searchPaths: string[] = []): TemplateResult {
   const content = fs.readFileSync(templatePath, 'utf-8');
   const templateDir = path.dirname(templatePath);
 
+  // Load catalogs from search paths
+  // Port from: OpenJade command-line catalog handling
+  const allSearchPaths = [templateDir, ...searchPaths];
+  const catalog = Catalog.loadFromSearchPaths(allSearchPaths);
+
   // Detect format
   if (content.trim().startsWith('<?xml') || content.trim().startsWith('<')) {
     // XML format - parse and extract
-    return loadXmlTemplate(content, templatePath, templateDir, searchPaths);
+    return loadXmlTemplate(content, templatePath, templateDir, searchPaths, catalog);
   } else {
     // Plain Scheme format - single file, simple source map
     const lineCount = content.split('\n').length;
@@ -85,9 +92,9 @@ export function loadTemplate(templatePath: string, searchPaths: string[] = []): 
 /**
  * Load XML-wrapped template
  */
-function loadXmlTemplate(content: string, templatePath: string, baseDir: string, searchPaths: string[]): TemplateResult {
+function loadXmlTemplate(content: string, templatePath: string, baseDir: string, searchPaths: string[], catalog: Catalog): TemplateResult {
   // Parse DOCTYPE for entity declarations (including from parameter entity files)
-  const entities = parseEntities(content, baseDir, searchPaths);
+  const entities = parseEntities(content, baseDir, searchPaths, catalog);
 
   // Parse external specifications
   // Port from: DSSSL style-sheet - <external-specification id="..." document="...">
@@ -113,13 +120,20 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
         continue;
       }
 
-      if (!entity.systemId) {
-        // PUBLIC-only entity with no SYSTEM path - skip (needs catalog resolution)
-        console.warn(`Warning: External specification "${spec.id}" references PUBLIC entity "${spec.document}" with no SYSTEM path - skipping`);
+      // Resolve entity path - try SYSTEM first, then PUBLIC via catalog
+      let systemId = entity.systemId;
+      if (!systemId && entity.publicId) {
+        // Try resolving PUBLIC identifier via catalog
+        systemId = catalog.resolve(entity.publicId) || undefined;
+      }
+
+      if (!systemId) {
+        // Entity has neither SYSTEM path nor resolvable PUBLIC identifier
+        console.warn(`Warning: External specification "${spec.id}" references entity "${spec.document}" that cannot be resolved - skipping`);
         continue;
       }
 
-      const specPath = resolveEntityPath(entity.systemId, baseDir, searchPaths);
+      const specPath = resolveEntityPath(systemId, baseDir, searchPaths);
       let specContent = fs.readFileSync(specPath, 'utf-8');
 
       // Check if this external spec is itself an XML-wrapped template
@@ -165,7 +179,19 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
   const entityReplacements: Array<{ ref: string; content: string; path: string }> = [];
 
   for (const entity of entities) {
-    const entityPath = resolveEntityPath(entity.systemId, baseDir, searchPaths);
+    // Resolve entity path - try SYSTEM first, then PUBLIC via catalog
+    let systemId = entity.systemId;
+    if (!systemId && entity.publicId) {
+      // Try resolving PUBLIC identifier via catalog
+      systemId = catalog.resolve(entity.publicId) || undefined;
+    }
+
+    if (!systemId) {
+      // Skip entities that cannot be resolved
+      continue;
+    }
+
+    const entityPath = resolveEntityPath(systemId, baseDir, searchPaths);
     let entityContent = fs.readFileSync(entityPath, 'utf-8');
 
     // Strip CDATA sections if present (used in some templates for XML escaping)
@@ -248,7 +274,7 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
  * - <!ENTITY name PUBLIC "pubid" CDATA DSSSL>
  * Also processes parameter entity references to extract entities from those files
  */
-function parseEntities(content: string, baseDir: string, searchPaths: string[]): Entity[] {
+function parseEntities(content: string, baseDir: string, searchPaths: string[], catalog: Catalog): Entity[] {
   const entities: Entity[] = [];
 
   // Match DOCTYPE declaration - case-insensitive, more flexible with whitespace
@@ -284,16 +310,20 @@ function parseEntities(content: string, baseDir: string, searchPaths: string[]):
         paramContent = paramContent.replace(/<!\[%[\w-]+;?\[\s*([\s\S]*?)\s*\]\]>/g, '$1');
 
         // Parse entity declarations from parameter entity file
-        const paramEntityRegex = /<!ENTITY\s+(?!%)([\w.-]+)\s+(?:SYSTEM\s+"([^"]+)"|PUBLIC\s+"[^"]+"\s*(?:"([^"]+)"|CDATA\s+DSSSL))\s*(?:CDATA\s+DSSSL)?\s*>/gi;
+        // Improved regex to capture both PUBLIC and SYSTEM identifiers
+        const paramEntityRegex = /<!ENTITY\s+(?!%)([\w.-]+)\s+(?:SYSTEM\s+"([^"]+)"|PUBLIC\s+"([^"]+)"(?:\s+"([^"]+)")?)?\s*(?:CDATA\s+DSSSL)?\s*>/gi;
         let paramMatch;
 
         while ((paramMatch = paramEntityRegex.exec(paramContent)) !== null) {
           const name = paramMatch[1];
-          const systemId = paramMatch[2] || paramMatch[3];
+          const systemId = paramMatch[2] || paramMatch[4]; // SYSTEM id or PUBLIC's optional SYSTEM id
+          const publicId = paramMatch[3]; // PUBLIC id
 
-          if (systemId) {
-            entities.push({ name, systemId });
-          }
+          entities.push({
+            name,
+            systemId,
+            publicId,
+          });
         }
       } catch (e) {
         // Parameter entity file not found - skip
@@ -302,18 +332,19 @@ function parseEntities(content: string, baseDir: string, searchPaths: string[]):
   }
 
   // Parse regular entity declarations from DOCTYPE
-  const entityRegex = /<!ENTITY\s+(?!%)([\w.-]+)\s+(?:SYSTEM\s+"([^"]+)"|PUBLIC\s+"[^"]+"\s*(?:"([^"]+)"|CDATA\s+DSSSL))\s*(?:CDATA\s+DSSSL)?\s*>/gi;
+  // Improved regex to capture both PUBLIC and SYSTEM identifiers
+  const entityRegex = /<!ENTITY\s+(?!%)([\w.-]+)\s+(?:SYSTEM\s+"([^"]+)"|PUBLIC\s+"([^"]+)"(?:\s+"([^"]+)")?)?\s*(?:CDATA\s+DSSSL)?\s*>/gi;
 
   while ((match = entityRegex.exec(doctype)) !== null) {
     const name = match[1];
-    const systemId = match[2] || match[3];
+    const systemId = match[2] || match[4]; // SYSTEM id or PUBLIC's optional SYSTEM id
+    const publicId = match[3]; // PUBLIC id
 
-    if (systemId) {
-      entities.push({
-        name,
-        systemId,
-      });
-    }
+    entities.push({
+      name,
+      systemId,
+      publicId,
+    });
   }
 
   return entities;
