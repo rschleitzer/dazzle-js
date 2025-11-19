@@ -126,7 +126,13 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
       let systemId = entity.systemId;
       if (!systemId && entity.publicId) {
         // Try resolving PUBLIC identifier via catalog
+        if (process.env.DEBUG_CATALOG) {
+          console.error(`DEBUG: Resolving PUBLIC "${entity.publicId}" for entity "${spec.document}"`);
+        }
         systemId = catalog.resolve(entity.publicId) || undefined;
+        if (process.env.DEBUG_CATALOG) {
+          console.error(`DEBUG: Resolved to: ${systemId || '(not found)'}`);
+        }
       }
 
       if (!systemId) {
@@ -138,6 +144,11 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
       const specPath = resolveEntityPath(systemId, baseDir, searchPaths);
       let specContent = fs.readFileSync(specPath, 'utf-8');
       let lineOffset = 0;
+
+      if (process.env.DEBUG_CATALOG) {
+        console.error(`DEBUG: Loading external spec from: ${specPath}`);
+        console.error(`DEBUG: Content length: ${specContent.length} bytes`);
+      }
 
       // Check if this external spec is itself an XML-wrapped template
       if (specContent.trim().startsWith('<?xml') || specContent.trim().startsWith('<!DOCTYPE')) {
@@ -155,6 +166,11 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
       specContent = specContent.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
       specContent = specContent.replace(/<!\[%[\w-]+;?\[\s*([\s\S]*?)\s*\]\]>/g, '$1');
 
+      if (process.env.DEBUG_CATALOG) {
+        console.error(`DEBUG: After processing, content length: ${specContent.length} bytes`);
+        console.error(`DEBUG: First 200 chars: ${specContent.substring(0, 200)}`);
+      }
+
       externalContents.push({ content: specContent, path: specPath, lineOffset });
     }
   }
@@ -169,6 +185,10 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
     const lines = external.content.split('\n');
     prependedLines.push(...lines);
 
+    if (process.env.DEBUG_CATALOG) {
+      console.error(`DEBUG: Prepending ${lines.length} lines from ${external.path}`);
+    }
+
     // Add source map entry for this external spec
     sourceMap.push({
       startLine: currentLine,
@@ -178,6 +198,10 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
     });
 
     currentLine += lines.length;
+  }
+
+  if (process.env.DEBUG_CATALOG) {
+    console.error(`DEBUG: Total prepended lines: ${prependedLines.length}`);
   }
 
   // Track all entity references and their positions

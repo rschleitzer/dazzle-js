@@ -8,7 +8,7 @@
 
 import type { ELObj } from './elobj.js';
 import type { VM } from './vm.js';
-import { FunctionObj, type Signature, theNilObj, makePair } from './elobj.js';
+import { FunctionObj, type Signature, theNilObj, theFalseObj, makePair } from './elobj.js';
 
 /**
  * Source location information
@@ -635,19 +635,19 @@ export class VarargsInsn extends Insn {
   execute(vm: VM): Insn | null {
     const nActual = vm.nActualArgs;
     const nRequired = this.signature.nRequiredArgs;
-    const stackBefore = vm.stackSize();
+    const nOptional = this.signature.nOptionalArgs;
+    const nTotal = nRequired + nOptional;
 
     // Port from: OpenJade Insn.cxx VarargsInsn::execute lines 689-735
-    // For now, simplified version: no optional args, no keyword args
     if (this.signature.restArg) {
-      // Number of extra arguments beyond required
-      const nExtra = nActual - nRequired;
+      // Calculate how many args go to rest (beyond required + optional)
+      const nRest = Math.max(0, nActual - nTotal);
 
-      if (nExtra > 0) {
+      if (nRest > 0) {
         // Pack extra arguments into a list (from top of stack backwards)
         // Port from: lines 695-702
         let restList: ELObj = theNilObj;
-        for (let i = 0; i < nExtra; i++) {
+        for (let i = 0; i < nRest; i++) {
           const arg = vm.pop();
           restList = makePair(arg, restList);
         }
@@ -656,6 +656,24 @@ export class VarargsInsn extends Insn {
       } else {
         // No extra args, push empty list for rest parameter
         vm.push(theNilObj);
+      }
+
+      // After handling rest args, we have nActual - nRest args on stack
+      // which should be nRequired + min(nActual - nRequired, nOptional)
+    }
+
+    // Handle optional parameters
+    if (nOptional > 0) {
+      // Calculate how many optional args were actually provided
+      const nOptionalProvided = Math.max(0, Math.min(nOptional, nActual - nRequired));
+      const nOptionalMissing = nOptional - nOptionalProvided;
+
+      // Fill in missing optional parameters with #f
+      // Port from: OpenJade - default optional args to #f
+      // Stack layout (top to bottom): [opt_n ... opt_1] [req_n ... req_1]
+      // We need to insert #f for missing optional args
+      for (let i = 0; i < nOptionalMissing; i++) {
+        vm.push(theFalseObj);
       }
     }
 
@@ -858,6 +876,44 @@ export class DefineUnitInsn extends Insn {
 
     // Push nil (define-unit returns nothing useful)
     vm.push(theNilObj);
+
+    return this.next;
+  }
+}
+
+/**
+ * WithMode instruction - Execute expression with temporary processing mode
+ * Port from: OpenJade Insn.h WithModeInsn (similar pattern)
+ *
+ * Syntax: (with-mode mode-name expr)
+ * Temporarily sets the processing mode to mode-name while evaluating expr,
+ * then restores the previous mode.
+ */
+export class WithModeInsn extends Insn {
+  constructor(
+    private modeName: string,
+    private body: Insn | null,
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Save current processing mode
+    const savedMode = vm.processingMode;
+
+    // Set new mode
+    vm.processingMode = this.modeName;
+
+    // Execute body with mode set
+    // Port from: OpenJade - modes affect rule matching in process-children
+    let insn = this.body;
+    while (insn) {
+      insn = insn.execute(vm);
+    }
+
+    // Restore previous mode
+    vm.processingMode = savedMode;
 
     return this.next;
   }

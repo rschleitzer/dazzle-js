@@ -41,6 +41,7 @@ import {
   VarargsInsn,
   ErrorInsn,
   DefineUnitInsn,
+  WithModeInsn,
 } from './insn.js';
 
 
@@ -487,6 +488,8 @@ export class Compiler {
             return this.compileRoot(pair.cdr, env, stackPos, next);
           case 'mode':
             return this.compileMode(pair.cdr, env, stackPos, next);
+          case 'with-mode':
+            return this.compileWithMode(pair.cdr, env, stackPos, next);
           // DSSSL declaration forms - no-ops for SGML backend (code generation)
           // Port from: OpenJade SchemeParser.cxx doDeclareCharacteristic, doDeclareFlowObjectClass, etc.
           // TODO: Implement when adding RTF/document formatting backends
@@ -587,39 +590,94 @@ export class Compiler {
 
     const params = this.listToArray(argsArray[0]);
     const paramNames: string[] = [];
+    const optionalDefaults: (ELObj | null)[] = [];
+    let nRequiredParams = 0;
+    let nOptionalParams = 0;
     let hasRestArg = false;
     let restArgName: string | null = null;
+    let inOptional = false;
 
-    // Parse parameters, handling #!rest
+    // Parse parameters, handling #!optional and #!rest
+    // Port from: OpenJade Expression.cxx parseFormalArguments
     for (let i = 0; i < params.length; i++) {
       const p = params[i];
+
+      // Check for keyword first
       const sym = p.asSymbol();
-      if (!sym) {
-        throw new Error('lambda parameter must be a symbol');
+      if (sym) {
+        // Check for #!optional keyword
+        if (sym.name === '#!optional') {
+          if (inOptional) {
+            throw new Error('duplicate #!optional in parameter list');
+          }
+          if (hasRestArg) {
+            throw new Error('#!optional cannot follow #!rest');
+          }
+          inOptional = true;
+          continue;
+        }
+
+        // Check for #!rest keyword
+        if (sym.name === '#!rest') {
+          if (i === params.length - 1) {
+            throw new Error('#!rest must be followed by a parameter name');
+          }
+          hasRestArg = true;
+          // Next parameter is the rest arg name
+          i++;
+          const restSym = params[i].asSymbol();
+          if (!restSym) {
+            throw new Error('rest parameter must be a symbol');
+          }
+          restArgName = restSym.name;
+          paramNames.push(restArgName);
+          // #!rest must be the last parameter specification
+          if (i !== params.length - 1) {
+            throw new Error('#!rest must be the last parameter specification');
+          }
+          break;
+        }
+
+        // Regular parameter name
+        if (inOptional) {
+          // Optional parameter (defaults to #f)
+          paramNames.push(sym.name);
+          optionalDefaults.push(theFalseObj);
+          nOptionalParams++;
+        } else {
+          // Required parameter
+          paramNames.push(sym.name);
+          nRequiredParams++;
+        }
+        continue;
       }
 
-      // Check for #!rest keyword
-      if (sym.name === '#!rest') {
-        if (i === params.length - 1) {
-          throw new Error('#!rest must be followed by a parameter name');
+      // Check for optional parameter with default value: (name default)
+      const pair = p.asPair();
+      if (pair) {
+        if (!inOptional) {
+          throw new Error('parameter default values require #!optional');
         }
-        hasRestArg = true;
-        // Next parameter is the rest arg name
-        i++;
-        const restSym = params[i].asSymbol();
-        if (!restSym) {
-          throw new Error('rest parameter must be a symbol');
+
+        // Parse (name default-value)
+        const nameArg = pair.car.asSymbol();
+        if (!nameArg) {
+          throw new Error('optional parameter name must be a symbol');
         }
-        restArgName = restSym.name;
-        paramNames.push(restArgName);
-        // #!rest must be the last parameter specification
-        if (i !== params.length - 1) {
-          throw new Error('#!rest must be the last parameter specification');
+
+        const defaultValueList = this.listToArray(pair.cdr);
+        if (defaultValueList.length !== 1) {
+          throw new Error('optional parameter must have exactly one default value');
         }
-        break;
+
+        paramNames.push(nameArg.name);
+        // Store the default value expression (will be evaluated later)
+        optionalDefaults.push(defaultValueList[0]);
+        nOptionalParams++;
+        continue;
       }
 
-      paramNames.push(sym.name);
+      throw new Error('lambda parameter must be a symbol or (name default) pair');
     }
 
     // Body is remaining arguments (implicit begin)
@@ -659,20 +717,21 @@ export class Compiler {
     // Parameters are at frame positions 0..nParams-1, so body starts at nParams
     const bodyInsn = this.compile(body, lambdaEnv, paramNames.length, new ReturnInsn(paramNames.length));
 
-    // Calculate required args (excluding rest arg if present)
-    const nRequiredArgs = hasRestArg ? paramNames.length - 1 : paramNames.length;
-
+    // Build signature
+    // Port from: OpenJade Expression.cxx parseFormalArguments signature building
     const signature: Signature = {
-      nRequiredArgs,
-      nOptionalArgs: 0,
+      nRequiredArgs: nRequiredParams,
+      nOptionalArgs: nOptionalParams,
       restArg: hasRestArg,
       nKeyArgs: 0,
     };
 
     // Port from: OpenJade Expression.cxx lines 602-636
-    // If function has rest arg, wrap body with VarargsInsn
+    // If function has optional args or rest arg, wrap body with VarargsInsn
     let closureCode: Insn | null = bodyInsn;
-    if (hasRestArg) {
+    if (hasRestArg || nOptionalParams > 0) {
+      // TODO: Handle optional parameter defaults
+      // For now, VarargsInsn will fill in missing optional params with #f
       closureCode = new VarargsInsn(signature, bodyInsn);
     }
 
@@ -1985,5 +2044,44 @@ export class Compiler {
 
     // Return no-op
     return new ConstantInsn(theNilObj, next);
+  }
+
+  /**
+   * Compile with-mode special form
+   * Port from: OpenJade Interpreter.cxx (similar pattern to process-node-list with mode)
+   *
+   * Syntax: (with-mode mode-name expr)
+   *
+   * Temporarily sets the processing mode to mode-name while evaluating expr.
+   */
+  private compileWithMode(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
+    const argsArray = this.listToArray(args);
+
+    if (argsArray.length !== 2) {
+      throw new Error('with-mode requires exactly 2 arguments: mode-name and expression');
+    }
+
+    // First arg is mode name (can be symbol or keyword)
+    const modeNameArg = argsArray[0];
+    let modeName: string;
+
+    const modeSym = modeNameArg.asSymbol();
+    const modeKeyword = modeNameArg.asKeyword();
+    if (modeSym) {
+      modeName = modeSym.name;
+    } else if (modeKeyword) {
+      modeName = modeKeyword.name;
+    } else {
+      throw new Error('with-mode requires a symbol or keyword for mode name');
+    }
+
+    // Second arg is the expression to evaluate with the mode set
+    const bodyExpr = argsArray[1];
+
+    // Compile the body expression
+    const bodyInsn = this.compile(bodyExpr, env, stackPos, null);
+
+    // Create WithModeInsn that wraps the body
+    return new WithModeInsn(modeName, bodyInsn, next);
   }
 }
