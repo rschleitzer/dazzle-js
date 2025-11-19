@@ -6469,7 +6469,19 @@ const nodeListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
     const nl = args[i].asNodeList();
     if (!nl) {
       const typeName = args[i].constructor.name;
-      throw new Error(`node-list: argument ${i+1} must be a node-list (got ${typeName})`);
+      // Show what value we got for better debugging
+      let valueStr = '';
+      const bool = args[i].asBoolean();
+      if (bool) {
+        valueStr = ` (value: ${bool.value ? '#t' : '#f'})`;
+      }
+      const str = args[i].asString();
+      if (str) {
+        valueStr = ` (value: "${str.value}")`;
+      }
+      // Show all argument types for debugging
+      const allArgTypes = args.map((arg, idx) => `${idx+1}:${arg.constructor.name}`).join(', ');
+      throw new Error(`node-list: argument ${i+1} must be a node-list (got ${typeName}${valueStr})\n  all args: [${allArgTypes}]\n  location: ${vm.currentFile}:${vm.currentLine}`);
     }
     nodeLists.push(nl.nodes);
   }
