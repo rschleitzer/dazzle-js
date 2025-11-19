@@ -8,7 +8,7 @@
  * - DSSSL processing context (current node, grove)
  */
 
-import type { ELObj } from './elobj.js';
+import type { ELObj, QuantityObj } from './elobj.js';
 import type { Insn } from './insn.js';
 import type { Node, Grove } from '../grove/index.js';
 import { makePair as makeELObjPair } from './elobj.js';
@@ -128,6 +128,18 @@ export class VM {
     registry.set('em', 1 / 6);           // 1 em = 1 pica (approximate)
 
     return registry;
+  }
+
+  /**
+   * Define a custom unit
+   * Port from: Interpreter.cxx Unit::setDefinition() and Unit::setValue()
+   *
+   * @param unitName The name of the unit
+   * @param quantity The quantity value (should be in inches)
+   */
+  defineUnit(unitName: string, quantity: QuantityObj): void {
+    // Store the unit's conversion factor (value in inches)
+    this.unitRegistry.set(unitName, quantity.value);
   }
 
   /**

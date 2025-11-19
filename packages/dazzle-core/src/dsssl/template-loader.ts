@@ -86,15 +86,80 @@ export function loadTemplate(templatePath: string, searchPaths: string[] = []): 
  * Load XML-wrapped template
  */
 function loadXmlTemplate(content: string, templatePath: string, baseDir: string, searchPaths: string[]): TemplateResult {
-  // Parse DOCTYPE for entity declarations
-  const entities = parseEntities(content);
+  // Parse DOCTYPE for entity declarations (including from parameter entity files)
+  const entities = parseEntities(content, baseDir, searchPaths);
+
+  // Parse external specifications
+  // Port from: DSSSL style-sheet - <external-specification id="..." document="...">
+  const externalSpecs = parseExternalSpecifications(content);
+
+  // Get the use attribute from style-specification
+  const usedSpecIds = parseStyleSpecificationUse(content);
 
   // Resolve entity references in content
   let schemeCode = extractStyleSpecification(content);
 
-  // Build source map as we replace entity references
+  // Prepend external specifications that are in the use list
+  // Port from: DSSSL - external specifications reference entities by name
+  const externalContents: Array<{ content: string; path: string }> = [];
+  for (const specId of usedSpecIds) {
+    const spec = externalSpecs.find(s => s.id === specId);
+    if (spec) {
+      // Look up the entity with this name to get the actual file path
+      const entity = entities.find(e => e.name === spec.document);
+      if (!entity) {
+        // Entity not found - skip (may be PUBLIC-only entity needing catalog)
+        console.warn(`Warning: External specification "${spec.id}" references undefined entity "${spec.document}" - skipping`);
+        continue;
+      }
+
+      if (!entity.systemId) {
+        // PUBLIC-only entity with no SYSTEM path - skip (needs catalog resolution)
+        console.warn(`Warning: External specification "${spec.id}" references PUBLIC entity "${spec.document}" with no SYSTEM path - skipping`);
+        continue;
+      }
+
+      const specPath = resolveEntityPath(entity.systemId, baseDir, searchPaths);
+      let specContent = fs.readFileSync(specPath, 'utf-8');
+
+      // Check if this external spec is itself an XML-wrapped template
+      if (specContent.trim().startsWith('<?xml') || specContent.trim().startsWith('<!DOCTYPE')) {
+        // Extract style-specification content from XML wrapper
+        try {
+          specContent = extractStyleSpecification(specContent);
+        } catch (e) {
+          // Not a valid XML template - use as-is
+        }
+      }
+
+      // Strip CDATA and marked sections
+      specContent = specContent.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
+      specContent = specContent.replace(/<!\[%[\w-]+;?\[\s*([\s\S]*?)\s*\]\]>/g, '$1');
+
+      externalContents.push({ content: specContent, path: specPath });
+    }
+  }
+
+  // Build source map starting with external specifications
   const sourceMap: SourceMapEntry[] = [];
   let currentLine = 1;
+  const prependedLines: string[] = [];
+
+  // Add external specifications first (they provide definitions used by main code)
+  for (const external of externalContents) {
+    const lines = external.content.split('\n');
+    prependedLines.push(...lines);
+
+    // Add source map entry for this external spec
+    sourceMap.push({
+      startLine: currentLine,
+      endLine: currentLine + lines.length - 1,
+      sourceFile: external.path,
+      sourceLine: 0,
+    });
+
+    currentLine += lines.length;
+  }
 
   // Track all entity references and their positions
   const entityReplacements: Array<{ ref: string; content: string; path: string }> = [];
@@ -162,15 +227,18 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
     }
   }
 
+  // Combine external specs + main code
+  const allLines = [...prependedLines, ...resultLines];
+
   return {
-    schemeCode: resultLines.join('\n'),
+    schemeCode: allLines.join('\n'),
     entities,
     sourceMap,
   };
 }
 
 /**
- * Parse entity declarations from DOCTYPE
+ * Parse entity declarations from DOCTYPE and parameter entity files
  *
  * Port from: OpenJade handles multiple entity declaration patterns
  * Extracts:
@@ -178,9 +246,9 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
  * - <!ENTITY name SYSTEM "file.scm" CDATA DSSSL>
  * - <!ENTITY name PUBLIC "pubid" "file.scm">
  * - <!ENTITY name PUBLIC "pubid" CDATA DSSSL>
- * Skips parameter entities (<!ENTITY % name ...>)
+ * Also processes parameter entity references to extract entities from those files
  */
-function parseEntities(content: string): Entity[] {
+function parseEntities(content: string, baseDir: string, searchPaths: string[]): Entity[] {
   const entities: Entity[] = [];
 
   // Match DOCTYPE declaration - case-insensitive, more flexible with whitespace
@@ -191,15 +259,54 @@ function parseEntities(content: string): Entity[] {
 
   const doctype = doctypeMatch[1];
 
-  // Match entity declarations with various formats
-  // Pattern: <!ENTITY (not %) name SYSTEM "file" or PUBLIC "pubid" optional("file" or CDATA DSSSL) optional(CDATA DSSSL)>
-  // Entity names can contain letters, digits, dots, hyphens, underscores
-  const entityRegex = /<!ENTITY\s+(?!%)([\w.-]+)\s+(?:SYSTEM\s+"([^"]+)"|PUBLIC\s+"[^"]+"\s*(?:"([^"]+)"|CDATA\s+DSSSL))\s*(?:CDATA\s+DSSSL)?\s*>/gi;
+  // First, collect parameter entity references and load them
+  // Pattern: <!ENTITY % name SYSTEM "file.ent"> followed by %name;
+  const paramEntityDefRegex = /<!ENTITY\s+%\s+([\w.-]+)\s+SYSTEM\s+"([^"]+)"\s*>/gi;
+  const paramEntities: Array<{ name: string; systemId: string }> = [];
   let match;
+
+  while ((match = paramEntityDefRegex.exec(doctype)) !== null) {
+    paramEntities.push({
+      name: match[1],
+      systemId: match[2],
+    });
+  }
+
+  // Process parameter entity references (%name;) and parse entities from those files
+  for (const paramEntity of paramEntities) {
+    const refPattern = new RegExp(`%${paramEntity.name};`, 'g');
+    if (refPattern.test(doctype)) {
+      try {
+        const paramPath = resolveEntityPath(paramEntity.systemId, baseDir, searchPaths);
+        let paramContent = fs.readFileSync(paramPath, 'utf-8');
+
+        // Strip marked sections to get entity declarations
+        paramContent = paramContent.replace(/<!\[%[\w-]+;?\[\s*([\s\S]*?)\s*\]\]>/g, '$1');
+
+        // Parse entity declarations from parameter entity file
+        const paramEntityRegex = /<!ENTITY\s+(?!%)([\w.-]+)\s+(?:SYSTEM\s+"([^"]+)"|PUBLIC\s+"[^"]+"\s*(?:"([^"]+)"|CDATA\s+DSSSL))\s*(?:CDATA\s+DSSSL)?\s*>/gi;
+        let paramMatch;
+
+        while ((paramMatch = paramEntityRegex.exec(paramContent)) !== null) {
+          const name = paramMatch[1];
+          const systemId = paramMatch[2] || paramMatch[3];
+
+          if (systemId) {
+            entities.push({ name, systemId });
+          }
+        }
+      } catch (e) {
+        // Parameter entity file not found - skip
+      }
+    }
+  }
+
+  // Parse regular entity declarations from DOCTYPE
+  const entityRegex = /<!ENTITY\s+(?!%)([\w.-]+)\s+(?:SYSTEM\s+"([^"]+)"|PUBLIC\s+"[^"]+"\s*(?:"([^"]+)"|CDATA\s+DSSSL))\s*(?:CDATA\s+DSSSL)?\s*>/gi;
 
   while ((match = entityRegex.exec(doctype)) !== null) {
     const name = match[1];
-    const systemId = match[2] || match[3];  // SYSTEM path or PUBLIC path
+    const systemId = match[2] || match[3];
 
     if (systemId) {
       entities.push({
@@ -210,6 +317,43 @@ function parseEntities(content: string): Entity[] {
   }
 
   return entities;
+}
+
+/**
+ * Parse external specification declarations
+ * Port from: DSSSL style-sheet - <external-specification id="..." document="...">
+ */
+function parseExternalSpecifications(content: string): Array<{ id: string; document: string }> {
+  const specs: Array<{ id: string; document: string }> = [];
+
+  // Match: <external-specification id="xxx" document="yyy">
+  const specRegex = /<external-specification\s+id="([\w-]+)"\s+document="([^"]+)">/gi;
+  let match;
+
+  while ((match = specRegex.exec(content)) !== null) {
+    specs.push({
+      id: match[1],
+      document: match[2],
+    });
+  }
+
+  return specs;
+}
+
+/**
+ * Parse the use attribute from style-specification
+ * Port from: DSSSL style-sheet - <style-specification use="id1 id2 ...">
+ */
+function parseStyleSpecificationUse(content: string): string[] {
+  // Match: <style-specification ... use="id1 id2 id3" ...>
+  const match = content.match(/<style-specification[^>]*\s+use="([^"]+)"/i);
+
+  if (!match) {
+    return []; // No use attribute
+  }
+
+  // Split by whitespace to get individual spec IDs
+  return match[1].trim().split(/\s+/);
 }
 
 /**

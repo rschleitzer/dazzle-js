@@ -40,6 +40,7 @@ import {
   ClosureInsn,
   VarargsInsn,
   ErrorInsn,
+  DefineUnitInsn,
 } from './insn.js';
 
 
@@ -456,6 +457,8 @@ export class Compiler {
             return this.compileLambda(pair.cdr, env, stackPos, next);
           case 'define':
             return this.compileDefine(pair.cdr, env, stackPos, next);
+          case 'define-unit':
+            return this.compileDefineUnit(pair.cdr, env, stackPos, next);
           case 'set!':
             return this.compileSet(pair.cdr, env, stackPos, next);
           case 'let':
@@ -831,6 +834,44 @@ export class Compiler {
 
     // Return no-op
     return new ConstantInsn(theNilObj, next);
+  }
+
+  /**
+   * Compile define-unit special form
+   * Port from: OpenJade SchemeParser.cxx doDefineUnit()
+   *
+   * Form: (define-unit name value)
+   * Where name is a symbol (unit name) and value is an expression that evaluates to a quantity
+   */
+  private compileDefineUnit(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
+    const argsArray = this.listToArray(args);
+    if (argsArray.length !== 2) {
+      throw new Error('define-unit requires exactly 2 arguments');
+    }
+
+    const nameExpr = argsArray[0];
+    const sym = nameExpr.asSymbol();
+    if (!sym) {
+      throw new Error('define-unit: name must be a symbol');
+    }
+
+    // Validate unit name - must be all letters, not 'e'
+    // Port from: OpenJade SchemeParser.cxx doDefineUnit() validation
+    const unitName = sym.name;
+    if (unitName === 'e') {
+      throw new Error('define-unit: "e" is not a valid unit name');
+    }
+    if (!/^[a-zA-Z]+$/.test(unitName)) {
+      throw new Error(`define-unit: invalid unit name "${unitName}" (must be all letters)`);
+    }
+
+    const valueExpr = argsArray[1];
+
+    // Compile the value expression
+    const valueInsn = this.compile(valueExpr, env, stackPos, null);
+
+    // Return DefineUnitInsn
+    return new DefineUnitInsn(unitName, valueInsn, next);
   }
 
   /**

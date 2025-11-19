@@ -812,6 +812,57 @@ export class PopBindingsInsn extends Insn {
  * Error instruction - throws an error
  * Used for case expressions without else clause when no clause matches
  */
+/**
+ * DefineUnitInsn - Define a custom unit
+ * Port from: OpenJade SchemeParser.cxx doDefineUnit()
+ *
+ * Evaluates the value expression and registers the unit with the VM
+ */
+export class DefineUnitInsn extends Insn {
+  constructor(
+    private unitName: string,
+    private valueInsn: Insn,
+    private next: Insn | null = null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Evaluate the value expression first
+    let insn: Insn | null = this.valueInsn;
+    while (insn !== null) {
+      insn = insn.execute(vm);
+    }
+
+    // Pop the result - can be a quantity or unresolved quantity
+    const value = vm.pop();
+
+    // Try to get a resolved quantity
+    let quantity = value.asQuantity();
+
+    // If it's an unresolved quantity, resolve it using the unit registry
+    if (!quantity) {
+      const unresolvedQuantity = value as any;
+      if (unresolvedQuantity.resolve && typeof unresolvedQuantity.resolve === 'function') {
+        // Port from: OpenJade UnresolvedQuantityObj::resolve()
+        quantity = unresolvedQuantity.resolve(vm.unitRegistry);
+      }
+    }
+
+    if (!quantity) {
+      throw new Error(`define-unit: value must be a quantity, got ${value.constructor.name}`);
+    }
+
+    // Register the unit with the VM
+    vm.defineUnit(this.unitName, quantity);
+
+    // Push nil (define-unit returns nothing useful)
+    vm.push(theNilObj);
+
+    return this.next;
+  }
+}
+
 export class ErrorInsn extends Insn {
   constructor(
     public message: string,

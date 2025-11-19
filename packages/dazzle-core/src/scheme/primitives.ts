@@ -66,6 +66,25 @@ function makeRelativePath(filePath: string): string {
 }
 
 /**
+ * Helper: Resolve unresolved quantities using the unit registry
+ * Port from: OpenJade UnresolvedQuantityObj::resolve()
+ */
+function resolveQuantity(value: ELObj, vm: VM): QuantityObj | null {
+  // Already resolved?
+  const q = value.asQuantity();
+  if (q) {
+    return q;
+  }
+
+  // Try to resolve if it's an unresolved quantity
+  if (value instanceof UnresolvedQuantityObj) {
+    return value.resolve(vm.unitRegistry);
+  }
+
+  return null;
+}
+
+/**
  * Helper: Call a closure from within a primitive
  * Creates necessary bytecode to invoke the closure with arguments
  */
@@ -224,7 +243,8 @@ const timesPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   let exact = true;
 
   for (const arg of args) {
-    const q = arg.asQuantity();
+    // Try to resolve as quantity (handles both QuantityObj and UnresolvedQuantityObj)
+    const q = resolveQuantity(arg, vm);
     if (q) {
       if (quantity) {
         // Multiple quantities - not supported yet
@@ -260,9 +280,30 @@ const dividePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
     throw new Error('/ requires at least 1 argument');
   }
 
+  // Check if first argument is a quantity
+  const firstQuantity = resolveQuantity(args[0], vm);
+  if (firstQuantity) {
+    // Quantity division: quantity / number
+    if (args.length !== 2) {
+      throw new Error('/ with quantity requires exactly 2 arguments');
+    }
+
+    const divisor = args[1].asNumber();
+    if (!divisor) {
+      throw new Error('/ with quantity requires numeric divisor');
+    }
+
+    if (divisor.value === 0) {
+      throw new Error('Division by zero');
+    }
+
+    return new QuantityObj(firstQuantity.value / divisor.value, firstQuantity.unit);
+  }
+
+  // Numeric division
   const first = args[0].asNumber();
   if (!first) {
-    throw new Error('/ requires numeric arguments');
+    throw new Error('/ requires numeric or quantity arguments');
   }
 
   if (args.length === 1) {
