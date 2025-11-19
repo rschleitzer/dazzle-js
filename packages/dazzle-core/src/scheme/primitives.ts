@@ -24,6 +24,8 @@ import {
   makeNode,
   makeNodeList,
   makeSosofo,
+  makeColorSpace,
+  makeColor,
   theNilObj,
   theTrueObj,
   theFalseObj,
@@ -8549,6 +8551,60 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
 };
 
 /**
+ * DSSSL color-space primitive
+ * Port from: OpenJade primitive.cxx - ColorSpace
+ * Creates a color space object for color creation
+ */
+const colorSpacePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length < 1) {
+    throw new Error('color-space requires a string argument');
+  }
+
+  const familyStr = args[0].asString();
+  if (!familyStr) {
+    throw new Error('color-space requires a string argument');
+  }
+
+  const family = familyStr.value;
+
+  // Port from: OpenJade checks for "ISO/IEC 10179:1996//Color-Space Family::Device "
+  if (family.startsWith('ISO/IEC 10179:1996//Color-Space Family::Device ')) {
+    const deviceFamily = family.substring('ISO/IEC 10179:1996//Color-Space Family::Device '.length);
+    return makeColorSpace(deviceFamily);
+  }
+
+  throw new Error(`Unknown color space family: ${family}`);
+};
+
+/**
+ * DSSSL color primitive
+ * Port from: OpenJade primitive.cxx - Color
+ * Creates a color object with component values
+ */
+const colorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length < 1) {
+    throw new Error('color requires a color-space argument');
+  }
+
+  const colorSpace = args[0].asColorSpace();
+  if (!colorSpace) {
+    throw new Error('color requires a color-space object');
+  }
+
+  // Extract numeric components (RGB, Gray, or CMYK values)
+  const components: number[] = [];
+  for (let i = 1; i < args.length; i++) {
+    const num = args[i].asNumber();
+    if (!num) {
+      throw new Error(`color component must be a number, got ${args[i].constructor.name}`);
+    }
+    components.push(num.value);
+  }
+
+  return colorSpace.makeColor(components);
+};
+
+/**
  * DSSSL Quantity Units
  * Port from: DSSSL spec - length units
  * Define as ELObj values (QuantityObj instances)
@@ -8932,6 +8988,10 @@ export const standardPrimitives: Record<string, ELObj> = {
   'literal': new FunctionObj('literal', literalPrimitive),
   'sosofo-append': new FunctionObj('sosofo-append', sosofoAppendPrimitive),
   'make-flow-object': new FunctionObj('make-flow-object', makeFlowObjectPrimitive),
+
+  // DSSSL color primitives
+  'color-space': new FunctionObj('color-space', colorSpacePrimitive),
+  'color': new FunctionObj('color', colorPrimitive),
 
   // DSSSL Quantity Units (length measurements)
   // Port from: DSSSL spec - these are constants representing unit quantities

@@ -43,6 +43,8 @@ export abstract class ELObj {
   asSosofo(): SosofoObj | null { return null; }
   asQuantity(): QuantityObj | null { return null; }
   asBox(): BoxObj | null { return null; }
+  asColor(): ColorObj | null { return null; }
+  asColorSpace(): ColorSpaceObj | null { return null; }
 
   /** Check if this is a proper list */
   isList(): boolean {
@@ -342,6 +344,55 @@ export class UnresolvedQuantityObj extends ELObj {
 }
 
 /**
+ * ColorSpace - Port from OpenJade ColorSpaceObj
+ *
+ * Represents a color space (Device RGB, Gray, CMYK, etc.)
+ * Port from: ELObj.h class ColorSpaceObj
+ */
+export class ColorSpaceObj extends ELObj {
+  constructor(
+    public family: string  // 'Device RGB', 'Device Gray', 'Device CMYK', etc.
+  ) {
+    super();
+  }
+
+  asColorSpace(): ColorSpaceObj { return this; }
+
+  /**
+   * Create a color in this color space
+   * Port from: OpenJade ColorSpaceObj::makeColor
+   */
+  makeColor(components: number[]): ColorObj {
+    return new ColorObj(this, components);
+  }
+
+  toString(): string {
+    return `<color-space ${this.family}>`;
+  }
+}
+
+/**
+ * Color - Port from OpenJade ColorObj
+ *
+ * Represents a color value in a specific color space
+ * Port from: ELObj.h class ColorObj
+ */
+export class ColorObj extends ELObj {
+  constructor(
+    public colorSpace: ColorSpaceObj,
+    public components: number[]  // RGB, Gray, or CMYK values
+  ) {
+    super();
+  }
+
+  asColor(): ColorObj { return this; }
+
+  toString(): string {
+    return `<color ${this.components.join(' ')}>`;
+  }
+}
+
+/**
  * Sosofo (Specification of a Sequence of Flow Objects)
  * Port from: OpenJade style/SosofoObj.h class SosofoObj : public ELObj
  *
@@ -500,4 +551,12 @@ export function makeUnresolvedQuantity(value: number, unitName: string, unitExp:
 
 export function makeSosofo(type: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal', data?: unknown): SosofoObj {
   return new SosofoObj(type, data);
+}
+
+export function makeColorSpace(family: string): ColorSpaceObj {
+  return new ColorSpaceObj(family);
+}
+
+export function makeColor(colorSpace: ColorSpaceObj, components: number[]): ColorObj {
+  return new ColorObj(colorSpace, components);
 }

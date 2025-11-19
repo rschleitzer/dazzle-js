@@ -1,6 +1,6 @@
 # CLAUDE.md - Dazzle Project Context
 
-> **Dazzle**: TypeScript port of OpenJade's SGML backend for modern code generation
+> **Dazzle**: TypeScript port of OpenJade's DSSSL processor with FOT, RTF, and SGML backends
 
 ## Table of Contents
 
@@ -43,16 +43,22 @@
 
 ## Project Overview
 
-**Dazzle**: TypeScript-based code generation tool using Scheme templates
+**Dazzle**: TypeScript-based DSSSL processor using Scheme templates
 
-- **Purpose**: Template-driven code generation from XML input
+- **Purpose**: Document transformation and code generation from XML input
 - **Language**: TypeScript + Scheme (ported from OpenJade)
-- **Use Case**: fire (FHIR 5 server) code generation
+- **Input**: XML only (no SGML document support)
+- **Backends**: FOT (Flow Object Tree), RTF (document formatting), SGML (code generation)
+- **Use Cases**:
+  - Code generation (fire FHIR 5 server)
+  - Document formatting (RTF, future PDF)
+  - Generic XML transformation
+- **Future**: PDF backend, editing capabilities
 - **Name**: Available everywhere, no conflicts
 
 **Problem**: OpenJade disappearing from package managers (dropped from Homebrew, aging in MacPorts, unmaintained C++)
 
-**Solution**: Pure TypeScript/Node.js, libxmljs2 (UTF-8 support), OpenJade CLI-compatible, focus on code generation
+**Solution**: Pure TypeScript/Node.js, libxmljs2 (UTF-8 support), OpenJade CLI-compatible, multiple backends (FOT/RTF/SGML)
 
 ---
 
@@ -106,15 +112,20 @@
 **Dazzle Must Implement**:
 1. **224 primitives**: ~90 R4RS + ~50 grove + ~20 processing + ~30 type stubs + ~24 utilities
 2. **R4RS interpreter** (port from OpenJade)
-3. **Grove engine** (trait-based)
-4. **SGML backend** (only `entity` + `formatting-instruction`)
+3. **Grove engine** (trait-based, XML only)
+4. **Multiple backends**:
+   - SGML backend (code generation: `entity` + `formatting-instruction`)
+   - FOT backend (Flow Object Tree output)
+   - RTF backend (document formatting)
 5. **Template parser** (XML + entity references)
 
 **Dazzle Roadmap**:
 - ✅ SGML backend (code generation) - COMPLETE
+- 🔄 FOT backend (intermediate representation) - IN PROGRESS
 - 🔄 RTF backend (document formatting) - IN PROGRESS
-- 🚧 PDF backend (via RTF foundation)
-- 🚧 Additional backends (TeX, MIF, HTML) - FUTURE
+- 🚧 PDF backend (via RTF foundation) - FUTURE
+- 🚧 Editing capabilities - FUTURE
+- 🚧 Additional backends (TeX, MIF, HTML) - OPTIONAL
 
 ---
 
@@ -354,12 +365,15 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 ## Quick Reference
 
 **What Dazzle Is**:
-- Modern TypeScript port of OpenJade's DSSSL processor for code generation
+- Modern TypeScript port of OpenJade's DSSSL processor
+- **Multiple backends**: FOT (intermediate), RTF (formatting), SGML (code generation)
+- **Input**: XML only (no SGML document support)
 - Target: ~10K lines of TypeScript (vs 72K C++ in OpenJade)
 - 260 language features (258 primitives + 2 special forms)
 - Full DSSSL processing model with automatic tree traversal
 - **UTF-8 native**: Handles modern XML perfectly
 - **Universal**: Runs in Node.js and Browser (with appropriate grove implementation)
+- **Future**: PDF backend, editing capabilities
 
 **OpenJade Comparison**:
 - OpenJade: 72K C++ (117 files), 224 primitives
@@ -377,10 +391,14 @@ dazzle -d gen.scm -V outdir=src/generated -D /usr/share/dazzle input.xml
 
 **Target Features**:
 - 🚧 Complete R4RS Scheme interpreter with named let
-- 🚧 Full DSSSL processing model (process-root, rules, modes, next-match)
-- 🚧 50+ grove query primitives (XML + DTD validation)
-- 🚧 Flow objects (make entity, formatting-instruction)
-- 🚧 XML template wrapper support (.dsl format)
+- 🚧 Full DSSSL processing model (process-root, rules, modes, next-match, default)
+- 🚧 50+ grove query primitives (XML only, DTD validation via libxmljs2)
+- 🚧 Multiple flow object backends:
+  - FOT backend (Flow Object Tree intermediate format)
+  - RTF backend (document formatting)
+  - SGML backend (code generation via entity + formatting-instruction)
+- 🚧 XML template wrapper support (.dsl format with entity references)
+- 🚧 SGML marked section processing (<![%entity;[ ... ]]>)
 
 **Install**: `npm install -g dazzle` (when available)
 

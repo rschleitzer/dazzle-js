@@ -101,9 +101,17 @@ export class RuleRegistry {
    */
   findRule(elementName: string, mode: string = "", globals?: GlobalEnvironment): ConstructionRule | null {
     // Try to find exact match
-    const rule = this.rules.find(
+    let rule = this.rules.find(
       r => r.elementName === elementName && r.mode === mode
     );
+
+    // If no exact match, try default rule for this mode
+    // Port from: OpenJade falls back to default rule when no specific rule matches
+    if (!rule) {
+      rule = this.rules.find(
+        r => r.elementName === "#default" && r.mode === mode
+      );
+    }
 
     if (!rule) return null;
 

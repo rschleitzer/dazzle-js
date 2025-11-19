@@ -478,6 +478,8 @@ export class Compiler {
             return this.compileMake(pair.cdr, env, stackPos, next);
           case 'element':
             return this.compileElement(pair.cdr, env, stackPos, next);
+          case 'default':
+            return this.compileDefault(pair.cdr, env, stackPos, next);
           case 'root':
             return this.compileRoot(pair.cdr, env, stackPos, next);
           case 'mode':
@@ -1718,19 +1720,35 @@ export class Compiler {
       throw new Error('element requires at least a GI');
     }
 
-    // First arg is element name (symbol or string)
+    // First arg is element name (symbol, string, or path)
+    // Port from: OpenJade supports element paths like (orderedlist title)
     const giArg = argsArray[0];
     let elementName: string;
 
     const giSym = giArg.asSymbol();
     const giStr = giArg.asString();
+    const giPair = giArg.asPair();
 
     if (giSym) {
       elementName = giSym.name;
     } else if (giStr) {
       elementName = giStr.value;
+    } else if (giPair) {
+      // Element path like (orderedlist title) - last element in path is the match
+      // For now, just use the last element as the key (full path matching not yet implemented)
+      const pathElements = this.listToArray(giPair);
+      if (pathElements.length === 0) {
+        throw new Error('element path cannot be empty');
+      }
+      const lastElem = pathElements[pathElements.length - 1];
+      const lastSym = lastElem.asSymbol();
+      if (!lastSym) {
+        throw new Error('element path must contain symbols');
+      }
+      elementName = lastSym.name;
+      // TODO: Store full path for proper matching
     } else {
-      throw new Error('element requires a symbol or string for GI');
+      throw new Error(`element requires a symbol, string, or path for GI, got: ${giArg.constructor.name}`);
     }
 
     // Body is rest of arguments (wrapped in begin if multiple)
@@ -1786,6 +1804,39 @@ export class Compiler {
   }
 
   /**
+   * Compile default construction rule
+   * Port from: OpenJade default rule handling
+   *
+   * Syntax: (default body...)
+   *
+   * Registers a catch-all rule that matches any element without a specific rule.
+   */
+  private compileDefault(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
+    const argsArray = this.listToArray(args);
+
+    if (argsArray.length === 0) {
+      throw new Error('default requires a body');
+    }
+
+    // Body (wrapped in begin if multiple expressions)
+    const bodyExpr = argsArray.length === 1 ? argsArray[0] : this.makeBegin(argsArray);
+
+    // Create lambda expression
+    const lambdaBody = new PairObj(bodyExpr, theNilObj);
+    const lambdaExpr = new PairObj(
+      makeSymbol('lambda'),
+      new PairObj(theNilObj, lambdaBody)
+    );
+
+    // Store UNCOMPILED lambda expression with special element name "#default"
+    // Port from: OpenJade uses a special marker for default rules
+    this.globals.ruleRegistry.addRuleLambdaExpr("#default", "", lambdaExpr, this.globals);
+
+    // Return no-op
+    return new ConstantInsn(theNilObj, next);
+  }
+
+  /**
    * Compile mode declaration
    * Port from: Interpreter.cxx compileMode()
    *
@@ -1811,13 +1862,13 @@ export class Compiler {
       throw new Error('mode requires a symbol for mode name');
     }
 
-    // Rest are element definitions
+    // Rest are element or default definitions
     for (let i = 1; i < argsArray.length; i++) {
       const ruleExpr = argsArray[i];
       const rulePair = ruleExpr.asPair();
 
       if (!rulePair) {
-        throw new Error('mode body must contain element expressions');
+        throw new Error('mode body must contain element or default expressions');
       }
 
       const ruleOp = rulePair.car.asSymbol();
@@ -1833,13 +1884,26 @@ export class Compiler {
 
         const giSym = giArg.asSymbol();
         const giStr = giArg.asString();
+        const giPair = giArg.asPair();
 
         if (giSym) {
           elementName = giSym.name;
         } else if (giStr) {
           elementName = giStr.value;
+        } else if (giPair) {
+          // Element path - use last element as key
+          const pathElements = this.listToArray(giPair);
+          if (pathElements.length === 0) {
+            throw new Error('element path cannot be empty');
+          }
+          const lastElem = pathElements[pathElements.length - 1];
+          const lastSym = lastElem.asSymbol();
+          if (!lastSym) {
+            throw new Error('element path must contain symbols');
+          }
+          elementName = lastSym.name;
         } else {
-          throw new Error('element requires symbol or string for GI');
+          throw new Error('element requires symbol, string, or path for GI');
         }
 
         // Body
@@ -1855,6 +1919,26 @@ export class Compiler {
 
         // Store UNCOMPILED lambda expression (lazy compilation)
         this.globals.ruleRegistry.addRuleLambdaExpr(elementName, modeName, lambdaExpr, this.globals);
+      } else if (ruleOp && ruleOp.name === 'default') {
+        // Parse default rule (catch-all for this mode)
+        const defaultArgs = this.listToArray(rulePair.cdr);
+
+        if (defaultArgs.length === 0) {
+          throw new Error('default in mode requires a body');
+        }
+
+        // Body
+        const bodyExpr = defaultArgs.length === 1 ? defaultArgs[0] : this.makeBegin(defaultArgs);
+
+        // Create lambda expression
+        const lambdaBody = new PairObj(bodyExpr, theNilObj);
+        const lambdaExpr = new PairObj(
+          makeSymbol('lambda'),
+          new PairObj(theNilObj, lambdaBody)
+        );
+
+        // Store UNCOMPILED lambda expression with special element name "#default"
+        this.globals.ruleRegistry.addRuleLambdaExpr("#default", modeName, lambdaExpr, this.globals);
       }
     }
 

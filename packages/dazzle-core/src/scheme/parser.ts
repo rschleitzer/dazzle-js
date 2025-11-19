@@ -619,7 +619,7 @@ export class Parser {
 
   private error(message: string): Error {
     const loc = this.currentLocation();
-    return new Error(`Parse error at ${loc.line}:${loc.column}: ${message}`);
+    return new Error(`Parse error in ${loc.file} at ${loc.line}:${loc.column}: ${message}`);
   }
 }
 

@@ -107,6 +107,11 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
     // Transform: <![CDATA[content]]> → content
     entityContent = entityContent.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
 
+    // Port from: OpenJade processes SGML marked sections
+    // Strip marked sections for INCLUDE (keep content): <![%entity;[ content ]]> → content
+    // Pattern matches: <![%name;[ ... ]]> or <![%name[ ... ]]>
+    entityContent = entityContent.replace(/<!\[%[\w-]+;?\[\s*([\s\S]*?)\s*\]\]>/g, '$1');
+
     const entityRef = `&${entity.name};`;
     entityReplacements.push({ ref: entityRef, content: entityContent, path: entityPath });
   }
@@ -167,7 +172,13 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
 /**
  * Parse entity declarations from DOCTYPE
  *
- * Extracts: <!ENTITY name SYSTEM "file.scm">
+ * Port from: OpenJade handles multiple entity declaration patterns
+ * Extracts:
+ * - <!ENTITY name SYSTEM "file.scm">
+ * - <!ENTITY name SYSTEM "file.scm" CDATA DSSSL>
+ * - <!ENTITY name PUBLIC "pubid" "file.scm">
+ * - <!ENTITY name PUBLIC "pubid" CDATA DSSSL>
+ * Skips parameter entities (<!ENTITY % name ...>)
  */
 function parseEntities(content: string): Entity[] {
   const entities: Entity[] = [];
@@ -180,15 +191,22 @@ function parseEntities(content: string): Entity[] {
 
   const doctype = doctypeMatch[1];
 
-  // Match entity declarations: <!ENTITY name SYSTEM "file"> (case-insensitive, optional whitespace)
-  const entityRegex = /<!ENTITY\s+(\w+)\s+SYSTEM\s+"([^"]+)"\s*>/gi;
+  // Match entity declarations with various formats
+  // Pattern: <!ENTITY (not %) name SYSTEM "file" or PUBLIC "pubid" optional("file" or CDATA DSSSL) optional(CDATA DSSSL)>
+  // Entity names can contain letters, digits, dots, hyphens, underscores
+  const entityRegex = /<!ENTITY\s+(?!%)([\w.-]+)\s+(?:SYSTEM\s+"([^"]+)"|PUBLIC\s+"[^"]+"\s*(?:"([^"]+)"|CDATA\s+DSSSL))\s*(?:CDATA\s+DSSSL)?\s*>/gi;
   let match;
 
   while ((match = entityRegex.exec(doctype)) !== null) {
-    entities.push({
-      name: match[1],
-      systemId: match[2],
-    });
+    const name = match[1];
+    const systemId = match[2] || match[3];  // SYSTEM path or PUBLIC path
+
+    if (systemId) {
+      entities.push({
+        name,
+        systemId,
+      });
+    }
   }
 
   return entities;
