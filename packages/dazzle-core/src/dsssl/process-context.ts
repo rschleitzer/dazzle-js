@@ -41,6 +41,10 @@ export class ProcessContext {
    * Port from: ProcessContext.cxx various SosofoObj::process() methods
    */
   process(sosofo: SosofoObj): void {
+    if (process.env.DEBUG_FOT) {
+      console.error(`ProcessContext.process: sosofo type: ${sosofo.type || 'FlowObj'}`);
+    }
+
     // FlowObj sosofos don't have a type - they handle their own processing
     // Port from: OpenJade - FlowObj::process() is called polymorphically
     if (!sosofo.type) {
@@ -57,6 +61,9 @@ export class ProcessContext {
       case 'literal': {
         // Literal text - call characters() on backend
         const text = sosofo.literalText();
+        if (process.env.DEBUG_FOT) {
+          console.error(`Processing literal sosofo, text: "${text}"`);
+        }
         if (text) {
           this.fotBuilder.characters(text);
         }
@@ -123,7 +130,13 @@ export class ProcessContext {
       case 'append': {
         // Append sosofo - process children in sequence
         const children = sosofo.children();
+        if (process.env.DEBUG_FOT) {
+          console.error(`Processing append sosofo with ${children.length} children`);
+        }
         for (const child of children) {
+          if (process.env.DEBUG_FOT) {
+            console.error(`  - child type: ${child.type || (child.constructor.name === 'FlowObj' ? 'FlowObj' : child.constructor.name)}`);
+          }
           this.process(child);
         }
         break;

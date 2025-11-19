@@ -9177,11 +9177,6 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
 
   const flowObjectType = typeSym ? typeSym.name : typeStr!.value;
 
-  // DEBUG: Log flow object creation
-  if (process.env.DEBUG_MAKE) {
-    console.error(`makeFlowObjectPrimitive: creating ${flowObjectType}`);
-  }
-
   // Parse keyword arguments
   const characteristics: Record<string, unknown> = {};
   let contentStart = 1;
@@ -9218,6 +9213,15 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
 
   // Content arguments (if any)
   const content = args.slice(contentStart);
+
+  // DEBUG: Log flow object creation with content info
+  if (process.env.DEBUG_MAKE) {
+    console.error(`makeFlowObjectPrimitive: creating ${flowObjectType}, total args: ${args.length}, content items: ${content.length}`);
+    if (content.length > 0) {
+      const sosofo = content[0].asSosofo();
+      console.error(`makeFlowObjectPrimitive: content[0] type: ${content[0].constructor.name}, isSosofo: ${sosofo !== null}, sosofoType: ${sosofo?.type || 'N/A'}`);
+    }
+  }
 
   // Create flow object based on type
   switch (flowObjectType) {

@@ -91,6 +91,9 @@ export abstract class CompoundFlowObj extends FlowObj {
    * Port from: FlowObj.cxx:183 CompoundFlowObj::processInner()
    */
   protected processInner(context: ProcessContext): void {
+    if (process.env.DEBUG_FOT) {
+      console.error(`CompoundFlowObj.processInner: content_ is ${this.content_ ? 'set' : 'null'}, type: ${this.content_?.type || 'N/A'}`);
+    }
     if (this.content_) {
       this.content_.process(context);
     } else {

@@ -421,12 +421,14 @@ export class SosofoObj extends ELObj {
    * Process this sosofo with a ProcessContext
    * Port from: OpenJade SosofoObj::process()
    *
-   * Must be implemented by subclasses (like FlowObj)
-   * Base implementation handles simple types
+   * Base implementation delegates to ProcessContext for simple sosofos (literal, empty, append, etc.)
+   * FlowObj subclass overrides this to handle flow object processing
    */
-  process(_context: any): void {
-    // Base implementation - subclasses override
-    // Simple sosofos (empty, literal, etc.) are handled by ProcessContext
+  process(context: any): void {
+    // Base implementation - delegate to ProcessContext
+    // This handles simple sosofos (literal, empty, append, etc.)
+    // FlowObj overrides this to handle flow object-specific processing
+    context.process(this);
   }
 
   /**
