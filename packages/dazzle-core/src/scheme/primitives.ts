@@ -5945,17 +5945,27 @@ const loadPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
  * OpenJade returns a string for gi.
  */
 const giPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
-  if (args.length !== 1) {
-    throw new Error('gi requires exactly 1 argument');
+  if (args.length > 1) {
+    throw new Error('gi takes at most 1 argument');
   }
 
-  // Port from: OpenJade Gi primitive uses optSingletonNodeList
-  // Accepts nodes, singleton node-lists, and empty node-lists
-  const node = optSingletonNode(args[0]);
-  if (!node) {
-    // Empty node-list -> return #f (not an error)
-    // Port from: OpenJade returns makeFalse() when node is null
-    return theFalseObj;
+  let node: Node | null;
+
+  if (args.length === 0) {
+    // No argument - use current-node
+    if (!vm.currentNode) {
+      throw new Error('gi: no current node in processing context');
+    }
+    node = vm.currentNode;
+  } else {
+    // Port from: OpenJade Gi primitive uses optSingletonNodeList
+    // Accepts nodes, singleton node-lists, and empty node-lists
+    node = optSingletonNode(args[0]);
+    if (!node) {
+      // Empty node-list -> return #f (not an error)
+      // Port from: OpenJade returns makeFalse() when node is null
+      return theFalseObj;
+    }
   }
 
   const gi = node.gi();
@@ -5968,17 +5978,27 @@ const giPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
  * Port from: primitive.h PRIMITIVE(Id, "id", 0, 1, 0)
  */
 const idPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
-  if (args.length !== 1) {
-    throw new Error('id requires exactly 1 argument');
+  if (args.length > 1) {
+    throw new Error('id takes at most 1 argument');
   }
 
-  // Port from: OpenJade Id primitive uses optSingletonNodeList
-  // Accepts nodes, singleton node-lists, and empty node-lists
-  const node = optSingletonNode(args[0]);
-  if (!node) {
-    // Empty node-list -> return #f (not an error)
-    // Port from: OpenJade returns makeFalse() when node is null
-    return theFalseObj;
+  let node: Node | null;
+
+  if (args.length === 0) {
+    // No argument - use current-node
+    if (!vm.currentNode) {
+      throw new Error('id: no current node in processing context');
+    }
+    node = vm.currentNode;
+  } else {
+    // Port from: OpenJade Id primitive uses optSingletonNodeList
+    // Accepts nodes, singleton node-lists, and empty node-lists
+    node = optSingletonNode(args[0]);
+    if (!node) {
+      // Empty node-list -> return #f (not an error)
+      // Port from: OpenJade returns makeFalse() when node is null
+      return theFalseObj;
+    }
   }
 
   const id = node.id();
@@ -7023,6 +7043,361 @@ const nodeListErrorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj
   // and call interp.message() followed by interp.makeError()
   // For now, just throw an error with the message
   throw new Error(`DSSSL Error: ${str.value}`);
+};
+
+// ============ Number Formatting Helpers (for format-number) ============
+// Port from: primitive.cxx formatNumberLetter, formatNumberRoman, formatNumberDecimal
+
+/**
+ * Format number as letters (a, b, c... or A, B, C...)
+ * Port from: primitive.cxx formatNumberLetter
+ */
+function formatNumberLetter(n: number, letters: string): string {
+  if (n === 0) {
+    return '0';
+  }
+
+  let result = '';
+  let neg = false;
+
+  if (n < 0) {
+    n = -n;
+    neg = true;
+  }
+
+  do {
+    n--;
+    const r = n % 26;
+    n = Math.floor((n - r) / 26);
+    result += letters[r];
+  } while (n > 0);
+
+  if (neg) {
+    result += '-';
+  }
+
+  // Reverse the string
+  return result.split('').reverse().join('');
+}
+
+/**
+ * Format number as decimal with minimum width
+ * Port from: primitive.cxx formatNumberDecimal
+ */
+function formatNumberDecimal(n: number, minWidth: number): string {
+  let result = '';
+  const str = n.toString();
+  let p = str;
+
+  if (str[0] === '-') {
+    p = str.substring(1);
+    result += '-';
+  }
+
+  let len = p.length;
+  while (len < minWidth) {
+    result += '0';
+    len++;
+  }
+
+  result += p;
+  return result;
+}
+
+/**
+ * Format number as Roman numerals (i, ii, iii... or I, II, III...)
+ * Port from: primitive.cxx formatNumberRoman
+ */
+function formatNumberRoman(n: number, letters: string): string {
+  if (n > 5000 || n < -5000 || n === 0) {
+    return formatNumberDecimal(n, 1);
+  }
+
+  let result = '';
+
+  if (n < 0) {
+    n = -n;
+    result += '-';
+  }
+
+  // Thousands (M)
+  while (n >= 1000) {
+    result += letters[0];
+    n -= 1000;
+  }
+
+  // Hundreds, tens, ones
+  let letterIdx = 0;
+  for (let i = 100; i > 0; i = Math.floor(i / 10)) {
+    const q = Math.floor(n / i);
+    n -= q * i;
+
+    switch (q) {
+      case 1:
+        result += letters[letterIdx + 2];
+        break;
+      case 2:
+        result += letters[letterIdx + 2];
+        result += letters[letterIdx + 2];
+        break;
+      case 3:
+        result += letters[letterIdx + 2];
+        result += letters[letterIdx + 2];
+        result += letters[letterIdx + 2];
+        break;
+      case 4:
+        result += letters[letterIdx + 2];
+        result += letters[letterIdx + 1];
+        break;
+      case 5:
+        result += letters[letterIdx + 1];
+        break;
+      case 6:
+        result += letters[letterIdx + 1];
+        result += letters[letterIdx + 2];
+        break;
+      case 7:
+        result += letters[letterIdx + 1];
+        result += letters[letterIdx + 2];
+        result += letters[letterIdx + 2];
+        break;
+      case 8:
+        result += letters[letterIdx + 1];
+        result += letters[letterIdx + 2];
+        result += letters[letterIdx + 2];
+        result += letters[letterIdx + 2];
+        break;
+      case 9:
+        result += letters[letterIdx + 2];
+        result += letters[letterIdx];
+        break;
+    }
+
+    letterIdx += 2;
+  }
+
+  return result;
+}
+
+/**
+ * Format a number according to a format string
+ * Port from: primitive.cxx formatNumber
+ *
+ * Format strings:
+ * - "1" or "01" etc: decimal with zero-padding
+ * - "a": lowercase letters (a, b, c, ...)
+ * - "A": uppercase letters (A, B, C, ...)
+ * - "i": lowercase Roman numerals (i, ii, iii, ...)
+ * - "I": uppercase Roman numerals (I, II, III, ...)
+ */
+function formatNumber(n: number, format: string): string {
+  if (format.length === 0) {
+    return formatNumberDecimal(n, 1);
+  }
+
+  const lastChar = format[format.length - 1];
+
+  switch (lastChar) {
+    case 'a':
+      return formatNumberLetter(n, 'abcdefghijklmnopqrstuvwxyz');
+    case 'A':
+      return formatNumberLetter(n, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ');
+    case 'i':
+      return formatNumberRoman(n, 'mdclxvi');
+    case 'I':
+      return formatNumberRoman(n, 'MDCLXVI');
+    case '1':
+      return formatNumberDecimal(n, format.length);
+    default:
+      return formatNumberDecimal(n, 1);
+  }
+}
+
+/**
+ * DSSSL: format-number
+ * Port from: primitive.h PRIMITIVE(FormatNumber, "format-number", 2, 0, 0)
+ * Port from: primitive.cxx DEFPRIMITIVE(FormatNumber)
+ *
+ * Formats a number according to a format string.
+ * Examples:
+ *   (format-number 1 "1") => "1"
+ *   (format-number 1 "01") => "01"
+ *   (format-number 3 "a") => "c"
+ *   (format-number 3 "A") => "C"
+ *   (format-number 3 "i") => "iii"
+ *   (format-number 3 "I") => "III"
+ */
+const formatNumberPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 2) {
+    throw new Error('format-number requires exactly 2 arguments');
+  }
+
+  const num = args[0].asNumber();
+  if (!num || !Number.isInteger(num.value)) {
+    throw new Error('format-number requires an exact integer as first argument');
+  }
+
+  const format = args[1].asString();
+  if (!format) {
+    throw new Error('format-number requires a string as second argument');
+  }
+
+  const result = formatNumber(num.value, format.value);
+  return makeString(result);
+};
+
+/**
+ * DSSSL: format-number-list
+ * Port from: primitive.h PRIMITIVE(FormatNumberList, "format-number-list", 3, 0, 0)
+ * Port from: primitive.cxx DEFPRIMITIVE(FormatNumberList)
+ *
+ * Formats a list of numbers with corresponding formats and separators.
+ * Examples:
+ *   (format-number-list '(1 2 3) "1" ".") => "1.2.3"
+ *   (format-number-list '(1 2) '("I" "a") ".") => "I.b"
+ */
+const formatNumberListPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 3) {
+    throw new Error('format-number-list requires exactly 3 arguments');
+  }
+
+  let numbers = args[0];
+  let formats = args[1];
+  let seps = args[2];
+
+  let result = '';
+  let first = true;
+
+  while (!numbers.asNil()) {
+    // Add separator before each number except the first
+    if (!first) {
+      let sep: string;
+      const sepStr = seps.asString();
+      if (sepStr) {
+        sep = sepStr.value;
+      } else {
+        const sepPair = seps.asPair();
+        if (!sepPair) {
+          throw new Error('format-number-list: separators must be a string or list');
+        }
+        const sepCar = sepPair.car.asString();
+        if (!sepCar) {
+          throw new Error('format-number-list: separator must be a string');
+        }
+        sep = sepCar.value;
+        seps = sepPair.cdr;
+      }
+      result += sep;
+    }
+    first = false;
+
+    // Get the number
+    const numPair = numbers.asPair();
+    if (!numPair) {
+      throw new Error('format-number-list: numbers must be a list');
+    }
+    const num = numPair.car.asNumber();
+    if (!num || !Number.isInteger(num.value)) {
+      throw new Error('format-number-list: all numbers must be exact integers');
+    }
+    numbers = numPair.cdr;
+
+    // Get the format
+    let format: string;
+    const formatStr = formats.asString();
+    if (formatStr) {
+      format = formatStr.value;
+    } else {
+      const formatPair = formats.asPair();
+      if (!formatPair) {
+        throw new Error('format-number-list: formats must be a string or list');
+      }
+      const formatCar = formatPair.car.asString();
+      if (!formatCar) {
+        throw new Error('format-number-list: format must be a string');
+      }
+      format = formatCar.value;
+      formats = formatPair.cdr;
+    }
+
+    result += formatNumber(num.value, format);
+  }
+
+  return makeString(result);
+};
+
+/**
+ * Grove: node-property
+ * Port from: primitive.h PRIMITIVE(NodeProperty, "node-property", 2, 0, 1)
+ * Port from: primitive.cxx DEFPRIMITIVE(NodeProperty)
+ *
+ * Generic property accessor for grove nodes. Looks up any property by name.
+ * This is the low-level interface - most code should use specific accessors like gi, id, etc.
+ *
+ * Takes: property-name (string/symbol), node, optional keyword args (default:, null:)
+ * Returns: property value or default/null value
+ */
+const nodePropertyPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length < 2) {
+    throw new Error('node-property requires at least 2 arguments');
+  }
+
+  // Get property name
+  const propName = args[0].asString()?.value || args[0].asSymbol()?.name;
+  if (!propName) {
+    throw new Error('node-property requires string or symbol as first argument');
+  }
+
+  // Get node
+  const node = optSingletonNode(args[1]);
+  if (!node) {
+    throw new Error('node-property requires a singleton node as second argument');
+  }
+
+  // Map common property names to node methods
+  // Port from: OpenJade's node property lookup table
+  let value: string | null | Node | NodeList = null;
+
+  switch (propName) {
+    case 'gi':
+    case 'generic-identifier':
+      value = node.gi();
+      return value !== null ? makeString(value) : theFalseObj;
+
+    case 'id':
+      value = node.id();
+      return value !== null ? makeString(value) : theFalseObj;
+
+    case 'data':
+      value = node.data();
+      return value !== null ? makeString(value) : theFalseObj;
+
+    case 'class-name':
+    case 'node-type':
+      return makeString(node.nodeType());
+
+    case 'parent':
+      value = node.parent();
+      return value !== null ? makeNode(value) : makeNodeList(EMPTY_NODE_LIST);
+
+    case 'children':
+      return makeNodeList(node.children());
+
+    case 'attributes':
+      return makeNodeList(node.attributes());
+
+    // Add more property mappings as needed
+    default:
+      // Try as attribute name
+      const attrValue = node.attributeString(propName);
+      if (attrValue !== null) {
+        return makeString(attrValue);
+      }
+
+      // Property not found - check for default: keyword argument
+      // For now, just return #f
+      return theFalseObj;
+  }
 };
 
 /**
@@ -9149,6 +9524,9 @@ export const standardPrimitives: Record<string, ELObj> = {
   'ancestor': new FunctionObj('ancestor', ancestorPrimitive),
   'general-name-normalize': new FunctionObj('general-name-normalize', generalNameNormalizePrimitive),
   'node-list-error': new FunctionObj('node-list-error', nodeListErrorPrimitive),
+  'format-number': new FunctionObj('format-number', formatNumberPrimitive),
+  'format-number-list': new FunctionObj('format-number-list', formatNumberListPrimitive),
+  'node-property': new FunctionObj('node-property', nodePropertyPrimitive),
   'tree-root': new FunctionObj('tree-root', treeRootPrimitive),
   'descendants': new FunctionObj('descendants', descendantsPrimitive),
   'child-number': new FunctionObj('child-number', childNumberPrimitive),
