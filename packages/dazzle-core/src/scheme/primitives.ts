@@ -9069,12 +9069,25 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
   }
 
   // First argument is the flow object type
+  // DSSSL spec §177 says it must be an identifier (symbol)
+  // However, OpenJade also accepts strings for runtime-determined flow object types
+  // Port from: OpenJade accepts both symbols and strings
   const typeSym = args[0].asSymbol();
-  if (!typeSym) {
-    throw new Error('make requires a symbol as first argument (flow object type)');
+  const typeStr = args[0].asString();
+
+  if (!typeSym && !typeStr) {
+    // Better error reporting to debug what was passed
+    const firstArg = args[0];
+    let argType = 'unknown';
+    if (firstArg.asNumber()) argType = 'number';
+    else if (firstArg.asBoolean()) argType = 'boolean';
+    else if (firstArg.asPair()) argType = 'pair/list';
+    else if (firstArg.asFunction()) argType = 'function';
+    else if (firstArg.asKeyword()) argType = 'keyword';
+    throw new Error(`make requires a symbol or string as first argument (flow object type), got ${argType}`);
   }
 
-  const flowObjectType = typeSym.name;
+  const flowObjectType = typeSym ? typeSym.name : typeStr!.value;
 
   // Parse keyword arguments
   const characteristics: Record<string, unknown> = {};
