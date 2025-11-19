@@ -13,6 +13,7 @@ import {
   makeSymbol,
   makePair,
   makeBox,
+  makeStyle,
   theNilObj,
   theTrueObj,
   theFalseObj,
@@ -480,6 +481,8 @@ export class Compiler {
             return this.compileCond(pair.cdr, env, stackPos, next);
           case 'make':
             return this.compileMake(pair.cdr, env, stackPos, next);
+          case 'style':
+            return this.compileStyle(pair.cdr, env, stackPos, next);
           case 'element':
             return this.compileElement(pair.cdr, env, stackPos, next);
           case 'default':
@@ -1492,6 +1495,34 @@ export class Compiler {
     }
 
     return insn;
+  }
+
+  /**
+   * Compile style special form
+   * Port from: OpenJade StyleExpression::compile
+   *
+   * (style key1: val1 key2: val2 ...)
+   * Creates a style object with the specified characteristics.
+   * For now, this is a stub that just returns an empty style object.
+   */
+  private compileStyle(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
+    // For now, ignore all the keyword arguments and just return an empty style object
+    // TODO: Properly parse and compile the keyword arguments
+    const argsArray = this.listToArray(args);
+
+    // Count keyword argument pairs
+    let numPairs = 0;
+    for (let i = 0; i < argsArray.length; i++) {
+      const keyword = argsArray[i].asKeyword();
+      if (keyword && i + 1 < argsArray.length) {
+        numPairs++;
+        i++; // Skip the value
+      }
+    }
+
+    // For now, just create an empty style object
+    // In a full implementation, we would compile the keyword values and create a proper style
+    return new ConstantInsn(makeStyle(), next);
   }
 
   /**

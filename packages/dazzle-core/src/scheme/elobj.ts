@@ -46,6 +46,7 @@ export abstract class ELObj {
   asColor(): ColorObj | null { return null; }
   asColorSpace(): ColorSpaceObj | null { return null; }
   asAddress(): AddressObj | null { return null; }
+  asStyle(): StyleObj | null { return null; }
 
   /** Check if this is a proper list */
   isList(): boolean {
@@ -509,6 +510,23 @@ export function makeKeyword(name: string): KeywordObj {
 }
 
 /**
+ * Style object - DSSSL formatting style
+ * Port from: OpenJade style/Style.h
+ *
+ * Stores formatting characteristics (font-family, font-size, etc.)
+ * For now, this is a stub that just stores the properties as a map.
+ */
+export class StyleObj extends ELObj {
+  constructor(public properties: Map<string, ELObj> = new Map()) {
+    super();
+  }
+
+  asStyle(): StyleObj | null {
+    return this;
+  }
+}
+
+/**
  * Box object - Mutable container for values
  * Port from: OpenJade BoxObj
  * Used for letrec variables that need to be captured before initialization
@@ -560,6 +578,10 @@ export class AddressObj extends ELObj {
   asAddress(): AddressObj | null {
     return this;
   }
+}
+
+export function makeStyle(properties: Map<string, ELObj> = new Map()): StyleObj {
+  return new StyleObj(properties);
 }
 
 export function makeBox(value: ELObj): BoxObj {
