@@ -231,13 +231,34 @@ export class Parser {
   /**
    * Parse character literal
    * Port from: SchemeParser::parseDatum handling #\
+   *
+   * Supports DSSSL SGML entity references: #\&NAME
+   * where NAME is an SGML function character name (RE, RS, SPACE, TAB)
    */
   private parseChar(): ELObj {
     const start = this.pos;
+    const ch = this.peek();
 
-    // Single character
-    if (!this.isAlpha(this.peek())) {
-      const ch = this.advance();
+    // DSSSL SGML entity reference: #\&name
+    // Port from: OpenJade SGML function character support
+    if (ch === '&') {
+      this.advance(); // skip '&'
+      const nameStart = this.pos;
+
+      // Read entity name (alphanumeric, hyphen, and # for numeric refs)
+      while (this.pos < this.input.length &&
+             (this.isAlpha(this.peek()) || this.peek() === '-' || this.peek() === '#')) {
+        this.advance();
+      }
+
+      const entityName = this.input.substring(nameStart, this.pos);
+      const entityChar = this.convertSgmlEntityName(entityName);
+      return makeChar(entityChar);
+    }
+
+    // Single character (non-alphabetic)
+    if (!this.isAlpha(ch)) {
+      this.advance();
       return makeChar(ch);
     }
 
@@ -247,8 +268,8 @@ export class Parser {
     }
 
     const name = this.input.substring(start, this.pos);
-    const ch = this.convertCharName(name);
-    return makeChar(ch);
+    const convertedChar = this.convertCharName(name);
+    return makeChar(convertedChar);
   }
 
   /**
@@ -271,6 +292,34 @@ export class Parser {
           return name;
         }
         throw this.error(`Unknown character name: ${name}`);
+    }
+  }
+
+  /**
+   * Convert SGML entity name to character
+   * Port from: OpenJade SGML function character mapping
+   *
+   * SGML defines standard function characters (ISO 8879):
+   * - #RE (Record End): Carriage return
+   * - #RS (Record Start): Line feed
+   * - #SPACE: Space character
+   * - #TAB: Horizontal tab
+   */
+  private convertSgmlEntityName(name: string): string {
+    const upper = name.toUpperCase();
+
+    switch (upper) {
+      case '#RE': return '\r';        // Record End (0x000D)
+      case '#RS': return '\n';        // Record Start (0x000A)
+      case '#SPACE': return ' ';      // Space (0x0020)
+      case '#TAB': return '\t';       // Tab (0x0009)
+      // Also support without # prefix for compatibility
+      case 'RE': return '\r';
+      case 'RS': return '\n';
+      case 'SPACE': return ' ';
+      case 'TAB': return '\t';
+      default:
+        throw this.error(`Unknown SGML entity name: &${name}`);
     }
   }
 
