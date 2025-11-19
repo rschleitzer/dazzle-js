@@ -9707,6 +9707,7 @@ export const standardPrimitives: Record<string, ELObj> = {
   'ancestors': new FunctionObj('ancestors', ancestorsPrimitive),
   'ancestor': new FunctionObj('ancestor', ancestorPrimitive),
   'general-name-normalize': new FunctionObj('general-name-normalize', generalNameNormalizePrimitive),
+  'normalize': new FunctionObj('normalize', generalNameNormalizePrimitive),  // Alias for general-name-normalize
   'node-list-error': new FunctionObj('node-list-error', nodeListErrorPrimitive),
   'format-number': new FunctionObj('format-number', formatNumberPrimitive),
   'format-number-list': new FunctionObj('format-number-list', formatNumberListPrimitive),
