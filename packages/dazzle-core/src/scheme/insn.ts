@@ -352,7 +352,7 @@ export class GlobalRefInsn extends Insn {
 
     const value = vm.globals.lookup(this.name);
     if (!value) {
-      throw new Error(`Undefined variable: ${this.name}`);
+      throw new Error(`Undefined variable: ${this.name}\n  location: ${vm.currentFile}:${vm.currentLine}`);
     }
 
     vm.push(value);

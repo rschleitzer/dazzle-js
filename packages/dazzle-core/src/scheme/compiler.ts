@@ -542,7 +542,7 @@ export class Compiler {
     // Global variable - check if defined
     // Port from: OpenJade VariableExpression::compile global lookup
     if (!this.globals.defined(name)) {
-      throw new Error(`Undefined variable: ${name}`);
+      throw new Error(`Undefined variable: ${name}\n  file: ${this.currentFile}:${this.currentLine}`);
     }
 
     // Use runtime lookup (like OpenJade's TopRefInsn)
