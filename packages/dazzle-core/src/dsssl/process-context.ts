@@ -184,17 +184,18 @@ export class ProcessContext {
           const elementName = child.gi() || '';
           const rule = this.vm.globals.ruleRegistry.findRule(elementName, processingMode, this.vm.globals);
 
-          if (rule && rule.insn) {
-            // Port from: ProcessContext.cxx:115 vm().eval(insn.pointer())
-            // The insn evaluates to a closure, which we then call
-            const closure = this.vm.eval(rule.insn);
-            const func = closure?.asFunction();
-            if (func) {
-              const sosofo = callClosure(func, [], this.vm);
-              const sosofoObj = sosofo?.asSosofo();
-              if (sosofoObj) {
-                this.process(sosofoObj);
-              }
+          if (rule) {
+            // Execute rule to get sosofo
+            const func = rule.func!.asFunction();
+            if (!func || !func.isClosure()) {
+              throw new Error(`Rule for '${elementName}' must be a function`);
+            }
+
+            // Call the rule with no arguments
+            const sosofo = callClosure(func, [], this.vm);
+            const sosofoObj = sosofo?.asSosofo();
+            if (sosofoObj) {
+              this.process(sosofoObj);
             }
           } else {
             // Port from: OpenJade - If no rule found, process children recursively
