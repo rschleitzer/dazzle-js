@@ -9176,9 +9176,7 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
   if (!typeSym && !typeStr) {
     // TODO: Figure out why we sometimes get non-symbol first arguments
     // For now, return empty sosofo to allow processing to continue
-    if (process.env.DEBUG_MAKE) {
-      console.error(`makeFlowObjectPrimitive: WARNING - non-symbol flow object type, returning empty sosofo`);
-    }
+    console.error(`makeFlowObjectPrimitive: WARNING - non-symbol flow object type (got ${args[0].constructor.name}), returning empty sosofo`);
     return makeSosofo('empty');
   }
 
