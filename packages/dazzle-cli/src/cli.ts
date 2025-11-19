@@ -153,15 +153,26 @@ program
       if (func && func.isPrimitive()) {
         const sosofo = func.callPrimitive([], vm);
 
+        if (process.env.DEBUG_FOT) {
+          console.error(`process-root returned: ${sosofo.constructor.name}`);
+        }
+
         // Process the resulting sosofo through the backend
         const sosofoParsed = sosofo.asSosofo();
         if (sosofoParsed) {
+          if (process.env.DEBUG_FOT) {
+            console.error(`Processing sosofo with type: ${sosofoParsed.type || 'FlowObj'}`);
+          }
           // Call startNode for the root element before processing
           // Port from: OpenJade pattern where root processing generates an anchor
           const rootNode = vm.grove.root();
           backend.startNode(rootNode, '');
           processContext.process(sosofoParsed);
           backend.endNode();
+        } else {
+          if (process.env.DEBUG_FOT) {
+            console.error(`process-root did not return a sosofo!`);
+          }
         }
       }
 

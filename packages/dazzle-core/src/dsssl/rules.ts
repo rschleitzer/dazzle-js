@@ -111,9 +111,10 @@ export class RuleRegistry {
       r => r.elementName === elementName && r.mode === mode
     );
 
-    // If no exact match, try default rule for this mode
+    // If no exact match and this is NOT a root query, try default rule for this mode
     // Port from: OpenJade falls back to default rule when no specific rule matches
-    if (!rule) {
+    // But root processing should NOT fall back to default rule
+    if (!rule && elementName !== "root") {
       rule = this.rules.find(
         r => r.elementName === "#default" && r.mode === mode
       );

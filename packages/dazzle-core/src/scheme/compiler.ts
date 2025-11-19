@@ -1437,6 +1437,12 @@ export class Compiler {
       throw new Error('make requires at least a flow object type');
     }
 
+    // DEBUG: Log when compileMake is called
+    if (process.env.DEBUG_MAKE) {
+      const firstArgSym = argsArray[0].asSymbol();
+      console.error(`compileMake called with ${argsArray.length} args, first arg type: ${argsArray[0].constructor.name}, symbol: ${firstArgSym?.name || 'N/A'}`);
+    }
+
     // Get the make-flow-object primitive
     const primitive = this.globals.lookup('make-flow-object');
     if (!primitive || !primitive.asFunction()?.isPrimitive()) {
@@ -1456,8 +1462,19 @@ export class Compiler {
       insn = this.compile(argsArray[i], env, stackPos + i, insn);
     }
 
-    // First argument (flow object type) is a quoted symbol
+    // First argument (flow object type) must be a symbol
+    // Port from: OpenJade SchemeParser.cxx - rejects non-symbols at parse time
+    const flowObjType = argsArray[0].asSymbol();
+    if (!flowObjType) {
+      const loc = this.makeLocation(argsArray[0]);
+      throw new Error(`${loc.file}:${loc.line}: make: flow object type must be a symbol, got: ${argsArray[0].constructor.name}`);
+    }
     insn = new ConstantInsn(argsArray[0], insn);
+
+    // DEBUG: Verify what we're pushing
+    if (process.env.DEBUG_MAKE) {
+      console.error(`compileMake: pushing constant of type ${argsArray[0].constructor.name}`);
+    }
 
     return insn;
   }

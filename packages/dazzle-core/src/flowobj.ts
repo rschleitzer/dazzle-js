@@ -402,11 +402,53 @@ export class FormattingInstructionFlowObj extends FlowObj {
 }
 
 /**
+ * Sequence FlowObj
+ * Port from: OpenJade style/FlowObj.cxx SequenceFlowObj
+ *
+ * Generic sequence container - wraps child content without additional semantics.
+ * This is the most common flow object in DSSSL output.
+ */
+export class SequenceFlowObj extends CompoundFlowObj {
+  /**
+   * Process this flow object
+   * Port from: SequenceFlowObj::processInner()
+   */
+  protected processInner(context: ProcessContext): void {
+    const fotb = context.currentFOTBuilder();
+
+    if (process.env.DEBUG_FOT) {
+      console.error('SequenceFlowObj.processInner called');
+    }
+
+    // Start sequence
+    if (fotb.startSequence) {
+      fotb.startSequence();
+    }
+
+    // Process child content
+    super.processInner(context);
+
+    // End sequence
+    if (fotb.endSequence) {
+      fotb.endSequence();
+    }
+  }
+
+  copy(): FlowObj {
+    const copy = new SequenceFlowObj();
+    copy.content_ = this.content_;
+    return copy;
+  }
+}
+
+/**
  * Flow object factory
  * Creates flow objects by class name
  */
 export function createFlowObj(className: string): FlowObj | null {
   switch (className) {
+    case 'sequence':
+      return new SequenceFlowObj();
     case 'simple-page-sequence':
       return new SimplePageSequenceFlowObj();
     case 'scroll':

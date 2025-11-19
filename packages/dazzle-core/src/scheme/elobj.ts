@@ -45,6 +45,7 @@ export abstract class ELObj {
   asBox(): BoxObj | null { return null; }
   asColor(): ColorObj | null { return null; }
   asColorSpace(): ColorSpaceObj | null { return null; }
+  asAddress(): AddressObj | null { return null; }
 
   /** Check if this is a proper list */
   isList(): boolean {
@@ -521,8 +522,55 @@ export class BoxObj extends ELObj {
   }
 }
 
+/**
+ * Address type enumeration
+ * Port from: OpenJade style/FOTBuilder.h struct Address::Type
+ */
+export enum AddressType {
+  // An address of #f
+  none = 'none',
+  // An address that was resolved by the front-end to a node
+  // Only the node member is valid.
+  resolvedNode = 'resolvedNode',
+  // node contains current node, params[0] is string.
+  idref = 'idref',
+  entity = 'entity',
+  sgmlDocument = 'sgmlDocument',
+  hytimeLinkend = 'hytimeLinkend',
+  tei = 'tei',
+  html = 'html'
+}
+
+/**
+ * Address object - Reference to a document location
+ * Port from: OpenJade style/ELObj.h class AddressObj
+ *
+ * Used for creating links and references in DSSSL output.
+ */
+export class AddressObj extends ELObj {
+  constructor(
+    public addressType: AddressType,
+    public node: Node | null = null,
+    public params: [string, string, string] = ['', '', '']
+  ) {
+    super();
+  }
+
+  asAddress(): AddressObj | null {
+    return this;
+  }
+}
+
 export function makeBox(value: ELObj): BoxObj {
   return new BoxObj(value);
+}
+
+export function makeAddress(
+  addressType: AddressType,
+  node: Node | null = null,
+  params: [string, string, string] = ['', '', '']
+): AddressObj {
+  return new AddressObj(addressType, node, params);
 }
 
 export function makePair(car: ELObj, cdr: ELObj): PairObj {
