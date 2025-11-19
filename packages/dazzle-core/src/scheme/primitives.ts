@@ -6797,6 +6797,58 @@ const attributeStringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELO
 };
 
 /**
+ * Grove: inherited-attribute-string
+ * Port from: primitive.h PRIMITIVE(InheritedAttributeString, "inherited-attribute-string", 1, 1, 0)
+ * Port from: primitive.cxx - looks up attribute in current node and ancestors
+ *
+ * This walks up the ancestor chain looking for the specified attribute.
+ * Very useful for inheritable attributes like language codes, etc.
+ *
+ * Takes: attribute name (string/symbol), optional node (uses current-node if omitted)
+ * Returns: attribute value string or #f if not found
+ */
+const inheritedAttributeStringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length < 1 || args.length > 2) {
+    throw new Error('inherited-attribute-string requires 1 or 2 arguments');
+  }
+
+  const name = args[0].asString() || args[0].asSymbol();
+  if (!name) {
+    throw new Error('inherited-attribute-string requires string or symbol as first argument');
+  }
+
+  const attrName = args[0].asString()?.value || args[0].asSymbol()?.name || '';
+
+  // Get starting node
+  let node: Node | null = null;
+  if (args.length > 1) {
+    node = optSingletonNode(args[1]);
+    if (!node) {
+      // Empty node-list -> return #f
+      return theFalseObj;
+    }
+  } else {
+    // Use current-node if not specified
+    if (!vm.currentNode) {
+      throw new Error('inherited-attribute-string: no current node in processing context');
+    }
+    node = vm.currentNode;
+  }
+
+  // Walk up the ancestor chain looking for the attribute
+  while (node) {
+    const value = node.attributeString(attrName);
+    if (value !== null) {
+      return makeString(value);
+    }
+    node = node.parent();
+  }
+
+  // Not found in any ancestor
+  return theFalseObj;
+};
+
+/**
  * Grove: ancestors
  * Port from: primitive.h PRIMITIVE(Ancestors, "ancestors", 0, 1, 0)
  * Port from: primitive.cxx - uses optSingletonNodeList, maps over node-lists
@@ -6890,6 +6942,87 @@ const ancestorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
 
   // No matching ancestor found
   return makeNodeList(EMPTY_NODE_LIST);
+};
+
+/**
+ * Grove: general-name-normalize
+ * Port from: primitive.h PRIMITIVE(GeneralNameNormalize, "general-name-normalize", 1, 1, 0)
+ * Port from: primitive.cxx - normalizes element names using grove's element list
+ *
+ * In SGML, element names can be case-insensitive. This function normalizes
+ * an element name string to its canonical form as defined by the DTD.
+ *
+ * For XML (case-sensitive), this is effectively a no-op - just returns the string.
+ * For SGML (case-insensitive), would need to consult the DTD's element list.
+ *
+ * Takes: string name, optional node (for grove context, uses current-node if omitted)
+ * Returns: normalized string
+ */
+const generalNameNormalizePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length < 1 || args.length > 2) {
+    throw new Error('general-name-normalize requires 1 or 2 arguments');
+  }
+
+  const str = args[0].asString();
+  if (!str) {
+    throw new Error('general-name-normalize requires a string as first argument');
+  }
+
+  // Optional node argument (for grove context)
+  // In OpenJade, this is used to get the grove root and its element list
+  // For XML, we don't need normalization (case-sensitive)
+  // For SGML, we would call node.getGroveRoot().getElements().normalize()
+
+  let node: Node | null = null;
+  if (args.length > 1) {
+    node = optSingletonNode(args[1]);
+    if (!node) {
+      throw new Error('general-name-normalize: second argument must be a singleton node');
+    }
+  } else {
+    // Use current-node if not specified
+    if (!vm.currentNode) {
+      throw new Error('general-name-normalize: no current node in processing context');
+    }
+    node = vm.currentNode;
+  }
+
+  // For XML, element names are case-sensitive, so no normalization needed
+  // Just return the string as-is
+  // TODO: For SGML support, would need to implement proper name normalization
+  return str;
+};
+
+/**
+ * Grove: node-list-error
+ * Port from: primitive.h PRIMITIVE(NodeListError, "node-list-error", 2, 0, 0)
+ * Port from: primitive.cxx - reports an error with a message and node location
+ *
+ * This is a DSSSL primitive for user-defined error reporting in stylesheets.
+ * Takes a string message and a node-list, reports an error, and throws.
+ *
+ * Takes: string message, node-list (for location context)
+ * Returns: Never returns (throws error)
+ */
+const nodeListErrorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length < 2) {
+    throw new Error('node-list-error requires at least 2 arguments');
+  }
+
+  const str = args[0].asString();
+  if (!str) {
+    throw new Error('node-list-error requires a string as first argument');
+  }
+
+  const nodeList = args[1].asNodeList();
+  if (!nodeList) {
+    throw new Error('node-list-error requires a node-list as second argument');
+  }
+
+  // In OpenJade, this would set the error location from the node-list
+  // and call interp.message() followed by interp.makeError()
+  // For now, just throw an error with the message
+  throw new Error(`DSSSL Error: ${str.value}`);
 };
 
 /**
@@ -9011,8 +9144,11 @@ export const standardPrimitives: Record<string, ELObj> = {
   'node-list-contains?': new FunctionObj('node-list-contains?', nodeListContainsPredicate),
   'attributes': new FunctionObj('attributes', attributesPrimitive),
   'attribute-string': new FunctionObj('attribute-string', attributeStringPrimitive),
+  'inherited-attribute-string': new FunctionObj('inherited-attribute-string', inheritedAttributeStringPrimitive),
   'ancestors': new FunctionObj('ancestors', ancestorsPrimitive),
   'ancestor': new FunctionObj('ancestor', ancestorPrimitive),
+  'general-name-normalize': new FunctionObj('general-name-normalize', generalNameNormalizePrimitive),
+  'node-list-error': new FunctionObj('node-list-error', nodeListErrorPrimitive),
   'tree-root': new FunctionObj('tree-root', treeRootPrimitive),
   'descendants': new FunctionObj('descendants', descendantsPrimitive),
   'child-number': new FunctionObj('child-number', childNumberPrimitive),
