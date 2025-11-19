@@ -104,11 +104,13 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
   const usedSpecIds = parseStyleSpecificationUse(content);
 
   // Resolve entity references in content
-  let schemeCode = extractStyleSpecification(content);
+  const mainExtraction = extractStyleSpecification(content);
+  let schemeCode = mainExtraction.content;
+  const mainTemplateOffset = mainExtraction.lineOffset;
 
   // Prepend external specifications that are in the use list
   // Port from: DSSSL - external specifications reference entities by name
-  const externalContents: Array<{ content: string; path: string }> = [];
+  const externalContents: Array<{ content: string; path: string; lineOffset: number }> = [];
   for (const specId of usedSpecIds) {
     const spec = externalSpecs.find(s => s.id === specId);
     if (spec) {
@@ -135,12 +137,15 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
 
       const specPath = resolveEntityPath(systemId, baseDir, searchPaths);
       let specContent = fs.readFileSync(specPath, 'utf-8');
+      let lineOffset = 0;
 
       // Check if this external spec is itself an XML-wrapped template
       if (specContent.trim().startsWith('<?xml') || specContent.trim().startsWith('<!DOCTYPE')) {
         // Extract style-specification content from XML wrapper
         try {
-          specContent = extractStyleSpecification(specContent);
+          const extraction = extractStyleSpecification(specContent);
+          specContent = extraction.content;
+          lineOffset = extraction.lineOffset;
         } catch (e) {
           // Not a valid XML template - use as-is
         }
@@ -150,7 +155,7 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
       specContent = specContent.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
       specContent = specContent.replace(/<!\[%[\w-]+;?\[\s*([\s\S]*?)\s*\]\]>/g, '$1');
 
-      externalContents.push({ content: specContent, path: specPath });
+      externalContents.push({ content: specContent, path: specPath, lineOffset });
     }
   }
 
@@ -169,7 +174,7 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
       startLine: currentLine,
       endLine: currentLine + lines.length - 1,
       sourceFile: external.path,
-      sourceLine: 0,
+      sourceLine: external.lineOffset - 1, // Convert 1-based lineOffset to 0-based sourceLine
     });
 
     currentLine += lines.length;
@@ -246,7 +251,7 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
         startLine: currentLine,
         endLine: currentLine,
         sourceFile: templatePath,
-        sourceLine: i,
+        sourceLine: i + mainTemplateOffset - 1, // i is 0-based, convert 1-based mainTemplateOffset to 0-based
       });
       resultLines.push(line);
       currentLine++;
@@ -391,8 +396,9 @@ function parseStyleSpecificationUse(content: string): string[] {
  * Extract content from <style-specification> tag
  * Case-insensitive to match OpenJade behavior
  * Also handles optional <style-specification-body> nested tag
+ * Returns the extracted content and the line offset in the original file
  */
-function extractStyleSpecification(content: string): string {
+function extractStyleSpecification(content: string): { content: string; lineOffset: number } {
   // Match <style-specification>...</style-specification> (case-insensitive)
   const match = content.match(/<style-specification[^>]*>([\s\S]*?)<\/style-specification>/i);
 
@@ -400,15 +406,26 @@ function extractStyleSpecification(content: string): string {
     throw new Error('XML template must contain <style-specification> tag');
   }
 
+  // Calculate line offset - how many lines before the match
+  const beforeMatch = content.substring(0, match.index);
+  const lineOffset = (beforeMatch.match(/\n/g) || []).length;
+
   let extracted = match[1];
+  let additionalOffset = 0;
 
   // If there's a <style-specification-body> tag, extract its content
   const bodyMatch = extracted.match(/<style-specification-body[^>]*>([\s\S]*?)<\/style-specification-body>/i);
   if (bodyMatch) {
+    // Add offset from style-specification to style-specification-body
+    const beforeBody = extracted.substring(0, bodyMatch.index);
+    additionalOffset = (beforeBody.match(/\n/g) || []).length;
     extracted = bodyMatch[1];
   }
 
-  return extracted;
+  return {
+    content: extracted,
+    lineOffset: lineOffset + additionalOffset + 1, // +1 because we skip the opening tag line
+  };
 }
 
 /**
