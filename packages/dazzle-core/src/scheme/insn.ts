@@ -416,6 +416,25 @@ export class ReturnInsn extends Insn {
     // Pop the return value
     const result = vm.pop();
 
+    // Debug: Track if we're returning a sosofo
+    if (process.env.DEBUG_CLOSURES) {
+      const sosofo = result.asSosofo();
+      if (sosofo) {
+        // Only log FlowObj returns (not built-in sosofo types)
+        const isFlowObj = sosofo.type === undefined || sosofo.type === null;
+        if (isFlowObj) {
+          console.error(`ReturnInsn: returning FLOW OBJECT from function`);
+          console.error(`  Result type: ${result.constructor.name}`);
+          console.error(`  Total args: ${this.totalArgs}`);
+          console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
+          // Get some stack trace context
+          const error = new Error();
+          const stack = error.stack?.split('\n').slice(2, 6).join('\n');
+          console.error(`  Stack:\n${stack}`);
+        }
+      }
+    }
+
     // Remove function arguments from stack
     for (let i = 0; i < this.totalArgs; i++) {
       vm.pop();
