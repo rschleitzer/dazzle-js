@@ -32,6 +32,7 @@ interface Entity {
   name: string;
   systemId?: string;  // SYSTEM identifier (file path) - optional for PUBLIC-only entities
   publicId?: string;  // PUBLIC identifier - optional
+  value?: string;     // Direct text replacement value (for <!ENTITY name "value"> declarations)
 }
 
 /**
@@ -208,7 +209,21 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
   const entityReplacements: Array<{ ref: string; content: string; path: string }> = [];
 
   for (const entity of entities) {
-    // Resolve entity path - try SYSTEM first, then PUBLIC via catalog
+    let entityContent: string;
+    let entityPath: string;
+
+    // Check if this is a text replacement entity
+    if (entity.value !== undefined) {
+      // Direct text replacement entity (<!ENTITY name "value">)
+      entityContent = entity.value;
+      entityPath = templatePath; // Use template path for source tracking
+
+      const entityRef = `&${entity.name};`;
+      entityReplacements.push({ ref: entityRef, content: entityContent, path: entityPath });
+      continue;
+    }
+
+    // File-based entity - resolve path
     let systemId = entity.systemId;
     if (!systemId && entity.publicId) {
       // Try resolving PUBLIC identifier via catalog
@@ -220,8 +235,8 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
       continue;
     }
 
-    const entityPath = resolveEntityPath(systemId, baseDir, searchPaths);
-    let entityContent = fs.readFileSync(entityPath, 'utf-8');
+    entityPath = resolveEntityPath(systemId, baseDir, searchPaths);
+    entityContent = fs.readFileSync(entityPath, 'utf-8');
 
     // Check if entity file is a DSSSL stylesheet (has XML DOCTYPE wrapper)
     // If so, extract just the <style-specification-body> content
@@ -235,8 +250,16 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
           paramDefMap.set(name, value);
         }
 
-        // Resolve any entity references in the entity file
+        // Merge general entities from entity file into global entity list
+        // Port from: SGML makes entities from included files available globally
         for (const subEntity of entityFileEntities) {
+          // Check if already exists (first definition wins)
+          const existing = entities.find(e => e.name === subEntity.name);
+          if (!existing) {
+            entities.push(subEntity);
+          }
+
+          // Resolve file-based entities and replace inline
           let subSystemId = subEntity.systemId;
           if (!subSystemId && subEntity.publicId) {
             subSystemId = catalog.resolve(subEntity.publicId) || undefined;
@@ -294,8 +317,17 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
     entityReplacements.push({ ref: entityRef, content: entityContent, path: entityPath });
   }
 
-  // Replace entity references and build source map
-  // Process line by line to track line numbers
+  // Separate entity replacements into inline (text values) and file-based
+  const inlineReplacements = entityReplacements.filter(r => !r.content.includes('\n'));
+  const fileReplacements = entityReplacements.filter(r => r.content.includes('\n'));
+
+  // First, do inline replacements (text values) - these don't affect line numbers
+  // Port from: SGML expands entity references before Scheme parser sees them
+  for (const replacement of inlineReplacements) {
+    schemeCode = schemeCode.replace(new RegExp(replacement.ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replacement.content);
+  }
+
+  // Then process file-based entity references line by line to track line numbers
   const lines = schemeCode.split('\n');
   const resultLines: string[] = [];
 
@@ -303,8 +335,8 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
     let line = lines[i];
     let wasReplaced = false;
 
-    // Check if this line contains entity references
-    for (const replacement of entityReplacements) {
+    // Check if this line contains file-based entity references
+    for (const replacement of fileReplacements) {
       if (line.includes(replacement.ref)) {
         // Replace entity reference with content
         const entityLines = replacement.content.split('\n');
@@ -427,14 +459,18 @@ function parseEntities(content: string, baseDir: string, searchPaths: string[], 
         });
 
         // Parse entity declarations from parameter entity file
-        // Improved regex to capture both PUBLIC and SYSTEM identifiers
-        const paramEntityRegex = /<!ENTITY\s+(?!%)([\w.-]+)\s+(?:SYSTEM\s+"([^"]+)"|PUBLIC\s+"([^"]+)"(?:\s+"([^"]+)")?)?\s*(?:CDATA\s+DSSSL)?\s*>/gi;
+        // Handle both file-based entities (SYSTEM/PUBLIC) and text replacement entities
+        // Pattern 1: <!ENTITY name SYSTEM "file">
+        // Pattern 2: <!ENTITY name PUBLIC "pubid" "sysid">
+        // Pattern 3: <!ENTITY name "text value">
+        const paramEntityRegex = /<!ENTITY\s+(?!%)([\w.-]+)\s+(?:SYSTEM\s+"([^"]+)"|PUBLIC\s+"([^"]+)"(?:\s+"([^"]+)")?|"([^"]*)")?\s*(?:CDATA\s+DSSSL)?\s*>/gi;
         let paramMatch;
 
         while ((paramMatch = paramEntityRegex.exec(paramContent)) !== null) {
           const name = paramMatch[1];
           const systemId = paramMatch[2] || paramMatch[4]; // SYSTEM id or PUBLIC's optional SYSTEM id
           const publicId = paramMatch[3]; // PUBLIC id
+          const value = paramMatch[5]; // Direct text value
 
           // Check if entity already exists - if so, skip (first definition wins)
           // This handles marked sections: when INCLUDE, the entity inside the marked
@@ -442,19 +478,20 @@ function parseEntities(content: string, baseDir: string, searchPaths: string[], 
           const existing = entities.find(e => e.name === name);
           if (existing) {
             if (process.env.DEBUG_TEMPLATE) {
-              console.error(`DEBUG_TEMPLATE: Entity ${name} already defined as ${existing.systemId || existing.publicId}, skipping duplicate -> ${systemId || publicId || '(no id)'}`);
+              console.error(`DEBUG_TEMPLATE: Entity ${name} already defined, skipping duplicate`);
             }
             continue;
           }
 
           if (process.env.DEBUG_TEMPLATE) {
-            console.error(`DEBUG_TEMPLATE: Entity parsed: ${name} -> ${systemId || publicId || '(no id)'}`);
+            console.error(`DEBUG_TEMPLATE: Entity parsed: ${name} -> ${systemId || publicId || value || '(no id/value)'}`);
           }
 
           entities.push({
             name,
             systemId,
             publicId,
+            value,
           });
         }
       } catch (e) {

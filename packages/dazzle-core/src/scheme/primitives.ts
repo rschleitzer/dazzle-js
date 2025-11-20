@@ -6291,6 +6291,10 @@ const childrenPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
     return makeNodeList(nodeListFromArray(allChildren));
   }
 
+  console.error(`children: arg is ${args[0].constructor.name}`);
+  console.error(`  asNode():`, args[0].asNode());
+  console.error(`  asNodeList():`, args[0].asNodeList());
+  console.error(`  Value:`, args[0]);
   throw new Error('children requires a node or node-list argument');
 };
 
@@ -7055,8 +7059,27 @@ const ancestorsPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => 
  * Returns first ancestor with matching GI
  */
 const ancestorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
-  if (args.length !== 2) {
-    throw new Error('ancestor requires exactly 2 arguments');
+  if (args.length < 1 || args.length > 2) {
+    throw new Error('ancestor requires 1 or 2 arguments');
+  }
+
+  // Get node - either from second argument or current-node
+  // Port from: OpenJade checks argc > 1, otherwise uses context.currentNode
+  let groveNode: Node;
+  if (args.length > 1) {
+    const nodeArg = optSingletonNode(args[1]);
+    if (!nodeArg) {
+      console.error(`ancestor: second arg is ${args[1].constructor.name}`);
+      console.error(`  optSingletonNode returned null`);
+      console.error(`  Value:`, args[1]);
+      throw new Error('ancestor: second argument must be a singleton node');
+    }
+    groveNode = nodeArg;
+  } else {
+    if (!vm.currentNode) {
+      throw new Error('ancestor: no current node');
+    }
+    groveNode = vm.currentNode;
   }
 
   const giStr = args[0].asString();
@@ -7064,13 +7087,8 @@ const ancestorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
     throw new Error('ancestor requires a string as first argument');
   }
 
-  const node = args[1].asNode();
-  if (!node) {
-    throw new Error('ancestor requires a node as second argument');
-  }
-
   const gi = giStr.value;
-  let ancestorList = node.node.ancestors();
+  let ancestorList = groveNode.ancestors();
 
   // Search for first ancestor with matching GI
   while (true) {
