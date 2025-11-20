@@ -348,11 +348,24 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
   const inlineReplacements = entityReplacements.filter(r => !r.content.includes('\n'));
   const fileReplacements = entityReplacements.filter(r => r.content.includes('\n'));
 
-  // First, do inline replacements (text values) - these don't affect line numbers
-  // Port from: SGML expands entity references before Scheme parser sees them
-  for (const replacement of inlineReplacements) {
-    schemeCode = schemeCode.replace(new RegExp(replacement.ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), replacement.content);
+  if (process.env.DEBUG_TEMPLATE) {
+    console.error(`DEBUG_TEMPLATE: ${inlineReplacements.length} inline replacements, ${fileReplacements.length} file-based`);
+    if (inlineReplacements.length > 0) {
+      console.error(`DEBUG_TEMPLATE: First few inline replacements:`);
+      for (let i = 0; i < Math.min(5, inlineReplacements.length); i++) {
+        console.error(`  ${inlineReplacements[i].ref} -> "${inlineReplacements[i].content}"`);
+      }
+      // Check for TableofContents specifically
+      const tocReplacement = inlineReplacements.find(r => r.ref === '&TableofContents;');
+      if (tocReplacement) {
+        console.error(`DEBUG_TEMPLATE: Found &TableofContents; -> "${tocReplacement.content}"`);
+      } else {
+        console.error(`DEBUG_TEMPLATE: &TableofContents; NOT found in inline replacements!`);
+      }
+    }
   }
+
+  // NOTE: Inline replacements are applied to the combined code later (after prepending external specs)
 
   // Then process file-based entity references line by line to track line numbers
   const lines = schemeCode.split('\n');
@@ -400,10 +413,25 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
   }
 
   // Combine external specs + main code
-  const allLines = [...prependedLines, ...resultLines];
+  let combinedCode = [...prependedLines, ...resultLines].join('\n');
+
+  // Apply inline replacements to the ENTIRE combined code (including prepended external specs)
+  // Port from: SGML expands all entity references before Scheme sees the code
+  if (process.env.DEBUG_TEMPLATE) {
+    console.error(`DEBUG_TEMPLATE: Applying ${inlineReplacements.length} inline replacements to combined code (${combinedCode.length} chars)`);
+  }
+  for (const replacement of inlineReplacements) {
+    const regex = new RegExp(replacement.ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+    const before = combinedCode;
+    combinedCode = combinedCode.replace(regex, replacement.content);
+    if (process.env.DEBUG_TEMPLATE && before !== combinedCode) {
+      const count = (before.match(regex) || []).length;
+      console.error(`DEBUG_TEMPLATE: Replaced ${count} occurrences of ${replacement.ref}`);
+    }
+  }
 
   return {
-    schemeCode: allLines.join('\n'),
+    schemeCode: combinedCode,
     entities,
     sourceMap,
   };
