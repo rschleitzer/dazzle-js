@@ -43,6 +43,11 @@ import {
   ErrorInsn,
   DefineUnitInsn,
   WithModeInsn,
+  CopyFlowObjInsn,
+  CheckSosofoInsn,
+  SosofoAppendInsn,
+  SetContentInsn,
+  SetNonInheritedCInsn,
 } from './insn.js';
 
 
@@ -1478,6 +1483,23 @@ export class Compiler {
    * The flow object type is not evaluated (like a symbol in quote).
    * Keywords and their values are compiled as normal arguments.
    */
+  /**
+   * Compile make special form using OpenJade's algorithm
+   * Port from: OpenJade Expression.cxx MakeExpression::compile
+   *
+   * (make flow-obj-type content...)
+   *
+   * OpenJade's algorithm:
+   * 1. Create flow object template (CopyFlowObjInsn)
+   * 2. Compile content expressions, each wrapped in CheckSosofoInsn
+   * 3. If multiple content, combine with SosofoAppendInsn
+   * 4. Attach content to flow object with SetContentInsn
+   *
+   * This avoids stack corruption issues because:
+   * - Flow object is created immediately (no type symbol on stack)
+   * - Content expressions evaluate at same stackPos (replace test/branch values)
+   * - Each nested make completes fully before returning to outer context
+   */
   private compileMake(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
     const argsArray = this.listToArray(args);
 
@@ -1485,46 +1507,100 @@ export class Compiler {
       throw new Error('make requires at least a flow object type');
     }
 
-    // DEBUG: Log when compileMake is called
-    if (process.env.DEBUG_MAKE) {
-      const firstArgSym = argsArray[0].asSymbol();
-      console.error(`compileMake called with ${argsArray.length} args, first arg type: ${argsArray[0].constructor.name}, symbol: ${firstArgSym?.name || 'N/A'}`);
-    }
-
-    // Get the make-flow-object primitive
-    const primitive = this.globals.lookup('make-flow-object');
-    if (!primitive || !primitive.asFunction()?.isPrimitive()) {
-      throw new Error('make-flow-object primitive not found');
-    }
-
-    // Build instruction chain from back to front:
-    // 1. PrimitiveCallInsn (calls make-flow-object)
-    // 2. Push all arguments (right-to-left)
-    // 3. Return first instruction in chain
-
-    // Start with the call instruction
-    let insn: Insn | null = new PrimitiveCallInsn(argsArray.length, primitive, this.makeLocation(), next);
-
-    // Compile arguments in reverse order (right-to-left for stack)
-    for (let i = argsArray.length - 1; i >= 1; i--) {
-      insn = this.compile(argsArray[i], env, stackPos + i, insn);
-    }
-
-    // First argument (flow object type) must be a symbol
+    // First argument must be a flow object type symbol
     // Port from: OpenJade SchemeParser.cxx - rejects non-symbols at parse time
     const flowObjType = argsArray[0].asSymbol();
     if (!flowObjType) {
       const loc = this.makeLocation(argsArray[0]);
       throw new Error(`${loc.file}:${loc.line}: make: flow object type must be a symbol, got: ${argsArray[0].constructor.name}`);
     }
-    insn = new ConstantInsn(argsArray[0], insn);
 
-    // DEBUG: Verify what we're pushing
-    if (process.env.DEBUG_MAKE) {
-      console.error(`compileMake: pushing constant of type ${argsArray[0].constructor.name}`);
+    // Separate keyword arguments from content expressions
+    // DSSSL syntax: (make type key1: val1 key2: val2 content1 content2 ...)
+    // Keywords end with ':' and are followed by their values
+    const keywords: Array<{name: string, valueExpr: ELObj, index: number}> = [];
+    let contentStart = 1;  // Index where content expressions start
+
+    for (let i = 1; i < argsArray.length; i++) {
+      const keyword = argsArray[i].asKeyword();
+      if (keyword) {
+        // Found a keyword, next element is its value
+        if (i + 1 >= argsArray.length) {
+          throw new Error(`make: keyword ${keyword.name} missing value`);
+        }
+        keywords.push({
+          name: keyword.name,
+          valueExpr: argsArray[i + 1],
+          index: i
+        });
+        i++;  // Skip the value
+        contentStart = i + 1;
+      } else {
+        // Not a keyword, this is where content starts
+        break;
+      }
     }
 
-    return insn;
+    // Now we know: argsArray[1..contentStart-1] are keywords+values, argsArray[contentStart..] are content
+    const nContent = argsArray.length - contentStart;
+
+    // Port from: OpenJade MakeExpression::compile lines 1305-1326
+    // Handle case with no content
+    if (nContent === 0 && keywords.length === 0) {
+      // No keywords, no content - just create and return the flow object
+      // Port from: line 1309 - CopyFlowObjInsn
+      return new CopyFlowObjInsn(flowObjType.name, next);
+    }
+
+    // If we have keywords but no content, we still need to set them
+    if (nContent === 0) {
+      // Build chain: CopyFlowObjInsn -> SetNonInheritedCInsn for each keyword
+      let rest: Insn | null = next;
+      // Compile keywords in order (they'll execute in reverse, which is what we want)
+      for (const kw of keywords) {
+        rest = this.compile(kw.valueExpr, env, stackPos + 1,
+                            new SetNonInheritedCInsn(kw.name, this.makeLocation(kw.valueExpr), rest));
+      }
+      return new CopyFlowObjInsn(flowObjType.name, rest);
+    }
+
+    // Build instruction chain from back to front:
+    let rest: Insn | null = next;
+
+    // Port from: lines 1293-1301 - Compile keyword characteristics
+    // For each keyword, compile its value expression and create SetNonInheritedCInsn
+    for (const kw of keywords) {
+      // Compile keyword value at stackPos + 1 (flow object is at stackPos)
+      rest = this.compile(kw.valueExpr, env, stackPos + 1,
+                          new SetNonInheritedCInsn(kw.name, this.makeLocation(kw.valueExpr), rest));
+    }
+
+    // Port from: line 1311 - SetContentInsn attaches content to flow object
+    rest = new SetContentInsn(flowObjType.name, rest);
+
+    // Port from: lines 1318-1326 - Handle content compilation
+    // When there's content, SetContentInsn contains the template, so we DON'T need CopyFlowObjInsn
+    if (nContent === 1) {
+      // Single content expression
+      // Port from: line 1320 - compile at stackPos (not stackPos+1!)
+      // Content replaces itself with a sosofo at the same stack position
+      const contentExpr = argsArray[contentStart];
+      return this.compile(contentExpr, env, stackPos,
+                          new CheckSosofoInsn(this.makeLocation(contentExpr), rest));
+    } else {
+      // Multiple content expressions
+      // Port from: lines 1322-1325
+      rest = new SosofoAppendInsn(nContent, rest);
+
+      // Compile each content expression in reverse order
+      // Port from: line 1324 - compile at stackPos + nContent - i
+      for (let i = nContent - 1; i >= 0; i--) {
+        const contentExpr = argsArray[contentStart + i];
+        rest = this.compile(contentExpr, env, stackPos + i,
+                            new CheckSosofoInsn(this.makeLocation(contentExpr), rest));
+      }
+      return rest;
+    }
   }
 
   /**

@@ -8,7 +8,8 @@
 
 import type { ELObj } from './elobj.js';
 import type { VM } from './vm.js';
-import { FunctionObj, type Signature, theNilObj, theFalseObj, makePair } from './elobj.js';
+import { FunctionObj, type Signature, theNilObj, theFalseObj, makePair, makeSymbol } from './elobj.js';
+import { createFlowObj, CompoundFlowObj, FlowObj } from '../flowobj.js';
 
 /**
  * Source location information
@@ -641,7 +642,19 @@ export class CallInsn extends Insn {
                    num ? `number ${num.value}` :
                    bool !== null ? `boolean ${bool.value}` :
                    funcObj.constructor.name;
-      throw new Error(`Cannot call non-function: got ${type} at ${this.loc.file}:${this.loc.line}`);
+
+      // Add debug info to help trace the issue
+      const stackInfo = vm.stackSize() > 0 ? `Stack size: ${vm.stackSize()}, top 3 items: ${
+        [0, 1, 2].map(i => {
+          if (vm.stackSize() > i) {
+            const val = vm.getStackValue(vm.stackSize() - 1 - i);
+            return val.constructor.name;
+          }
+          return 'N/A';
+        }).join(', ')
+      }` : 'Stack empty';
+
+      throw new Error(`Cannot call non-function: got ${type} at ${this.loc.file}:${this.loc.line}. ${stackInfo}`);
     }
 
     // Gather arguments from stack (they're at sp - nArgs .. sp - 1)
@@ -1207,6 +1220,224 @@ export class ErrorInsn extends Insn {
       throw new Error(`${this.message}: ${valueStr}`);
     }
     throw new Error(this.message);
+  }
+}
+
+/**
+ * DSSSL Flow Object Instructions
+ * Port from: OpenJade Insn2.h
+ *
+ * These specialized instructions handle DSSSL make expressions.
+ * Unlike the generic PrimitiveCallInsn approach, these instructions
+ * build flow objects step-by-step, avoiding stack corruption issues
+ * with nested make expressions.
+ */
+
+/**
+ * Copy flow object instruction - Create a copy of a flow object template
+ * Port from: Insn2.h CopyFlowObjInsn
+ *
+ * Pushes a copy of the flow object onto the stack.
+ * The flow object template is created at compile time and stored in the instruction.
+ */
+export class CopyFlowObjInsn extends Insn {
+  constructor(
+    private flowObjType: string,  // e.g., 'sequence', 'simple-page-sequence'
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Create the flow object using the factory
+    // Port from: OpenJade CopyFlowObjInsn::execute() - vm.sp++ = flowObj_->copy(*vm.interp)
+    const flowObj = createFlowObj(this.flowObjType);
+
+    if (!flowObj) {
+      throw new Error(`Unknown flow object type: ${this.flowObjType}`);
+    }
+
+    // Push a copy of the flow object (OpenJade copies, not shares)
+    vm.push(flowObj.copy());
+
+    return this.next;
+  }
+}
+
+/**
+ * Check sosofo instruction - Verify that top of stack is a sosofo
+ * Port from: Insn2.h CheckSosofoInsn
+ *
+ * Validates that the value on top of the stack is a sosofo (flow object).
+ * Throws an error if not.
+ */
+export class CheckSosofoInsn extends Insn {
+  constructor(
+    private loc: Location,
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    const value = vm.peek();
+    if (!value.asSosofo()) {
+      vm.currentFile = this.loc.file;
+      vm.currentLine = this.loc.line;
+      vm.currentColumn = this.loc.column;
+      throw new Error(`Expected sosofo, got ${value.constructor.name}`);
+    }
+    return this.next;
+  }
+}
+
+/**
+ * Sosofo append instruction - Combine multiple sosofos into one
+ * Port from: Insn2.h SosofoAppendInsn
+ *
+ * Pops n sosofos from the stack and combines them into a single sosofo.
+ * Uses sosofo-append primitive.
+ */
+export class SosofoAppendInsn extends Insn {
+  constructor(
+    private n: number,  // Number of sosofos to append
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Gather n sosofos from top of stack
+    const sosofos: ELObj[] = [];
+    for (let i = 0; i < this.n; i++) {
+      const sosofo = vm.getStackValue(vm.stackSize() - this.n + i);
+      if (!sosofo.asSosofo()) {
+        throw new Error(`SosofoAppendInsn: expected sosofo at position ${i}, got ${sosofo.constructor.name}`);
+      }
+      sosofos.push(sosofo);
+    }
+
+    // Pop all sosofos except the first
+    for (let i = 1; i < this.n; i++) {
+      vm.pop();
+    }
+
+    // Call sosofo-append primitive
+    const sosofoAppend = vm.globals.lookup('sosofo-append');
+    if (!sosofoAppend) {
+      throw new Error('sosofo-append primitive not found');
+    }
+
+    const func = sosofoAppend.asFunction();
+    if (!func || !func.isPrimitive()) {
+      throw new Error('sosofo-append must be a primitive function');
+    }
+
+    const result = func.callPrimitive(sosofos, vm);
+
+    // Replace first sosofo with appended result
+    vm.pop();
+    vm.push(result);
+
+    return this.next;
+  }
+}
+
+/**
+ * Set non-inherited characteristic instruction
+ * Port from: Insn2.h SetNonInheritedCInsn
+ *
+ * Stack on entry: [flow-object, characteristic-value]
+ * Pops value, sets characteristic on flow object, pushes flow object back.
+ */
+export class SetNonInheritedCInsn extends Insn {
+  constructor(
+    private characteristicName: string,
+    private loc: Location,
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Stack: [flow-obj, char-value]
+    const value = vm.pop();
+    const flowObj = vm.peek();  // Peek, don't pop - we'll replace in place
+
+    // Port from: OpenJade SetNonInheritedCInsn - calls flowObj->setNonInheritedC()
+    if (!flowObj.asSosofo()) {
+      vm.currentFile = this.loc.file;
+      vm.currentLine = this.loc.line;
+      vm.currentColumn = this.loc.column;
+      throw new Error(`SetNonInheritedCInsn: expected flow object, got ${flowObj.constructor.name}`);
+    }
+
+    // Cast to FlowObj to access setNonInheritedC
+    const flowObjInstance = flowObj as FlowObj;
+    if (!(flowObj instanceof FlowObj)) {
+      throw new Error(`SetNonInheritedCInsn: object is sosofo but not a FlowObj`);
+    }
+
+    // Set the characteristic
+    flowObjInstance.setNonInheritedC(this.characteristicName, value);
+
+    return this.next;
+  }
+}
+
+/**
+ * Set content instruction - Attach content sosofo to a flow object
+ * Port from: Insn2.h SetContentInsn
+ *
+ * Stack on entry: [content-sosofo]
+ * The flow object template is stored in the instruction (compile-time).
+ * Pops content-sosofo, creates copy of template, sets content, pushes result.
+ */
+export class SetContentInsn extends Insn {
+  private flowObjTemplate: CompoundFlowObj;
+
+  constructor(
+    private flowObjType: string,  // Type of the compound flow object
+    private next: Insn | null
+  ) {
+    super();
+    // Create the flow object template at compile time
+    // Port from: OpenJade SetContentInsn stores flowObj_ member
+    const template = createFlowObj(flowObjType);
+    if (!template) {
+      throw new Error(`Unknown flow object type: ${flowObjType}`);
+    }
+    if (!(template instanceof CompoundFlowObj)) {
+      throw new Error(`SetContentInsn: ${flowObjType} is not a compound flow object`);
+    }
+    this.flowObjTemplate = template as CompoundFlowObj;
+  }
+
+  execute(vm: VM): Insn | null {
+    // Stack: [content-sosofo]
+    // Port from: OpenJade SetContentInsn::execute() lines 1333-1336
+    // CompoundFlowObj *copy = (CompoundFlowObj *)flowObj_->copy(*vm.interp);
+    // copy->setContent((SosofoObj *)vm.sp[-1]);
+    // vm.sp[-1] = copy;
+
+    const contentSosofo = vm.pop();  // Pop content from stack
+
+    if (!contentSosofo.asSosofo()) {
+      throw new Error(`SetContentInsn: expected content sosofo, got ${contentSosofo.constructor.name}`);
+    }
+
+    // Create a copy of the template flow object
+    const copy = this.flowObjTemplate.copy() as CompoundFlowObj;
+    const sosofo = contentSosofo.asSosofo();
+    if (!sosofo) {
+      throw new Error(`SetContentInsn: content is not a sosofo`);
+    }
+    copy.setContent(sosofo);
+
+    // Push the completed flow object
+    vm.push(copy);
+
+    return this.next;
   }
 }
 
