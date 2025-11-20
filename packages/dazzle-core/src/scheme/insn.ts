@@ -286,6 +286,16 @@ export class StackRefInsn extends Insn {
     }
     let value = vm.getFrame(this.frameIndex);
 
+    // Debug: Track if we're reading a FlowObj from the stack
+    if (process.env.DEBUG_CLOSURES) {
+      const sosofo = value?.asSosofo?.();
+      if (sosofo && (sosofo.type === undefined || sosofo.type === null)) {
+        console.error(`StackRefInsn: Reading FLOW OBJECT from frame[${this.frameIndex}]`);
+        console.error(`  Value type: ${value.constructor.name}`);
+        console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
+      }
+    }
+
     // Auto-unbox if this is a boxed value (for letrec variables)
     // Port from: OpenJade - stack refs auto-unbox
     // CRITICAL: Do NOT unbox if forCapture=true (for closure capture)
@@ -336,6 +346,16 @@ export class ClosureRefInsn extends Insn {
     const box = value.asBox();
     if (box) {
       value = box.value;
+    }
+
+    // Debug: Track if we're reading a FlowObj from closure
+    if (process.env.DEBUG_CLOSURES) {
+      const sosofo = value?.asSosofo?.();
+      if (sosofo && (sosofo.type === undefined || sosofo.type === null)) {
+        console.error(`ClosureRefInsn: Reading FLOW OBJECT from closure[${this.index}]`);
+        console.error(`  Value type: ${value.constructor.name}`);
+        console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
+      }
     }
 
     vm.push(value);

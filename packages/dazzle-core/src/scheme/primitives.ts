@@ -6277,7 +6277,21 @@ const parentPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   }
 
   const parent = node.node.parent();
-  return parent ? makeNode(parent) : theFalseObj;
+  const result = parent ? makeNode(parent) : theFalseObj;
+
+  // Debug: Check if we're somehow returning a FlowObj
+  if (process.env.DEBUG_CLOSURES && parent) {
+    const sosofo = result.asSosofo?.();
+    if (sosofo && (sosofo.type === undefined || sosofo.type === null)) {
+      console.error(`parent primitive: RETURNING FLOW OBJECT!`);
+      console.error(`  Parent type: ${parent.constructor?.name}`);
+      console.error(`  Result type: ${result.constructor.name}`);
+      console.error(`  Input node gi: ${node.node.gi()}`);
+      console.error(`  Parent gi: ${parent.gi()}`);
+    }
+  }
+
+  return result;
 };
 
 /**
