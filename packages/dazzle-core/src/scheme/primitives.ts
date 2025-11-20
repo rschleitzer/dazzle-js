@@ -7069,10 +7069,18 @@ const ancestorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length > 1) {
     const nodeArg = optSingletonNode(args[1]);
     if (!nodeArg) {
-      if (process.env.DEBUG_ANCESTOR) {
-        console.error(`ancestor: second arg is ${args[1].constructor.name}`);
-        console.error(`  optSingletonNode returned null`);
-        console.error(`  Value:`, args[1]);
+      // Debug: Check if this is a sosofo/flow object being passed incorrectly
+      const sosofo = args[1].asSosofo();
+      if (sosofo) {
+        const giArg = args[0].asString();
+        console.error(`ERROR: ancestor received a sosofo (flow object) as second argument`);
+        console.error(`  Searching for element: ${giArg ? giArg.value : '(not a string)'}`);
+        console.error(`  Got type: ${args[1].constructor.name}`);
+        console.error(`  Sosofo type: ${sosofo.type || 'unknown'}`);
+        console.error(`  This is likely a bug in a DSSSL library function`);
+        console.error(`  The function returned a sosofo when it should return a node or string`);
+        // For FOT backend, sosofos should never be passed to grove primitives
+        // This suggests a missing or incorrectly implemented DSSSL library function
       }
       throw new Error(`ancestor: second argument must be a singleton node, got ${args[1].constructor.name}`);
     }
