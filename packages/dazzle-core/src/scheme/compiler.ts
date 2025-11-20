@@ -1594,10 +1594,24 @@ export class Compiler {
 
       // Compile each content expression in reverse order
       // Port from: line 1324 - compile at stackPos + nContent - i
+      if (process.env.DEBUG_FOT) {
+        console.error(`compileMake: nContent=${nContent}, contentStart=${contentStart}, stackPos=${stackPos}, argsArray.length=${argsArray.length}`);
+      }
       for (let i = nContent - 1; i >= 0; i--) {
         const contentExpr = argsArray[contentStart + i];
-        rest = this.compile(contentExpr, env, stackPos + i,
-                            new CheckSosofoInsn(this.makeLocation(contentExpr), rest));
+        const checkInsn: Insn = new CheckSosofoInsn(this.makeLocation(contentExpr), rest);
+        if (process.env.DEBUG_FOT) {
+          console.error(`  Loop i=${i}: Wrapping content ${i} (argsArray[${contentStart + i}]=${contentExpr ? contentExpr.constructor.name : 'undefined'}) with CheckSosofoInsn at stackPos ${stackPos + i}`);
+        }
+        const compiled = this.compile(contentExpr, env, stackPos + i, checkInsn);
+        if (process.env.DEBUG_FOT && compiled !== checkInsn && !this.chainContainsInsn(compiled, checkInsn)) {
+          console.error(`    WARNING: compile() returned instruction chain that doesn't contain CheckSosofoInsn!`);
+          console.error(`    Returned: ${compiled?.constructor.name}, Expected chain to include: CheckSosofoInsn`);
+        }
+        rest = compiled;
+      }
+      if (process.env.DEBUG_FOT) {
+        console.error(`  Loop completed, returning instruction chain`);
       }
       return rest;
     }
@@ -2263,5 +2277,20 @@ export class Compiler {
 
     // Create WithModeInsn that wraps the body
     return new WithModeInsn(modeName, bodyInsn, next);
+  }
+
+  /**
+   * Helper: Check if instruction chain contains a specific instruction
+   */
+  private chainContainsInsn(start: Insn | null, target: Insn): boolean {
+    let current = start;
+    let depth = 0;
+    while (current && depth < 100) {  // Limit depth to avoid infinite loops
+      if (current === target) return true;
+      // Try to get next instruction (this is a simplified check)
+      current = (current as any).next || null;
+      depth++;
+    }
+    return false;
   }
 }

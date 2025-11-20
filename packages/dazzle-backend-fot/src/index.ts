@@ -207,6 +207,53 @@ export class FotBackend implements FotBuilder {
   }
 
   /**
+   * Start a leader flow object
+   * Port from: OpenJade FOTBuilder
+   */
+  startLeader(): void {
+    this.closeText();
+    this.writeIndent();
+    this.output += '<leader>\n';
+    this.indentLevel++;
+  }
+
+  /**
+   * End a leader flow object
+   */
+  endLeader(): void {
+    this.closeText();
+    this.indentLevel--;
+    this.writeIndent();
+    this.output += '</leader>\n';
+  }
+
+  /**
+   * Start a link flow object
+   * Port from: OpenJade FOTBuilder.h:484
+   */
+  startLink(destination?: string): void {
+    this.closeText();
+    this.writeIndent();
+    this.output += '<link';
+    if (destination) {
+      this.output += ` destination="${this.escapeXml(destination)}"`;
+    }
+    this.output += '>\n';
+    this.indentLevel++;
+  }
+
+  /**
+   * End a link flow object
+   * Port from: OpenJade FOTBuilder.h:485
+   */
+  endLink(): void {
+    this.closeText();
+    this.indentLevel--;
+    this.writeIndent();
+    this.output += '</link>\n';
+  }
+
+  /**
    * Finish output and return result
    */
   end(): void {

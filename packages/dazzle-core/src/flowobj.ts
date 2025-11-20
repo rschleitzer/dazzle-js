@@ -417,6 +417,124 @@ export class FormattingInstructionFlowObj extends FlowObj {
 }
 
 /**
+ * Leader FlowObj
+ * Port from: OpenJade style/FlowObj.cxx LeaderFlowObj (lines 1293-1369)
+ *
+ * Creates a leader (line or pattern connecting content, like dots in TOC).
+ * Common characteristics: length, break-before-priority, break-after-priority
+ */
+export class LeaderFlowObj extends CompoundFlowObj {
+  // For now, we just accept characteristics without storing them
+  // TODO: Implement proper leader rendering with characteristics
+
+  /**
+   * Process this flow object
+   * Port from: LeaderFlowObj::processInner() line 1319
+   */
+  protected processInner(context: ProcessContext): void {
+    const fotb = context.currentFOTBuilder();
+
+    // Start leader
+    if (fotb.startLeader) {
+      fotb.startLeader();
+    }
+
+    // Process child content
+    super.processInner(context);
+
+    // End leader
+    if (fotb.endLeader) {
+      fotb.endLeader();
+    }
+  }
+
+  /**
+   * Check if has characteristic
+   * Port from: LeaderFlowObj::hasNonInheritedC() line 1350
+   */
+  hasNonInheritedC(name: string): boolean {
+    return name === 'length' ||
+           name === 'break-before-priority' ||
+           name === 'break-after-priority';
+  }
+
+  /**
+   * Set characteristic value
+   * Port from: LeaderFlowObj::setNonInheritedC() line 1327
+   */
+  setNonInheritedC(_name: string, _value: ELObj): void {
+    // TODO: Store and use characteristics
+    // For now, silently accept to allow compilation
+  }
+
+  copy(): FlowObj {
+    const copy = new LeaderFlowObj();
+    copy.content_ = this.content_;
+    return copy;
+  }
+}
+
+/**
+ * Link FlowObj
+ * Port from: OpenJade style/FlowObj.cxx LinkFlowObj (lines 847-911)
+ *
+ * Creates a link (hyperlink) element. The destination characteristic
+ * specifies the target address.
+ */
+export class LinkFlowObj extends CompoundFlowObj {
+  private destination: string | null = null;
+
+  /**
+   * Process this flow object
+   * Port from: LinkFlowObj::processInner() line 865
+   */
+  protected processInner(context: ProcessContext): void {
+    const fotb = context.currentFOTBuilder();
+
+    // Start link with destination (if provided)
+    if (fotb.startLink) {
+      fotb.startLink(this.destination || undefined);
+    }
+
+    // Process child content
+    super.processInner(context);
+
+    // End link
+    if (fotb.endLink) {
+      fotb.endLink();
+    }
+  }
+
+  /**
+   * Check if has characteristic
+   * Port from: LinkFlowObj::hasNonInheritedC() line 890
+   */
+  hasNonInheritedC(name: string): boolean {
+    return name === 'destination';
+  }
+
+  /**
+   * Set characteristic value
+   * Port from: LinkFlowObj::setNonInheritedC() line 896
+   */
+  setNonInheritedC(name: string, value: ELObj): void {
+    if (name === 'destination') {
+      // For now, handle destination as string
+      // TODO: Implement proper AddressObj support
+      const str = value.asString();
+      this.destination = str ? str.value : null;
+    }
+  }
+
+  copy(): FlowObj {
+    const copy = new LinkFlowObj();
+    copy.destination = this.destination;
+    copy.content_ = this.content_;
+    return copy;
+  }
+}
+
+/**
  * Sequence FlowObj
  * Port from: OpenJade style/FlowObj.cxx SequenceFlowObj
  *
@@ -528,6 +646,10 @@ export function createFlowObj(className: string): FlowObj | null {
       return new ParagraphFlowObj();
     case 'display-group':
       return new DisplayGroupFlowObj();
+    case 'leader':
+      return new LeaderFlowObj();
+    case 'link':
+      return new LinkFlowObj();
     case 'entity':
       return new EntityFlowObj();
     case 'formatting-instruction':

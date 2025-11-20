@@ -141,6 +141,30 @@ export interface FotBuilder {
   endDisplayGroup?(): void;
 
   /**
+   * Start a leader flow object
+   * Port from: OpenJade FOTBuilder.h
+   */
+  startLeader?(): void;
+
+  /**
+   * End a leader flow object
+   * Port from: OpenJade FOTBuilder.h
+   */
+  endLeader?(): void;
+
+  /**
+   * Start a link flow object
+   * Port from: OpenJade FOTBuilder.h:484
+   */
+  startLink?(destination?: string): void;
+
+  /**
+   * End a link flow object
+   * Port from: OpenJade FOTBuilder.h:485
+   */
+  endLink?(): void;
+
+  /**
    * Page number sosofo - outputs current page number
    * Port from: OpenJade ProcessContext.cxx PageNumberSosofoObj::process()
    * Port from: OpenJade FOTBuilder.h currentNodePageNumber

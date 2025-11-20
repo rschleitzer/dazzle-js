@@ -1281,11 +1281,15 @@ export class CheckSosofoInsn extends Insn {
 
   execute(vm: VM): Insn | null {
     const value = vm.peek();
-    if (!value.asSosofo()) {
+    const sosofo = value.asSosofo();
+    if (process.env.DEBUG_FOT) {
+      console.error(`CheckSosofoInsn at ${this.loc.file}:${this.loc.line}: value type=${value.constructor.name}, asSosofo=${sosofo ? 'yes' : 'no'}, stackSize=${vm.stackSize()}, peeking at stack[${vm.stackSize()-1}]`);
+    }
+    if (!sosofo) {
       vm.currentFile = this.loc.file;
       vm.currentLine = this.loc.line;
       vm.currentColumn = this.loc.column;
-      throw new Error(`Expected sosofo, got ${value.constructor.name}`);
+      throw new Error(`Expected sosofo, got ${value.constructor.name} at ${this.loc.file}:${this.loc.line}`);
     }
     return this.next;
   }
@@ -1309,9 +1313,28 @@ export class SosofoAppendInsn extends Insn {
   execute(vm: VM): Insn | null {
     // Gather n sosofos from top of stack
     const sosofos: ELObj[] = [];
+    if (process.env.DEBUG_FOT) {
+      console.error(`SosofoAppendInsn: n=${this.n}, stackSize=${vm.stackSize()}`);
+      for (let i = 0; i < this.n; i++) {
+        const idx = vm.stackSize() - this.n + i;
+        const val = vm.getStackValue(idx);
+        console.error(`  pos ${i}: stack[${idx}] = ${val.constructor.name}, asSosofo=${val.asSosofo() ? 'yes' : 'no'}`);
+      }
+    }
     for (let i = 0; i < this.n; i++) {
       const sosofo = vm.getStackValue(vm.stackSize() - this.n + i);
       if (!sosofo.asSosofo()) {
+        if (process.env.DEBUG_FOT) {
+          console.error(`\nDEBUG: SosofoAppendInsn found non-sosofo:`);
+          console.error(`  Position: ${i} of ${this.n}`);
+          console.error(`  Stack index: ${vm.stackSize() - this.n + i}`);
+          console.error(`  Value type: ${sosofo.constructor.name}`);
+          console.error(`  Stack dump:`);
+          for (let j = 0; j < vm.stackSize(); j++) {
+            const val = vm.getStackValue(j);
+            console.error(`    [${j}]: ${val.constructor.name}`);
+          }
+        }
         throw new Error(`SosofoAppendInsn: expected sosofo at position ${i}, got ${sosofo.constructor.name}`);
       }
       sosofos.push(sosofo);
