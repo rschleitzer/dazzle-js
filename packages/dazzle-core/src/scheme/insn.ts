@@ -387,6 +387,21 @@ export class GlobalRefInsn extends Insn {
       throw new Error(`Undefined variable: ${this.name}\n  location: ${vm.currentFile}:${vm.currentLine}`);
     }
 
+    // Debug: Check if we're looking up ancestor-member and it's a FlowObj
+    if (process.env.DEBUG_CLOSURES && this.name === 'ancestor-member') {
+      console.error(`GlobalRefInsn: Looking up 'ancestor-member'`);
+      console.error(`  Value type: ${value.constructor.name}`);
+      const sosofo = value.asSosofo?.();
+      if (sosofo) {
+        console.error(`  ERROR: ancestor-member is a SOSOFO!`);
+        console.error(`  Sosofo type: ${sosofo.type || 'FlowObj'}`);
+      }
+      const func = value.asFunction();
+      if (func) {
+        console.error(`  Is function: ${func.isClosure() ? 'closure' : func.isPrimitive() ? 'primitive' : 'other'}`);
+      }
+    }
+
     vm.push(value);
     return this.next;
   }
@@ -593,6 +608,24 @@ export class CallInsn extends Insn {
 
     // Handle closures
     if (func.isClosure()) {
+      // Debug: Track function calls with 1 argument
+      if (process.env.DEBUG_CLOSURES && this.nArgs === 1) {
+        console.error(`CallInsn: Calling closure with 1 argument`);
+        console.error(`  Function name: ${func.name || '<anonymous>'}`);
+        console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
+        const arg = args[0];
+        const sosofo = arg?.asSosofo?.();
+        if (sosofo) {
+          console.error(`  Arg is SOSOFO: ${arg.constructor.name}, type: ${sosofo.type || 'FlowObj'}`);
+        } else {
+          console.error(`  Arg type: ${arg?.constructor.name || 'null'}`);
+          const node = arg?.asNode?.();
+          if (node) {
+            console.error(`  Arg is Node with gi: ${node.node.gi()}`);
+          }
+        }
+      }
+
       // Port from: OpenJade Insn.cxx ClosureObj::call lines 755-764
       // Note: OpenJade doesn't validate argument count here - VarargsInsn handles it
       // IMPORTANT: Order matters! Must match OpenJade exactly:
