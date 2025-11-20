@@ -453,6 +453,16 @@ export class ReturnInsn extends Insn {
 
     // Debug: Track if we're returning a sosofo
     if (process.env.DEBUG_CLOSURES) {
+      // Check if we should print debug for this return (set by CallInsn)
+      if ((globalThis as any)._debugNextReturn) {
+        console.error(`[ReturnInsn] Return value type: ${result.constructor.name}`);
+        const sosofo = result.asSosofo();
+        if (sosofo) {
+          console.error(`  Is sosofo: YES (type: ${sosofo.type || 'FlowObj'})`);
+        }
+        (globalThis as any)._debugNextReturn = false;
+      }
+
       const sosofo = result.asSosofo();
       if (sosofo) {
         // Only log FlowObj returns (not built-in sosofo types)
@@ -656,10 +666,13 @@ export class CallInsn extends Insn {
             count++;
           }
 
-          console.error(`CallInsn: Calling closure with 1 argument (PairObj)`);
+          console.error(`\n[CallInsn] Calling closure with 1 argument (PairObj)`);
           console.error(`  Function name: ${func.name || '<anonymous>'}`);
           console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
           console.error(`  List elements: ${pairListStr}${count >= maxShow ? '...' : ''}`);
+
+          // Mark that we want to see the return value
+          (globalThis as any)._debugNextReturn = true;
         }
       }
 
