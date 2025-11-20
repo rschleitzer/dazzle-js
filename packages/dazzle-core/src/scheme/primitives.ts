@@ -6970,12 +6970,21 @@ const attributeStringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELO
     const arg1Type = args[1].constructor.name;
     const sosofo = args[1].asSosofo();
     if (sosofo) {
-      console.error(`attribute-string: received SOSOFO as second arg: ${arg1Type}, type: ${sosofo.type || 'FlowObj'}`);
+      // Count occurrences
+      if (!(globalThis as any)._attributeStringSosofoCount) {
+        (globalThis as any)._attributeStringSosofoCount = 0;
+      }
+      (globalThis as any)._attributeStringSosofoCount++;
+      const count = (globalThis as any)._attributeStringSosofoCount;
+
+      console.error(`attribute-string [${count}]: received SOSOFO as second arg: ${arg1Type}, type: ${sosofo.type || 'FlowObj'}`);
       const nameStr = args[0].asString();
       const nameSym = args[0].asSymbol();
       console.error(`  attribute name arg type: ${arg0Type}`);
       console.error(`  attribute name string: ${nameStr ? nameStr.value : 'null'}`);
       console.error(`  attribute name symbol: ${nameSym ? nameSym.name : 'null'}`);
+      console.error(`  Stack trace:`);
+      console.error(new Error().stack);
     }
   }
 
@@ -8874,7 +8883,19 @@ const currentNodePrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj 
     }
   }
 
-  return makeNode(vm.currentNode);
+  const result = makeNode(vm.currentNode);
+
+  // Debug: Check what we're returning
+  if (process.env.DEBUG_CLOSURES) {
+    const resultSosofo = result.asSosofo();
+    if (resultSosofo) {
+      console.error(`ERROR: current-node is returning a SOSOFO!`);
+      console.error(`  Result type: ${result.constructor.name}`);
+      console.error(`  vm.currentNode type: ${vm.currentNode.constructor?.name}`);
+    }
+  }
+
+  return result;
 };
 
 /**
