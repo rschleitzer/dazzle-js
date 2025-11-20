@@ -286,13 +286,27 @@ export class StackRefInsn extends Insn {
     }
     let value = vm.getFrame(this.frameIndex);
 
-    // Debug: Track if we're reading a FlowObj from the stack
+    // Debug: Track stack reads
     if (process.env.DEBUG_CLOSURES) {
       const sosofo = value?.asSosofo?.();
-      if (sosofo && (sosofo.type === undefined || sosofo.type === null)) {
-        console.error(`StackRefInsn: Reading FLOW OBJECT from frame[${this.frameIndex}]`);
-        console.error(`  Value type: ${value.constructor.name}`);
-        console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
+      const isFlowObj = sosofo && (sosofo.type === undefined || sosofo.type === null);
+
+      // Log all stack reads, with extra detail for FlowObjs
+      if (isFlowObj || (globalThis as any)._debugStackReads) {
+        console.error(`[StackRefInsn] Reading from frame[${this.frameIndex}]`);
+        console.error(`  Value type: ${value?.constructor.name || 'null'}`);
+        console.error(`  vm.frameIndex: ${vm.frameIndex}`);
+        console.error(`  vm.stackSize: ${vm.stackSize()}`);
+        if (isFlowObj) {
+          console.error(`  *** FLOW OBJECT ***`);
+        }
+
+        // Count and turn off after 5 reads to avoid spam
+        (globalThis as any)._debugStackReadCount = ((globalThis as any)._debugStackReadCount || 0) + 1;
+        if ((globalThis as any)._debugStackReadCount >= 5) {
+          (globalThis as any)._debugStackReads = false;
+          (globalThis as any)._debugStackReadCount = 0;
+        }
       }
     }
 
@@ -671,8 +685,9 @@ export class CallInsn extends Insn {
           console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
           console.error(`  List elements: ${pairListStr}${count >= maxShow ? '...' : ''}`);
 
-          // Mark that we want to see the return value
+          // Mark that we want to see the return value and subsequent stack reads
           (globalThis as any)._debugNextReturn = true;
+          (globalThis as any)._debugStackReads = true;
         }
       }
 
