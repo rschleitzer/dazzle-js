@@ -7069,10 +7069,12 @@ const ancestorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   if (args.length > 1) {
     const nodeArg = optSingletonNode(args[1]);
     if (!nodeArg) {
-      console.error(`ancestor: second arg is ${args[1].constructor.name}`);
-      console.error(`  optSingletonNode returned null`);
-      console.error(`  Value:`, args[1]);
-      throw new Error('ancestor: second argument must be a singleton node');
+      if (process.env.DEBUG_ANCESTOR) {
+        console.error(`ancestor: second arg is ${args[1].constructor.name}`);
+        console.error(`  optSingletonNode returned null`);
+        console.error(`  Value:`, args[1]);
+      }
+      throw new Error(`ancestor: second argument must be a singleton node, got ${args[1].constructor.name}`);
     }
     groveNode = nodeArg;
   } else {
@@ -7188,10 +7190,12 @@ const nodeListErrorPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj
     throw new Error('node-list-error requires a node-list as second argument');
   }
 
-  // In OpenJade, this would set the error location from the node-list
-  // and call interp.message() followed by interp.makeError()
-  // For now, just throw an error with the message
-  throw new Error(`DSSSL Error: ${str.value}`);
+  // Port from: OpenJade primitive.cxx NodeListError
+  // In OpenJade, this sets the error location from the node-list,
+  // calls interp.message() to log the error, and returns interp.makeError()
+  // For now, log the error and return an empty node-list (error object TBD)
+  console.error(`DSSSL Error: ${str.value}`);
+  return makeNodeList(nodeListFromArray([]));
 };
 
 // ============ Number Formatting Helpers (for format-number) ============
