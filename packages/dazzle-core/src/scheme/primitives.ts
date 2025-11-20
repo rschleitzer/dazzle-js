@@ -9524,6 +9524,18 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
         (flowObj as any).setContent(childSosofo);
       }
 
+      // Debug: Track when we return a ParagraphFlowObj
+      if (process.env.DEBUG_CLOSURES && flowObj.constructor.name === 'ParagraphFlowObj') {
+        console.error(`makeFlowObjectPrimitive: Returning ParagraphFlowObj`);
+        console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
+        console.error(`  Total args: ${args.length}`);
+        console.error(`  Content items: ${content.length}`);
+        // Get call stack
+        const error = new Error();
+        const stack = error.stack?.split('\n').slice(2, 12).join('\n');
+        console.error(`  Call stack:\n${stack}`);
+      }
+
       // Return FlowObj directly - it IS a SosofoObj
       // Port from: OpenJade - FlowObj extends SosofoObj, so we return the FlowObj*
       return flowObj;

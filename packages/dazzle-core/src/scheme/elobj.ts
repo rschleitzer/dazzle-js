@@ -406,10 +406,10 @@ export class ColorObj extends ELObj {
  * Here we use it both as a base class and for simple sosofo types.
  */
 export class SosofoObj extends ELObj {
-  public type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'page-number' | 'current-node-page-number' | 'process-children-trim';
+  public type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'page-number' | 'page-number-sosofo' | 'current-node-page-number' | 'process-children-trim';
   public data?: unknown;
 
-  constructor(type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'page-number' | 'current-node-page-number' | 'process-children-trim', data?: unknown) {
+  constructor(type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'page-number' | 'page-number-sosofo' | 'current-node-page-number' | 'process-children-trim', data?: unknown) {
     super();
     this.type = type;
     this.data = data;

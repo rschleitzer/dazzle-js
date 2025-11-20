@@ -458,14 +458,18 @@ export class ReturnInsn extends Insn {
         // Only log FlowObj returns (not built-in sosofo types)
         const isFlowObj = sosofo.type === undefined || sosofo.type === null;
         if (isFlowObj) {
-          console.error(`ReturnInsn: returning FLOW OBJECT from function`);
+          console.error(`\n===== ReturnInsn: returning FLOW OBJECT from function =====`);
           console.error(`  Result type: ${result.constructor.name}`);
           console.error(`  Total args: ${this.totalArgs}`);
           console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
+          console.error(`  Stack size before: ${stackBefore}`);
+          console.error(`  Frame index: ${vm.frameIndex}`);
+          console.error(`  Closure display depth: ${vm.closure ? 'has-closure' : 'no-closure'}`);
           // Get some stack trace context
           const error = new Error();
-          const stack = error.stack?.split('\n').slice(2, 6).join('\n');
+          const stack = error.stack?.split('\n').slice(2, 8).join('\n');
           console.error(`  Stack:\n${stack}`);
+          console.error(`=============================================================\n`);
         }
       }
     }
@@ -610,19 +614,52 @@ export class CallInsn extends Insn {
     if (func.isClosure()) {
       // Debug: Track function calls with 1 argument
       if (process.env.DEBUG_CLOSURES && this.nArgs === 1) {
-        console.error(`CallInsn: Calling closure with 1 argument`);
-        console.error(`  Function name: ${func.name || '<anonymous>'}`);
-        console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
         const arg = args[0];
-        const sosofo = arg?.asSosofo?.();
-        if (sosofo) {
-          console.error(`  Arg is SOSOFO: ${arg.constructor.name}, type: ${sosofo.type || 'FlowObj'}`);
-        } else {
-          console.error(`  Arg type: ${arg?.constructor.name || 'null'}`);
-          const node = arg?.asNode?.();
-          if (node) {
-            console.error(`  Arg is Node with gi: ${node.node.gi()}`);
+        const argIsPair = arg?.asPair?.();
+        // Only log when arg is a PairObj (the suspicious case)
+        if (argIsPair) {
+          // Build a string representation of the pair list
+          let pairListStr = '';
+          let current = argIsPair;
+          let count = 0;
+          const maxShow = 5;
+          while (current && count < maxShow) {
+            const car = current.car;
+            const carStr = car?.asString?.();
+            const carSym = car?.asSymbol?.();
+            const carPair = car?.asPair?.();
+            if (carStr) {
+              pairListStr += `"${carStr.value}" `;
+            } else if (carSym) {
+              pairListStr += `${carSym.name} `;
+            } else if (carPair) {
+              // Nested pair - show first element
+              const nestedCar = carPair.car;
+              const nestedCarStr = nestedCar?.asString?.();
+              const nestedCarSym = nestedCar?.asSymbol?.();
+              if (nestedCarStr) {
+                pairListStr += `("${nestedCarStr.value}" ...) `;
+              } else if (nestedCarSym) {
+                pairListStr += `(${nestedCarSym.name} ...) `;
+              } else {
+                pairListStr += `(${nestedCar?.constructor.name || 'null'} ...) `;
+              }
+            } else {
+              pairListStr += `${car?.constructor.name || 'null'} `;
+            }
+            const cdr = current.cdr;
+            const cdrPair = cdr?.asPair?.();
+            if (!cdrPair) {
+              break;
+            }
+            current = cdrPair;
+            count++;
           }
+
+          console.error(`CallInsn: Calling closure with 1 argument (PairObj)`);
+          console.error(`  Function name: ${func.name || '<anonymous>'}`);
+          console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
+          console.error(`  List elements: ${pairListStr}${count >= maxShow ? '...' : ''}`);
         }
       }
 
