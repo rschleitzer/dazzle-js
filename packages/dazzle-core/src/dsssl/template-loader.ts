@@ -94,7 +94,7 @@ export function loadTemplate(templatePath: string, searchPaths: string[] = []): 
  */
 function loadXmlTemplate(content: string, templatePath: string, baseDir: string, searchPaths: string[], catalog: Catalog): TemplateResult {
   // Parse DOCTYPE for entity declarations (including from parameter entity files)
-  const entities = parseEntities(content, baseDir, searchPaths, catalog);
+  const { entities, paramDefMap } = parseEntities(content, baseDir, searchPaths, catalog);
 
   // Parse external specifications
   // Port from: DSSSL style-sheet - <external-specification id="..." document="...">
@@ -228,9 +228,19 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
     entityContent = entityContent.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');
 
     // Port from: OpenJade processes SGML marked sections
-    // Strip marked sections for INCLUDE (keep content): <![%entity;[ content ]]> → content
-    // Pattern matches: <![%name;[ ... ]]> or <![%name[ ... ]]>
-    entityContent = entityContent.replace(/<!\[%[\w-]+;?\[\s*([\s\S]*?)\s*\]\]>/g, '$1');
+    // Process marked sections based on parameter entity values
+    // Pattern: <![%entity[ content ]]> or <![%entity;[ content ]]>
+    // Note: Entity names can contain dashes (e.g., l10n-en), semicolon is optional
+    entityContent = entityContent.replace(/<!\[%([\w-]+);?\[([\s\S]*?)\]\]>/g, (match, entityName, content) => {
+      const entityValue = paramDefMap.get(entityName);
+      const included = entityValue === 'INCLUDE';
+      if (process.env.DEBUG_TEMPLATE) {
+        console.error(`DEBUG_TEMPLATE: [Entity file] Marked section <![%${entityName};[...]> - entity value: "${entityValue}", included: ${included}`);
+      }
+      // Only include content if entity is explicitly set to "INCLUDE"
+      // If not defined or set to "IGNORE", remove the entire marked section
+      return included ? content : '';
+    });
 
     const entityRef = `&${entity.name};`;
     entityReplacements.push({ ref: entityRef, content: entityContent, path: entityPath });
@@ -303,13 +313,13 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
  * - <!ENTITY name PUBLIC "pubid" CDATA DSSSL>
  * Also processes parameter entity references to extract entities from those files
  */
-function parseEntities(content: string, baseDir: string, searchPaths: string[], catalog: Catalog): Entity[] {
+function parseEntities(content: string, baseDir: string, searchPaths: string[], catalog: Catalog): { entities: Entity[]; paramDefMap: Map<string, string> } {
   const entities: Entity[] = [];
 
   // Match DOCTYPE declaration - case-insensitive, more flexible with whitespace
   const doctypeMatch = content.match(/<!DOCTYPE[\s\S]*?\[([\s\S]*?)\]/i);
   if (!doctypeMatch) {
-    return entities;
+    return { entities, paramDefMap: new Map() };
   }
 
   const doctype = doctypeMatch[1];
@@ -327,6 +337,10 @@ function parseEntities(content: string, baseDir: string, searchPaths: string[], 
     });
   }
 
+  // Global map to track parameter entity values (INCLUDE/IGNORE)
+  // This will be used to process marked sections in entity files
+  const globalParamDefMap = new Map<string, string>();
+
   // Process parameter entity references (%name;) and parse entities from those files
   for (const paramEntity of paramEntities) {
     const refPattern = new RegExp(`%${paramEntity.name};`, 'g');
@@ -335,8 +349,34 @@ function parseEntities(content: string, baseDir: string, searchPaths: string[], 
         const paramPath = resolveEntityPath(paramEntity.systemId, baseDir, searchPaths);
         let paramContent = fs.readFileSync(paramPath, 'utf-8');
 
-        // Strip marked sections to get entity declarations
-        paramContent = paramContent.replace(/<!\[%[\w-]+;?\[\s*([\s\S]*?)\s*\]\]>/g, '$1');
+        // Parse parameter entity definitions to track INCLUDE/IGNORE status
+        // Pattern: <!ENTITY % name "value">
+        const paramDefRegex = /<!ENTITY\s+%\s+([\w-]+)\s+"(INCLUDE|IGNORE)"\s*>/gi;
+        let paramDefMatch;
+        while ((paramDefMatch = paramDefRegex.exec(paramContent)) !== null) {
+          globalParamDefMap.set(paramDefMatch[1], paramDefMatch[2]);
+          if (process.env.DEBUG_TEMPLATE) {
+            console.error(`DEBUG_TEMPLATE: Found parameter entity %${paramDefMatch[1]}; = "${paramDefMatch[2]}"`);
+          }
+        }
+
+        if (process.env.DEBUG_TEMPLATE) {
+          console.error(`DEBUG_TEMPLATE: Processing file ${paramPath}, found ${globalParamDefMap.size} parameter entities`);
+        }
+
+        // Process marked sections based on parameter entity values
+        // Pattern: <![%entity[ content ]]> or <![%entity;[ content ]]>
+        // Note: Entity names can contain dashes (e.g., l10n-en), semicolon is optional
+        paramContent = paramContent.replace(/<!\[%([\w-]+);?\[([\s\S]*?)\]\]>/g, (match, entityName, content) => {
+          const entityValue = globalParamDefMap.get(entityName);
+          const included = entityValue === 'INCLUDE';
+          if (process.env.DEBUG_TEMPLATE) {
+            console.error(`DEBUG_TEMPLATE: Marked section <![%${entityName};[...]> - entity value: "${entityValue}", included: ${included}`);
+          }
+          // Only include content if entity is explicitly set to "INCLUDE"
+          // If not defined or set to "IGNORE", remove the entire marked section
+          return included ? content : '';
+        });
 
         // Parse entity declarations from parameter entity file
         // Improved regex to capture both PUBLIC and SYSTEM identifiers
@@ -347,6 +387,21 @@ function parseEntities(content: string, baseDir: string, searchPaths: string[], 
           const name = paramMatch[1];
           const systemId = paramMatch[2] || paramMatch[4]; // SYSTEM id or PUBLIC's optional SYSTEM id
           const publicId = paramMatch[3]; // PUBLIC id
+
+          // Check if entity already exists - if so, skip (first definition wins)
+          // This handles marked sections: when INCLUDE, the entity inside the marked
+          // section is parsed first, and the fallback definition should be ignored
+          const existing = entities.find(e => e.name === name);
+          if (existing) {
+            if (process.env.DEBUG_TEMPLATE) {
+              console.error(`DEBUG_TEMPLATE: Entity ${name} already defined as ${existing.systemId || existing.publicId}, skipping duplicate -> ${systemId || publicId || '(no id)'}`);
+            }
+            continue;
+          }
+
+          if (process.env.DEBUG_TEMPLATE) {
+            console.error(`DEBUG_TEMPLATE: Entity parsed: ${name} -> ${systemId || publicId || '(no id)'}`);
+          }
 
           entities.push({
             name,
@@ -376,7 +431,7 @@ function parseEntities(content: string, baseDir: string, searchPaths: string[], 
     });
   }
 
-  return entities;
+  return { entities, paramDefMap: globalParamDefMap };
 }
 
 /**
