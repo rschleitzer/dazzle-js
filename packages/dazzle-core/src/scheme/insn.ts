@@ -705,12 +705,30 @@ export class VarargsInsn extends Insn {
         if (this.signature.optionalDefaults && defaultIndex < this.signature.optionalDefaults.length) {
           // Execute the default value instruction
           const defaultInsn = this.signature.optionalDefaults[defaultIndex];
+
+          // Debug: Log what currentNode is when evaluating defaults
+          if (process.env.DEBUG_OPTIONAL_DEFAULTS) {
+            console.error(`VarargsInsn: Evaluating optional parameter default #${defaultIndex}`);
+            console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
+          }
+
           let currentInsn: Insn | null = defaultInsn;
 
           // Execute instruction chain until we get the value
           while (currentInsn) {
             currentInsn = currentInsn.execute(vm);
           }
+
+          // Debug: Check what was pushed onto stack
+          if (process.env.DEBUG_OPTIONAL_DEFAULTS) {
+            const topValue = vm.getStackValue(vm.stackSize() - 1);
+            console.error(`  Default value type: ${topValue.constructor.name}`);
+            const sosofo = topValue.asSosofo();
+            if (sosofo) {
+              console.error(`  WARNING: Default value is a sosofo!`);
+            }
+          }
+
           // The value is now on the stack
         } else {
           // No default value expression, use #f

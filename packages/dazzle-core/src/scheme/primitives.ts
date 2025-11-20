@@ -8908,6 +8908,22 @@ const pageNumberSosofoPrimitive: PrimitiveFunction = (_args: ELObj[], _vm: VM): 
 };
 
 /**
+ * current-node-page-number-sosofo - Creates a sosofo that outputs the page number for current node
+ * Port from: OpenJade primitive.h CurrentNodePageNumberSosofo
+ * Port from: OpenJade ProcessContext.cxx CurrentNodePageNumberSosofoObj::process()
+ *
+ * This creates a sosofo that calls fotBuilder.currentNodePageNumber(node) when processed.
+ */
+const currentNodePageNumberSosofoPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj => {
+  // Get the current node from VM
+  if (!vm.currentNode) {
+    throw new Error('current-node-page-number-sosofo: no current node');
+  }
+  const node = makeNode(vm.currentNode);
+  return makeSosofo('current-node-page-number', undefined, node);
+};
+
+/**
  * entity-generated-system-id - Returns generated system ID for an entity
  * Port from: OpenJade primitive.h EntityGeneratedSystemId
  *
@@ -9873,6 +9889,7 @@ export const standardPrimitives: Record<string, ELObj> = {
   'literal': new FunctionObj('literal', literalPrimitive),
   'sosofo-append': new FunctionObj('sosofo-append', sosofoAppendPrimitive),
   'page-number-sosofo': new FunctionObj('page-number-sosofo', pageNumberSosofoPrimitive),
+  'current-node-page-number-sosofo': new FunctionObj('current-node-page-number-sosofo', currentNodePageNumberSosofoPrimitive),
   'entity-generated-system-id': new FunctionObj('entity-generated-system-id', entityGeneratedSystemIdPrimitive),
   'entity-notation': new FunctionObj('entity-notation', entityNotationPrimitive),
   'sgml-parse': new FunctionObj('sgml-parse', sgmlParsePrimitive),

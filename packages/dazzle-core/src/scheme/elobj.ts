@@ -406,10 +406,10 @@ export class ColorObj extends ELObj {
  * Here we use it both as a base class and for simple sosofo types.
  */
 export class SosofoObj extends ELObj {
-  public type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'page-number' | 'process-children-trim';
+  public type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'page-number' | 'current-node-page-number' | 'process-children-trim';
   public data?: unknown;
 
-  constructor(type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'page-number' | 'process-children-trim', data?: unknown) {
+  constructor(type?: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'page-number' | 'current-node-page-number' | 'process-children-trim', data?: unknown) {
     super();
     this.type = type;
     this.data = data;
@@ -622,8 +622,12 @@ export function makeUnresolvedQuantity(value: number, unitName: string, unitExp:
   return new UnresolvedQuantityObj(value, unitName, unitExp);
 }
 
-export function makeSosofo(type: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'page-number' | 'process-children-trim', data?: unknown): SosofoObj {
-  return new SosofoObj(type, data);
+export function makeSosofo(type: 'empty' | 'append' | 'entity' | 'directory' | 'formatting-instruction' | 'literal' | 'page-number' | 'current-node-page-number' | 'process-children-trim', data?: unknown, node?: NodeObj): SosofoObj {
+  const sosofo = new SosofoObj(type, data);
+  if (node) {
+    (sosofo as any).node = node;
+  }
+  return sosofo;
 }
 
 export function makeColorSpace(family: string): ColorSpaceObj {
