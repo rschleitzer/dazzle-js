@@ -265,7 +265,8 @@ export class StackRefInsn extends Insn {
     private index: number,        // negative offset from sp
     private frameIndex: number,   // for debugging/validation
     private next: Insn | null,
-    private forCapture: boolean = false // true if capturing for closure
+    private forCapture: boolean = false, // true if capturing for closure
+    private varName?: string  // for debugging
   ) {
     super();
   }
@@ -293,7 +294,7 @@ export class StackRefInsn extends Insn {
 
       // Log all stack reads, with extra detail for FlowObjs
       if (isFlowObj || (globalThis as any)._debugStackReads) {
-        console.error(`[StackRefInsn] Reading from frame[${this.frameIndex}]`);
+        console.error(`[StackRefInsn] Reading from frame[${this.frameIndex}]${this.varName ? ` (var: ${this.varName})` : ''}`);
         console.error(`  this.index (offset): ${this.index}`);
         console.error(`  this.frameIndex: ${this.frameIndex}`);
         console.error(`  Value type: ${value?.constructor.name || 'null'}`);
@@ -551,6 +552,39 @@ export class PrimitiveCallInsn extends Insn {
       args.unshift(vm.getStackValue(vm.stackSize() - this.nArgs + i));
     }
 
+    // Debug: Track attribute-string primitive calls
+    if (process.env.DEBUG_CLOSURES && func.name === 'attribute-string') {
+      console.error(`\n[PrimitiveCallInsn] Calling attribute-string`);
+      console.error(`  nArgs: ${this.nArgs}`);
+      for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        const argType = arg.constructor.name;
+        console.error(`  arg[${i}] type: ${argType}`);
+
+        const argStr = arg.asString();
+        const argSym = arg.asSymbol();
+        const argNode = arg.asNode();
+        const argSosofo = arg.asSosofo();
+
+        if (argStr) {
+          console.error(`    string: "${argStr.value}"`);
+        } else if (argSym) {
+          console.error(`    symbol: ${argSym.name}`);
+        } else if (argNode) {
+          console.error(`    node: gi="${argNode.node.gi()}"`);
+        } else if (argSosofo) {
+          console.error(`    sosofo: type="${argSosofo.type || 'FlowObj'}"`);
+        }
+      }
+      console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
+      console.error(`  vm.frameIndex: ${vm.frameIndex}, stackSize: ${vm.stackSize()}`);
+      console.error(`  Stack contents:`);
+      for (let i = Math.max(0, vm.stackSize() - 10); i < vm.stackSize(); i++) {
+        const val = vm.getStackValue(i);
+        console.error(`    stack[${i}]: ${val.constructor.name}`);
+      }
+    }
+
     // Call the primitive with VM context
     // Port from: OpenJade passes location to primitiveCall
     const result = func.callPrimitive(args, vm);
@@ -618,6 +652,45 @@ export class CallInsn extends Insn {
 
     // Handle primitive functions
     if (func.isPrimitive()) {
+      // Debug: Track attribute-string calls
+      if (process.env.DEBUG_CLOSURES) {
+        // Check if this is attribute-string
+        const isAttrStr = func.name === 'attribute-string';
+        const arg1Type = args.length >= 2 ? args[1].constructor.name : 'N/A';
+        const arg1IsSosofo = args.length >= 2 && args[1].asSosofo() !== null;
+
+        if (isAttrStr || arg1IsSosofo) {
+          console.error(`\n[CallInsn] Primitive: ${func.name}`);
+          console.error(`  func.name === 'attribute-string': ${isAttrStr}`);
+          console.error(`  nArgs: ${this.nArgs}`);
+          if (args.length >= 2) {
+            console.error(`  arg[1] type: ${arg1Type}, is sosofo: ${arg1IsSosofo}`);
+          }
+        }
+      }
+
+      if (process.env.DEBUG_CLOSURES && func.name === 'attribute-string') {
+        console.error(`\n[CallInsn] Calling primitive: attribute-string`);
+        console.error(`  arg[0] type: ${args[0].constructor.name}`);
+        console.error(`  arg[1] type: ${args[1].constructor.name}`);
+        const arg0Str = args[0].asString();
+        const arg0Sym = args[0].asSymbol();
+        if (arg0Str) {
+          console.error(`  arg[0] string: "${arg0Str.value}"`);
+        } else if (arg0Sym) {
+          console.error(`  arg[0] symbol: ${arg0Sym.name}`);
+        }
+        const arg1Node = args[1].asNode();
+        const arg1Sosofo = args[1].asSosofo();
+        if (arg1Node) {
+          console.error(`  arg[1] node: ${arg1Node.node.gi()}`);
+        } else if (arg1Sosofo) {
+          console.error(`  arg[1] sosofo: type=${arg1Sosofo.type || 'FlowObj'}`);
+        }
+        console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
+        console.error(`  vm.frameIndex: ${vm.frameIndex}, stackSize: ${vm.stackSize()}`);
+      }
+
       // Pop arguments
       for (let i = 0; i < this.nArgs; i++) {
         vm.pop();

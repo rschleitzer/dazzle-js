@@ -148,7 +148,10 @@ export class VM {
    */
   private initStack(): void {
     this.sp = 0;
+    this.frameIndex = 0;  // Port from: OpenJade VM::initStack() - frame = sbase
     this.stack = new Array(100); // Start with reasonable size
+    this.controlStack = [];  // Port from: OpenJade VM::initStack() - csp = csbase
+    this.closure = null;  // Reset closure for clean evaluation
   }
 
   /**

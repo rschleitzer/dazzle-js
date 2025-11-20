@@ -548,7 +548,7 @@ export class Compiler {
           if (process.env.DEBUG_CLOSURES && (name === 'component' || name === 'chaporapp')) {
             console.error(`[compileVariable] ${name}: binding.index=${binding.index}, stackPos=${stackPos}, offset=${offset}`);
           }
-          return new StackRefInsn(offset, binding.index, next);
+          return new StackRefInsn(offset, binding.index, next, false, name);
         case 'closure':
           if (process.env.DEBUG_CLOSURES && (name === 'component' || name === 'chaporapp')) {
             console.error(`[compileVariable] ${name}: closure[${binding.index}]`);
@@ -1955,16 +1955,17 @@ export class Compiler {
     const body = argsArray.slice(1);
     const bodyExpr = body.length === 1 ? body[0] : this.makeBegin(body);
 
-    // Create lambda expression (takes no args, accesses current-node via VM)
-    const lambdaBody = new PairObj(bodyExpr, theNilObj);
+    // Wrap rule body in a lambda (no parameters)
+    // This creates a closure that will be called when the rule matches
     const lambdaExpr = new PairObj(
       makeSymbol('lambda'),
-      new PairObj(theNilObj, lambdaBody) // Empty arg list
+      new PairObj(
+        theNilObj,  // No parameters
+        new PairObj(bodyExpr, theNilObj)
+      )
     );
 
-    // Store UNCOMPILED lambda expression (lazy compilation like define)
-    // This allows rules to reference variables defined later in the template
-    // The lambda will be compiled when the rule is first matched
+    // Store uncompiled lambda expression - will be compiled lazily
     this.globals.ruleRegistry.addRuleLambdaExpr(elementName, "", lambdaExpr, this.globals);
 
     // Return no-op instruction (element forms don't execute at template load time)
@@ -2110,14 +2111,15 @@ export class Compiler {
         const body = elementArgs.slice(1);
         const bodyExpr = body.length === 1 ? body[0] : this.makeBegin(body);
 
-        // Create lambda expression
-        const lambdaBody = new PairObj(bodyExpr, theNilObj);
+        // Wrap in lambda (no parameters)
         const lambdaExpr = new PairObj(
           makeSymbol('lambda'),
-          new PairObj(theNilObj, lambdaBody)
+          new PairObj(
+            theNilObj,  // No parameters
+            new PairObj(bodyExpr, theNilObj)
+          )
         );
 
-        // Store UNCOMPILED lambda expression (lazy compilation)
         this.globals.ruleRegistry.addRuleLambdaExpr(elementName, modeName, lambdaExpr, this.globals);
       } else if (ruleOp && ruleOp.name === 'default') {
         // Parse default rule (catch-all for this mode)
@@ -2130,14 +2132,16 @@ export class Compiler {
         // Body
         const bodyExpr = defaultArgs.length === 1 ? defaultArgs[0] : this.makeBegin(defaultArgs);
 
-        // Create lambda expression
-        const lambdaBody = new PairObj(bodyExpr, theNilObj);
+        // Wrap in lambda (no parameters)
         const lambdaExpr = new PairObj(
           makeSymbol('lambda'),
-          new PairObj(theNilObj, lambdaBody)
+          new PairObj(
+            theNilObj,  // No parameters
+            new PairObj(bodyExpr, theNilObj)
+          )
         );
 
-        // Store UNCOMPILED lambda expression with special element name "#default"
+        // Store with special element name "#default"
         this.globals.ruleRegistry.addRuleLambdaExpr("#default", modeName, lambdaExpr, this.globals);
       }
     }

@@ -8,9 +8,9 @@
 
 import type { FotBuilder } from '../fot.js';
 import type { VM } from '../scheme/vm.js';
-import { SosofoObj } from '../scheme/elobj.js';
-import { callClosure } from '../scheme/primitives.js';
+import { ELObj, SosofoObj } from '../scheme/elobj.js';
 import { NodeType } from '../grove/grove.js';
+import { callClosure } from '../scheme/primitives.js';
 
 /**
  * ProcessContext - manages sosofo processing
@@ -216,17 +216,13 @@ export class ProcessContext {
           const rule = this.vm.globals.ruleRegistry.findRule(elementName, processingMode, this.vm.globals);
 
           if (rule) {
-            // Execute rule to get sosofo
-            const func = rule.func!.asFunction();
-            if (!func || !func.isClosure()) {
-              throw new Error(`Rule for '${elementName}' must be a function`);
-            }
-
-            // Call the rule with no arguments
-            const sosofo = callClosure(func, [], this.vm);
-            const sosofoObj = sosofo?.asSosofo();
-            if (sosofoObj) {
-              this.process(sosofoObj);
+            // Call the rule function (closure) to get the sosofo
+            const funcObj = rule.func?.asFunction();
+            if (funcObj) {
+              const sosofoObj = callClosure(funcObj, [], this.vm).asSosofo();
+              if (sosofoObj) {
+                this.process(sosofoObj);
+              }
             }
           } else {
             // Port from: OpenJade - If no rule found, process children recursively
@@ -329,18 +325,14 @@ export class ProcessContext {
           const rule = this.vm.globals.ruleRegistry.findRule(elementName, processingMode, this.vm.globals);
 
           if (rule) {
-            // Execute rule to get sosofo
-            const func = rule.func!.asFunction();
-            if (!func || !func.isClosure()) {
-              throw new Error(`Rule for '${elementName}' must be a function`);
-            }
-
-            // Call the rule with no arguments
-            const sosofo = callClosure(func, [], this.vm);
-            const sosofoObj = sosofo?.asSosofo();
-            if (sosofoObj) {
-              this.process(sosofoObj);
-              seenContent = true;
+            // Call the rule function (closure) to get the sosofo
+            const funcObj = rule.func?.asFunction();
+            if (funcObj) {
+              const sosofoObj = callClosure(funcObj, [], this.vm).asSosofo();
+              if (sosofoObj) {
+                this.process(sosofoObj);
+                seenContent = true;
+              }
             }
           } else {
             // Port from: OpenJade - If no rule found, process children recursively

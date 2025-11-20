@@ -159,24 +159,22 @@ export class RuleRegistry {
         if (process.env.DEBUG_RULES) {
           console.error(`DEBUG_RULES: Compiling rule for ${elementName}/${mode}`);
         }
-        // Compile lambda expression to bytecode
+        // Compile and evaluate the lambda to get the closure
         const compiler = new Compiler(globals);
         const insn = compiler.compile(rule.lambdaExpr, new Environment(), 0, null);
-
-        // Execute to get the closure (for backwards compatibility)
-        const vm = new VM();
-        vm.globals = globals;
-        const func = vm.eval(insn);
 
         if (process.env.DEBUG_RULES) {
           console.error(`DEBUG_RULES: Successfully compiled rule for ${elementName}/${mode}`);
         }
 
-        // Cache BOTH the bytecode instruction AND the function
-        // Port from: OpenJade caches the instruction so it can be re-evaluated
-        // to create fresh closures with correct stack frames
-        rule.insn = insn;
-        rule.func = func;
+        // Evaluate the instruction to create the closure
+        // This evaluates the (lambda () body) expression and returns a closure
+        const vm = new VM();
+        vm.globals = globals;
+        const result = vm.eval(insn);
+
+        // Cache the evaluated closure
+        rule.func = result;
         delete rule.lambdaExpr;  // Free the AST
         delete rule.beingCompiled;
 

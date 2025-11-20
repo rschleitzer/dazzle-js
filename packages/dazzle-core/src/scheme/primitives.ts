@@ -9135,14 +9135,18 @@ const processRootPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj 
       if (process.env.DEBUG_FOT) {
         console.error(`process-root: found root rule`);
       }
-      // Explicit root rule exists - use it
-      const func = rule.func!.asFunction();
-      if (!func || !func.isClosure()) {
-        throw new Error('process-root: root rule must be a function');
+      // Port from: OpenJade - call the rule closure to get the sosofo
+      let result: ELObj;
+      if (rule.func) {
+        // Call the closure (no arguments)
+        const funcObj = rule.func.asFunction();
+        if (!funcObj) {
+          throw new Error('process-root: root rule func is not a function');
+        }
+        result = callClosure(funcObj, [], vm);
+      } else {
+        throw new Error('process-root: root rule has no func');
       }
-
-      // Call the rule with no arguments
-      const result = callClosure(func, [], vm);
 
       if (process.env.DEBUG_FOT) {
         const sosofoCheck = result.asSosofo();
@@ -9169,12 +9173,19 @@ const processRootPrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj 
           if (process.env.DEBUG_FOT) {
             console.error(`process-root: found rule for element ${docElement}`);
           }
-          const func = elementRule.func!.asFunction();
-          if (!func || !func.isClosure()) {
-            throw new Error(`process-root: rule for '${docElement}' must be a function`);
+          // Port from: OpenJade - call the rule closure to get the sosofo
+          let result: ELObj;
+          if (elementRule.func) {
+            // Call the closure (no arguments)
+            const funcObj = elementRule.func.asFunction();
+            if (!funcObj) {
+              throw new Error(`process-root: element rule for '${docElement}' func is not a function`);
+            }
+            result = callClosure(funcObj, [], vm);
+          } else {
+            throw new Error(`process-root: element rule for '${docElement}' has no func`);
           }
 
-          const result = callClosure(func, [], vm);
           if (process.env.DEBUG_FOT) {
             console.error(`process-root: element rule returned ${result.constructor.name}`);
           }
@@ -9439,6 +9450,9 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
   // Scan for keyword: value pairs
   for (let i = 1; i < args.length; i++) {
     const keyword = args[i].asKeyword();
+    if (process.env.DEBUG_MAKE && i === 1) {
+      console.error(`makeFlowObjectPrimitive: args[1] type=${args[1].constructor.name}, isKeyword=${keyword !== null}, keywordName=${keyword?.name || 'N/A'}`);
+    }
     if (keyword) {
       // Next argument is the value
       if (i + 1 >= args.length) {
@@ -9471,10 +9485,11 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
 
   // DEBUG: Log flow object creation with content info
   if (process.env.DEBUG_MAKE) {
-    console.error(`makeFlowObjectPrimitive: creating ${flowObjectType}, total args: ${args.length}, content items: ${content.length}`);
-    if (content.length > 0) {
-      const sosofo = content[0].asSosofo();
-      console.error(`makeFlowObjectPrimitive: content[0] type: ${content[0].constructor.name}, isSosofo: ${sosofo !== null}, sosofoType: ${sosofo?.type || 'N/A'}`);
+    console.error(`makeFlowObjectPrimitive: creating ${flowObjectType}, total args: ${args.length}, contentStart: ${contentStart}, content items: ${content.length}`);
+    for (let i = 0; i < Math.min(content.length, 3); i++) {
+      const sosofo = content[i].asSosofo();
+      const sym = content[i].asSymbol();
+      console.error(`makeFlowObjectPrimitive: content[${i}] type: ${content[i].constructor.name}, isSosofo: ${sosofo !== null}, sosofoType: ${sosofo?.type || 'N/A'}, isSymbol: ${sym !== null}, symbolName: ${sym?.name || 'N/A'}`);
     }
   }
 
@@ -9511,7 +9526,7 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
         if (content.length === 1) {
           const c = content[0].asSosofo();
           if (!c) {
-            throw new Error('make: content must be a sosofo');
+            throw new Error(`make: content must be a sosofo, got ${content[0].constructor.name}`);
           }
           childSosofo = c;
         } else {
@@ -9520,7 +9535,7 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
           for (const item of content) {
             const s = item.asSosofo();
             if (!s) {
-              throw new Error('make: content must be sosofos');
+              throw new Error(`make: content must be sosofos, got ${item.constructor.name}`);
             }
             if (process.env.DEBUG_MAKE && flowObjectType === 'sequence') {
               console.error(`make sequence: child sosofo type=${s.type}, isEmpty=${s.isEmpty()}`);
