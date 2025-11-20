@@ -320,8 +320,20 @@ export class ClosureRefInsn extends Insn {
   execute(vm: VM): Insn | null {
     let value = vm.getClosure(this.index);
 
+    // Safety check: ensure we have a valid ELObj
+    if (!value || typeof value.asBox !== 'function') {
+      // Debug: inspect what's in the closure
+      console.error(`ClosureRefInsn: Invalid value at closure index ${this.index}`);
+      console.error(`  Type: ${typeof value}`);
+      console.error(`  Constructor: ${value?.constructor?.name || 'unknown'}`);
+      console.error(`  Keys:`, Object.keys(value || {}));
+      console.error(`  Has asBox:`, typeof value?.asBox);
+      console.error(`  Value:`, value);
+      throw new Error(`ClosureRefInsn: Invalid value in closure at index ${this.index}: ${typeof value} ${value?.constructor?.name || 'unknown'}`);
+    }
+
     // Auto-unbox if this is a boxed value (for letrec variables)
-    const box = value?.asBox();
+    const box = value.asBox();
     if (box) {
       value = box.value;
     }
@@ -593,6 +605,16 @@ export class ClosureInsn extends Insn {
     for (let i = 0; i < this.displayLength; i++) {
       // Get values from bottom of the display region to top
       const value = vm.getStackValue(vm.stackSize() - this.displayLength + i);
+
+      // Debug: Check if we're capturing a broken object
+      if (!value || typeof value.asBox !== 'function') {
+        console.error(`ClosureInsn: WARNING - capturing non-ELObj at display index ${i}`);
+        console.error(`  Type: ${typeof value}`);
+        console.error(`  Constructor: ${value?.constructor?.name}`);
+        console.error(`  Keys:`, Object.keys(value || {}));
+        console.error(`  Stack size: ${vm.stackSize()}, displayLength: ${this.displayLength}`);
+      }
+
       display.push(value);
     }
 

@@ -223,6 +223,54 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
     const entityPath = resolveEntityPath(systemId, baseDir, searchPaths);
     let entityContent = fs.readFileSync(entityPath, 'utf-8');
 
+    // Check if entity file is a DSSSL stylesheet (has XML DOCTYPE wrapper)
+    // If so, extract just the <style-specification-body> content
+    if (entityContent.includes('<!DOCTYPE') && entityContent.includes('<style-sheet')) {
+      try {
+        // Parse DOCTYPE to get parameter entities
+        const { entities: entityFileEntities, paramDefMap: entityFileParamMap } = parseEntities(entityContent, path.dirname(entityPath), searchPaths, catalog);
+
+        // Merge parameter entity definitions from entity file
+        for (const [name, value] of entityFileParamMap.entries()) {
+          paramDefMap.set(name, value);
+        }
+
+        // Resolve any entity references in the entity file
+        for (const subEntity of entityFileEntities) {
+          let subSystemId = subEntity.systemId;
+          if (!subSystemId && subEntity.publicId) {
+            subSystemId = catalog.resolve(subEntity.publicId) || undefined;
+          }
+          if (subSystemId) {
+            const subEntityPath = resolveEntityPath(subSystemId, path.dirname(entityPath), searchPaths);
+            const subEntityContent = fs.readFileSync(subEntityPath, 'utf-8');
+            const subEntityRef = `&${subEntity.name};`;
+            entityContent = entityContent.replace(subEntityRef, subEntityContent);
+          }
+        }
+
+        // Process marked sections BEFORE extracting style-specification-body
+        // This allows marked sections to be embedded in Scheme code
+        entityContent = entityContent.replace(/<!\[%([\w-]+);?\[([\s\S]*?)\]\]>/g, (match, entityName, content) => {
+          const entityValue = entityFileParamMap.get(entityName) || paramDefMap.get(entityName);
+          const included = entityValue === 'INCLUDE';
+          if (process.env.DEBUG_TEMPLATE) {
+            console.error(`DEBUG_TEMPLATE: [Entity file - before extraction] Marked section <![%${entityName};[...]> - entity value: "${entityValue}", included: ${included}`);
+          }
+          return included ? content : '';
+        });
+
+        // Extract just the <style-specification-body> content
+        const { content: extractedContent } = extractStyleSpecification(entityContent);
+        entityContent = extractedContent;
+      } catch (e) {
+        // If extraction fails, use raw content
+        if (process.env.DEBUG_TEMPLATE) {
+          console.error(`DEBUG_TEMPLATE: Failed to extract style-specification from ${entityPath}: ${e}`);
+        }
+      }
+    }
+
     // Strip CDATA sections if present (used in some templates for XML escaping)
     // Transform: <![CDATA[content]]> → content
     entityContent = entityContent.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1');

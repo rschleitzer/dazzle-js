@@ -69,9 +69,15 @@ export class RuleRegistry {
     if (existing >= 0) {
       // Replace existing rule (later definition wins)
       this.rules[existing] = { elementName, mode, func };
+      if (process.env.DEBUG_RULES) {
+        console.error(`DEBUG_RULES: Replaced rule for ${elementName}/${mode}`);
+      }
     } else {
       // Add new rule
       this.rules.push({ elementName, mode, func });
+      if (process.env.DEBUG_RULES) {
+        console.error(`DEBUG_RULES: Added rule for ${elementName}/${mode}`);
+      }
     }
   }
 
@@ -90,9 +96,15 @@ export class RuleRegistry {
     if (existing >= 0) {
       // Replace existing rule (later definition wins)
       this.rules[existing] = { elementName, mode, lambdaExpr };
+      if (process.env.DEBUG_RULES) {
+        console.error(`DEBUG_RULES: Replaced rule (lazy) for ${elementName}/${mode}`);
+      }
     } else {
       // Add new rule
       this.rules.push({ elementName, mode, lambdaExpr });
+      if (process.env.DEBUG_RULES) {
+        console.error(`DEBUG_RULES: Added rule (lazy) for ${elementName}/${mode}`);
+      }
     }
   }
 
@@ -111,6 +123,10 @@ export class RuleRegistry {
       r => r.elementName === elementName && r.mode === mode
     );
 
+    if (process.env.DEBUG_RULES) {
+      console.error(`DEBUG_RULES: findRule(${elementName}, "${mode}") - exact match: ${rule ? 'YES' : 'NO'}`);
+    }
+
     // If no exact match and this is NOT a root query, try default rule for this mode
     // Port from: OpenJade falls back to default rule when no specific rule matches
     // But root processing should NOT fall back to default rule
@@ -118,6 +134,9 @@ export class RuleRegistry {
       rule = this.rules.find(
         r => r.elementName === "#default" && r.mode === mode
       );
+      if (process.env.DEBUG_RULES && rule) {
+        console.error(`DEBUG_RULES: findRule(${elementName}, "${mode}") - using default rule`);
+      }
     }
 
     if (!rule) return null;
@@ -137,6 +156,9 @@ export class RuleRegistry {
 
       rule.beingCompiled = true;
       try {
+        if (process.env.DEBUG_RULES) {
+          console.error(`DEBUG_RULES: Compiling rule for ${elementName}/${mode}`);
+        }
         // Compile lambda expression to bytecode
         const compiler = new Compiler(globals);
         const insn = compiler.compile(rule.lambdaExpr, new Environment(), 0, null);
@@ -145,6 +167,10 @@ export class RuleRegistry {
         const vm = new VM();
         vm.globals = globals;
         const func = vm.eval(insn);
+
+        if (process.env.DEBUG_RULES) {
+          console.error(`DEBUG_RULES: Successfully compiled rule for ${elementName}/${mode}`);
+        }
 
         // Cache BOTH the bytecode instruction AND the function
         // Port from: OpenJade caches the instruction so it can be re-evaluated
@@ -157,6 +183,9 @@ export class RuleRegistry {
         return rule;
       } catch (e) {
         delete rule.beingCompiled;
+        if (process.env.DEBUG_RULES) {
+          console.error(`DEBUG_RULES: Failed to compile rule for ${elementName}/${mode}: ${e}`);
+        }
         throw e;
       }
     }

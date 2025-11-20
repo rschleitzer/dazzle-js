@@ -857,6 +857,11 @@ const equalPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   }
 
   const equal = (a: ELObj, b: ELObj): boolean => {
+    // Safety check: ensure we have ELObj instances
+    if (!a || !b || typeof a.asPair !== 'function' || typeof b.asPair !== 'function') {
+      return false;
+    }
+
     // Try eqv? first
     if (a === b) return true;
 
@@ -1780,8 +1785,8 @@ const stringRefPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => 
     throw new Error(`string-ref: index ${idx.value} out of bounds for string of length ${str.value.length}`);
   }
 
-  // Return as a character
-  return { asChar: () => ({ value: str.value[Math.floor(idx.value)] }) } as any;
+  // Return as a proper CharObj
+  return makeChar(str.value[Math.floor(idx.value)]);
 };
 
 /**
@@ -1967,6 +1972,11 @@ const memberPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
 
     // Use equal? comparison
     const equal = (a: ELObj, b: ELObj): boolean => {
+      // Safety check: ensure we have ELObj instances
+      if (!a || !b || typeof a.asPair !== 'function' || typeof b.asPair !== 'function') {
+        return false;
+      }
+
       if (a === b) return true;
 
       const pairA = a.asPair();
@@ -2434,7 +2444,7 @@ const charUpcasePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj =>
     throw new Error('char-upcase requires a character argument');
   }
 
-  return { asChar: () => ({ value: ch.value.toUpperCase() }) } as any;
+  return makeChar(ch.value.toUpperCase());
 };
 
 /**
@@ -2451,7 +2461,7 @@ const charDowncasePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj 
     throw new Error('char-downcase requires a character argument');
   }
 
-  return { asChar: () => ({ value: ch.value.toLowerCase() }) } as any;
+  return makeChar(ch.value.toLowerCase());
 };
 
 /**
@@ -2489,7 +2499,7 @@ const integerToCharPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj
     throw new Error('integer->char: argument out of range');
   }
 
-  return { asChar: () => ({ value: String.fromCharCode(num.value) }) } as any;
+  return makeChar(String.fromCharCode(num.value));
 };
 
 // ============ More List Operations ============
@@ -6308,12 +6318,21 @@ const nodeListEmptyPredicate: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj
     throw new Error('node-list-empty? requires exactly 1 argument');
   }
 
-  const nl = args[0].asNodeList();
-  if (!nl) {
-    throw new Error('node-list-empty? requires a node-list argument');
+  // Try node-list first
+  let nl = args[0].asNodeList();
+  if (nl) {
+    return makeBoolean(nl.nodes.first() === null);
   }
 
-  return makeBoolean(nl.nodes.first() === null);
+  // Try single node (treat as singleton node-list)
+  // Port from: OpenJade accepts both node-lists and nodes
+  const node = args[0].asNode();
+  if (node) {
+    // Single node is never empty
+    return makeBoolean(false);
+  }
+
+  throw new Error('node-list-empty? requires a node-list or node argument');
 };
 
 /**
@@ -9096,7 +9115,14 @@ function processNodeListHelper(nodeList: NodeList, vm: VM): ELObj {
 
           // Call the rule with no arguments
           try {
+            if (process.env.DEBUG_RULES && gi === 'book') {
+              console.error(`DEBUG_RULES: Calling rule for ${gi}/${mode}`);
+            }
             const result = callClosure(func, [], vm);
+
+            if (process.env.DEBUG_RULES && gi === 'book') {
+              console.error(`DEBUG_RULES: Rule for ${gi}/${mode} returned: ${result.constructor.name}`);
+            }
 
             // Result should be a sosofo
             const sosofo = result.asSosofo();
@@ -9108,7 +9134,7 @@ function processNodeListHelper(nodeList: NodeList, vm: VM): ELObj {
           } catch (e) {
             // If rule execution fails, log and continue with children
             // This handles cases where complex DSSSL code has issues
-            if (process.env.DEBUG_PROCESS) {
+            if (process.env.DEBUG_PROCESS || process.env.DEBUG_RULES) {
               console.error(`[processNodeList] Rule for '${gi}' failed:`, e);
               console.error(`[processNodeList] Falling back to processing children`);
             }
@@ -9176,7 +9202,10 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
   if (!typeSym && !typeStr) {
     // TODO: Figure out why we sometimes get non-symbol first arguments
     // For now, return empty sosofo to allow processing to continue
-    console.error(`makeFlowObjectPrimitive: WARNING - non-symbol flow object type (got ${args[0].constructor.name}), returning empty sosofo`);
+    if (process.env.DEBUG_MAKE) {
+      console.error(`makeFlowObjectPrimitive: WARNING - non-symbol flow object type (got ${args[0].constructor.name}), total args: ${args.length}`);
+      console.error(`makeFlowObjectPrimitive: args[0] value:`, args[0]);
+    }
     return makeSosofo('empty');
   }
 
@@ -9238,6 +9267,9 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
       const flowObj = createFlowObj(flowObjectType);
       if (!flowObj) {
         // Unknown flow object type, return empty sosofo
+        if (process.env.DEBUG_MAKE) {
+          console.error(`make: Unknown flow object type '${flowObjectType}', returning empty sosofo`);
+        }
         return makeSosofo('empty');
       }
 
@@ -9249,6 +9281,9 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
       }
 
       // Set content (child sosofos) - only for compound flow objects
+      if (process.env.DEBUG_MAKE && flowObjectType === 'sequence') {
+        console.error(`make sequence: content.length=${content.length}, has setContent=${'setContent' in flowObj}`);
+      }
       if (content.length > 0 && 'setContent' in flowObj) {
         // If multiple content items, wrap in sosofo-append
         let childSosofo: SosofoObj;
@@ -9266,7 +9301,13 @@ const makeFlowObjectPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELOb
             if (!s) {
               throw new Error('make: content must be sosofos');
             }
+            if (process.env.DEBUG_MAKE && flowObjectType === 'sequence') {
+              console.error(`make sequence: child sosofo type=${s.type}, isEmpty=${s.isEmpty()}`);
+            }
             sosofos.push(s);
+          }
+          if (process.env.DEBUG_MAKE && flowObjectType === 'sequence') {
+            console.error(`make sequence: total ${sosofos.length} children, creating append`);
           }
           childSosofo = makeSosofo('append', sosofos);
         }
@@ -9767,6 +9808,40 @@ export const standardPrimitives: Record<string, ELObj> = {
 // Port from: OpenJade installXPrimitive (primitive.cxx line 5326-5328)
 // XPRIMITIVE procedures use "UNREGISTERED::James Clark//Procedure::" prefix
 externalProcTable.set('UNREGISTERED::James Clark//Procedure::debug', standardPrimitives['debug'] as FunctionObj);
+
+// Stub external procedures for DocBook print stylesheets
+// These are page layout procedures that would normally be implemented by the backend
+// For FOT output, we stub them to always return the "else" branch (second argument)
+
+/**
+ * if-first-page - Check if we're on the first page
+ * Port from: OpenJade backend-specific procedure
+ * For FOT output: stub that always returns second argument (not first page)
+ */
+const ifFirstPagePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 2) {
+    throw new Error('if-first-page requires exactly 2 arguments');
+  }
+  // Always return second argument (not first page)
+  return args[1];
+};
+externalProcTable.set('UNREGISTERED::James Clark//Procedure::if-first-page',
+  new FunctionObj('if-first-page', ifFirstPagePrimitive));
+
+/**
+ * if-front-page - Check if we're on a front (recto) page
+ * Port from: OpenJade backend-specific procedure
+ * For FOT output: stub that always returns second argument (not front page)
+ */
+const ifFrontPagePrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
+  if (args.length !== 2) {
+    throw new Error('if-front-page requires exactly 2 arguments');
+  }
+  // Always return second argument (not front page)
+  return args[1];
+};
+externalProcTable.set('UNREGISTERED::James Clark//Procedure::if-front-page',
+  new FunctionObj('if-front-page', ifFrontPagePrimitive));
 
 /**
  * Get a primitive by name
