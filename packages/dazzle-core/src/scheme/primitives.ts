@@ -189,6 +189,17 @@ function optSingletonNode(obj: ELObj): Node | null {
   if (process.env.DEBUG_OPT_SINGLETON) {
     console.error(`optSingletonNode: got ${obj.constructor.name}, returning null`);
   }
+
+  // Debug: Check if this is a sosofo and log it (only first occurrence)
+  const sosofo = obj.asSosofo();
+  if (sosofo && !(globalThis as any)._sosofoWarningShown) {
+    (globalThis as any)._sosofoWarningShown = true;
+    console.error(`WARNING: optSingletonNode received a sosofo: ${obj.constructor.name}`);
+    console.error(`  This suggests a function returned a sosofo where a node was expected`);
+    console.error(`  Stack trace:`);
+    console.error(new Error().stack);
+  }
+
   return null;
 }
 
