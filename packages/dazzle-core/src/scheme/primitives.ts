@@ -96,6 +96,21 @@ export function callClosure(func: FunctionObj, args: ELObj[], vm: VM): ELObj {
     throw new Error('callClosure requires a closure');
   }
 
+  // Debug: Log function name if tracking closures
+  if (process.env.DEBUG_CLOSURES) {
+    console.error(`callClosure: calling ${func.name || '<anonymous>'}`);
+    console.error(`  args: ${args.length} arguments`);
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      const sosofo = arg.asSosofo();
+      if (sosofo) {
+        console.error(`  arg[${i}]: SOSOFO (${arg.constructor.name}, type: ${sosofo.type || 'FlowObj'})`);
+      } else {
+        console.error(`  arg[${i}]: ${arg.constructor.name}`);
+      }
+    }
+  }
+
   // Port from: OpenJade - must save/restore stack state
   // Record initial stack size to restore after call
   const initialStackSize = vm.stackSize();
@@ -121,10 +136,12 @@ export function callClosure(func: FunctionObj, args: ELObj[], vm: VM): ELObj {
   // Result is now on top of stack
   const result = vm.pop();
 
-  if (process.env.DEBUG_RULES) {
+  if (process.env.DEBUG_CLOSURES || process.env.DEBUG_RULES) {
     const sosofo = result.asSosofo();
     if (sosofo) {
       console.error(`callClosure result: ${result.constructor.name}, type: ${sosofo.type || 'FlowObj'}`);
+    } else if (process.env.DEBUG_CLOSURES) {
+      console.error(`callClosure result: ${result.constructor.name}`);
     }
   }
 
@@ -6947,6 +6964,21 @@ const attributeStringPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELO
     throw new Error('attribute-string requires string or symbol as first argument');
   }
 
+  // Debug: Log what we're receiving
+  if (process.env.DEBUG_CLOSURES) {
+    const arg0Type = args[0].constructor.name;
+    const arg1Type = args[1].constructor.name;
+    const sosofo = args[1].asSosofo();
+    if (sosofo) {
+      console.error(`attribute-string: received SOSOFO as second arg: ${arg1Type}, type: ${sosofo.type || 'FlowObj'}`);
+      const nameStr = args[0].asString();
+      const nameSym = args[0].asSymbol();
+      console.error(`  attribute name arg type: ${arg0Type}`);
+      console.error(`  attribute name string: ${nameStr ? nameStr.value : 'null'}`);
+      console.error(`  attribute name symbol: ${nameSym ? nameSym.name : 'null'}`);
+    }
+  }
+
   // Port from: primitive.cxx line 3009 - optSingletonNodeList
   const node = optSingletonNode(args[1]);
   if (!node) {
@@ -8832,6 +8864,16 @@ const currentNodePrimitive: PrimitiveFunction = (_args: ELObj[], vm: VM): ELObj 
   if (!vm.currentNode) {
     throw new Error('current-node: no current node in processing context');
   }
+
+  // Debug: Check if vm.currentNode is actually a flow object
+  if (process.env.DEBUG_CLOSURES) {
+    const nodeType = vm.currentNode.constructor?.name || typeof vm.currentNode;
+    if (nodeType !== 'Object' && !nodeType.includes('Element') && !nodeType.includes('Node')) {
+      console.error(`WARNING: current-node - vm.currentNode has unexpected type: ${nodeType}`);
+      console.error(`  This might be a FlowObj instead of a grove Node!`);
+    }
+  }
+
   return makeNode(vm.currentNode);
 };
 
@@ -9223,6 +9265,18 @@ function processNodeListHelper(nodeList: NodeList, vm: VM): ELObj {
 
       // Save current node
       const savedNode = vm.currentNode;
+
+      // Debug: Check if current is actually a Node
+      if (process.env.DEBUG_CLOSURES) {
+        const currentType = current.constructor?.name || typeof current;
+        if (currentType.includes('FlowObj') || currentType.includes('Sosofo')) {
+          console.error(`ERROR: About to set vm.currentNode to a FlowObj!`);
+          console.error(`  Type: ${currentType}`);
+          console.error(`  Element: ${gi}`);
+          console.error(`  This is a BUG - current should be a grove Node, not a FlowObj!`);
+        }
+      }
+
       vm.currentNode = current;
 
       try {
