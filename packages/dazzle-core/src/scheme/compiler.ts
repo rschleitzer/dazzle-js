@@ -97,8 +97,14 @@ export class Environment {
     // Add new stack variables at frame-relative positions
     // Port from: OpenJade uses frame-relative positions, not absolute
     // vars[0] at frame position stackPos+0, vars[1] at stackPos+1, etc.
+    if (process.env.DEBUG_CLOSURES) {
+      console.error(`[extendStack] Adding ${vars.length} vars at stackPos=${stackPos}`);
+    }
     for (let i = 0; i < vars.length; i++) {
       const framePos = baseStackPos + i;
+      if (process.env.DEBUG_CLOSURES) {
+        console.error(`  ${vars[i]} -> frame[${framePos}]`);
+      }
       newEnv.bindings.set(vars[i], {
         name: vars[i],
         kind: 'stack',
@@ -532,12 +538,21 @@ export class Compiler {
       // Local variable (frame, stack, or closure)
       switch (binding.kind) {
         case 'frame':
+          if (process.env.DEBUG_CLOSURES && (name === 'component' || name === 'chaporapp')) {
+            console.error(`[compileVariable] ${name}: frame[${binding.index}]`);
+          }
           return new FrameRefInsn(binding.index, next);
         case 'stack':
           // Convert absolute position to relative offset from current stackPos
           const offset = binding.index - stackPos;
+          if (process.env.DEBUG_CLOSURES && (name === 'component' || name === 'chaporapp')) {
+            console.error(`[compileVariable] ${name}: binding.index=${binding.index}, stackPos=${stackPos}, offset=${offset}`);
+          }
           return new StackRefInsn(offset, binding.index, next);
         case 'closure':
+          if (process.env.DEBUG_CLOSURES && (name === 'component' || name === 'chaporapp')) {
+            console.error(`[compileVariable] ${name}: closure[${binding.index}]`);
+          }
           return new ClosureRefInsn(binding.index, next);
       }
     }
@@ -1095,6 +1110,9 @@ export class Compiler {
     // Compile body with extended environment
     const bodyEnv = env.extendStack(vars, stackPos);
     const bodyStackPos = stackPos + vars.length;
+    if (process.env.DEBUG_CLOSURES && vars.includes('component')) {
+      console.error(`[compileLet] component let: stackPos=${stackPos}, vars.length=${vars.length}, bodyStackPos=${bodyStackPos}`);
+    }
     let result = this.compile(body, bodyEnv, bodyStackPos, new PopBindingsInsn(vars.length, next));
 
     // Compile initializers in reverse order (like OpenJade's compileInits)
@@ -1122,6 +1140,18 @@ export class Compiler {
 
     const bindings = this.listToArray(argsArray[0]);
     const bodyExprs = argsArray.slice(1);
+
+    if (process.env.DEBUG_CLOSURES) {
+      const varNames = bindings.map(b => {
+        const pair = b.asPair();
+        if (pair) {
+          const sym = pair.car.asSymbol();
+          return sym ? sym.name : '?';
+        }
+        return '?';
+      });
+      console.error(`[compileLetStar] bindings: [${varNames.join(', ')}], stackPos=${stackPos}`);
+    }
 
     // Empty bindings - just evaluate body
     if (bindings.length === 0) {

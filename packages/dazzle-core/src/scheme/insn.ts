@@ -294,6 +294,8 @@ export class StackRefInsn extends Insn {
       // Log all stack reads, with extra detail for FlowObjs
       if (isFlowObj || (globalThis as any)._debugStackReads) {
         console.error(`[StackRefInsn] Reading from frame[${this.frameIndex}]`);
+        console.error(`  this.index (offset): ${this.index}`);
+        console.error(`  this.frameIndex: ${this.frameIndex}`);
         console.error(`  Value type: ${value?.constructor.name || 'null'}`);
         console.error(`  vm.frameIndex: ${vm.frameIndex}`);
         console.error(`  vm.stackSize: ${vm.stackSize()}`);
@@ -301,12 +303,8 @@ export class StackRefInsn extends Insn {
           console.error(`  *** FLOW OBJECT ***`);
         }
 
-        // Count and turn off after 5 reads to avoid spam
+        // Count reads but keep logging (removed auto-shutoff)
         (globalThis as any)._debugStackReadCount = ((globalThis as any)._debugStackReadCount || 0) + 1;
-        if ((globalThis as any)._debugStackReadCount >= 5) {
-          (globalThis as any)._debugStackReads = false;
-          (globalThis as any)._debugStackReadCount = 0;
-        }
       }
     }
 
