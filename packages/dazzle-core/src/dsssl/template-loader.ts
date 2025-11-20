@@ -73,6 +73,9 @@ export function loadTemplate(templatePath: string, searchPaths: string[] = []): 
   // Detect format
   if (content.trim().startsWith('<?xml') || content.trim().startsWith('<')) {
     // XML format - parse and extract
+    if (process.env.DEBUG_TEMPLATE) {
+      console.error(`DEBUG_TEMPLATE: Detected XML format for ${templatePath}`);
+    }
     return loadXmlTemplate(content, templatePath, templateDir, searchPaths, catalog);
   } else {
     // Plain Scheme format - single file, simple source map
@@ -208,9 +211,17 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
   // Track all entity references and their positions
   const entityReplacements: Array<{ ref: string; content: string; path: string }> = [];
 
+  if (process.env.DEBUG_TEMPLATE) {
+    console.error(`DEBUG_TEMPLATE: Processing ${entities.length} entities for replacement`);
+  }
+
   for (const entity of entities) {
     let entityContent: string;
     let entityPath: string;
+
+    if (process.env.DEBUG_TEMPLATE) {
+      console.error(`DEBUG_TEMPLATE: Processing entity ${entity.name}: value=${entity.value ? 'YES' : 'NO'}, systemId=${entity.systemId}, publicId=${entity.publicId}`);
+    }
 
     // Check if this is a text replacement entity
     if (entity.value !== undefined) {
@@ -238,12 +249,25 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
     entityPath = resolveEntityPath(systemId, baseDir, searchPaths);
     entityContent = fs.readFileSync(entityPath, 'utf-8');
 
+    if (process.env.DEBUG_TEMPLATE) {
+      console.error(`DEBUG_TEMPLATE: Loading entity file: ${entityPath}`);
+      console.error(`  Has DOCTYPE: ${entityContent.includes('<!DOCTYPE')}`);
+      console.error(`  Has style-sheet: ${entityContent.includes('<style-sheet')}`);
+    }
+
     // Check if entity file is a DSSSL stylesheet (has XML DOCTYPE wrapper)
     // If so, extract just the <style-specification-body> content
     if (entityContent.includes('<!DOCTYPE') && entityContent.includes('<style-sheet')) {
       try {
         // Parse DOCTYPE to get parameter entities
         const { entities: entityFileEntities, paramDefMap: entityFileParamMap } = parseEntities(entityContent, path.dirname(entityPath), searchPaths, catalog);
+
+        if (process.env.DEBUG_TEMPLATE) {
+          console.error(`DEBUG_TEMPLATE: Parsed ${entityFileEntities.length} entities from ${entityPath}`);
+          for (const e of entityFileEntities) {
+            console.error(`  - ${e.name}: ${e.value || e.systemId || e.publicId}`);
+          }
+        }
 
         // Merge parameter entity definitions from entity file
         for (const [name, value] of entityFileParamMap.entries()) {
@@ -257,6 +281,9 @@ function loadXmlTemplate(content: string, templatePath: string, baseDir: string,
           const existing = entities.find(e => e.name === subEntity.name);
           if (!existing) {
             entities.push(subEntity);
+            if (process.env.DEBUG_TEMPLATE) {
+              console.error(`DEBUG_TEMPLATE: Added entity to global list: ${subEntity.name}`);
+            }
           }
 
           // Resolve file-based entities and replace inline
@@ -399,22 +426,34 @@ function parseEntities(content: string, baseDir: string, searchPaths: string[], 
   // Match DOCTYPE declaration - case-insensitive, more flexible with whitespace
   const doctypeMatch = content.match(/<!DOCTYPE[\s\S]*?\[([\s\S]*?)\]/i);
   if (!doctypeMatch) {
+    if (process.env.DEBUG_TEMPLATE) {
+      console.error(`DEBUG_TEMPLATE: parseEntities - no DOCTYPE found`);
+    }
     return { entities, paramDefMap: new Map() };
   }
 
   const doctype = doctypeMatch[1];
 
+  if (process.env.DEBUG_TEMPLATE) {
+    console.error(`DEBUG_TEMPLATE: parseEntities - found DOCTYPE with ${doctype.length} chars`);
+  }
+
   // First, collect parameter entity references and load them
-  // Pattern: <!ENTITY % name SYSTEM "file.ent"> followed by %name;
-  const paramEntityDefRegex = /<!ENTITY\s+%\s+([\w.-]+)\s+SYSTEM\s+"([^"]+)"\s*>/gi;
+  // Pattern: <!ENTITY % name SYSTEM "file.ent"> OR <!ENTITY % name PUBLIC "pubid" "sysid">
+  const paramEntityDefRegex = /<!ENTITY\s+%\s+([\w.-]+)\s+(?:SYSTEM\s+"([^"]+)"|PUBLIC\s+"[^"]+"\s+"([^"]+)")\s*>/gi;
   const paramEntities: Array<{ name: string; systemId: string }> = [];
   let match;
 
   while ((match = paramEntityDefRegex.exec(doctype)) !== null) {
+    const name = match[1];
+    const systemId = match[2] || match[3]; // SYSTEM or PUBLIC's system id
     paramEntities.push({
-      name: match[1],
-      systemId: match[2],
+      name,
+      systemId,
     });
+    if (process.env.DEBUG_TEMPLATE) {
+      console.error(`DEBUG_TEMPLATE: Found parameter entity def: %${name}; SYSTEM/PUBLIC "${systemId}"`);
+    }
   }
 
   // Global map to track parameter entity values (INCLUDE/IGNORE)
@@ -425,9 +464,16 @@ function parseEntities(content: string, baseDir: string, searchPaths: string[], 
   for (const paramEntity of paramEntities) {
     const refPattern = new RegExp(`%${paramEntity.name};`, 'g');
     if (refPattern.test(doctype)) {
+      if (process.env.DEBUG_TEMPLATE) {
+        console.error(`DEBUG_TEMPLATE: Found parameter entity reference %${paramEntity.name}; in DOCTYPE, loading ${paramEntity.systemId}`);
+      }
       try {
         const paramPath = resolveEntityPath(paramEntity.systemId, baseDir, searchPaths);
         let paramContent = fs.readFileSync(paramPath, 'utf-8');
+
+        if (process.env.DEBUG_TEMPLATE) {
+          console.error(`DEBUG_TEMPLATE: Loaded ${paramPath} (${paramContent.length} bytes)`);
+        }
 
         // Parse parameter entity definitions to track INCLUDE/IGNORE status
         // Pattern: <!ENTITY % name "value">
@@ -465,6 +511,10 @@ function parseEntities(content: string, baseDir: string, searchPaths: string[], 
         // Pattern 3: <!ENTITY name "text value">
         const paramEntityRegex = /<!ENTITY\s+(?!%)([\w.-]+)\s+(?:SYSTEM\s+"([^"]+)"|PUBLIC\s+"([^"]+)"(?:\s+"([^"]+)")?|"([^"]*)")?\s*(?:CDATA\s+DSSSL)?\s*>/gi;
         let paramMatch;
+
+        if (process.env.DEBUG_TEMPLATE) {
+          console.error(`DEBUG_TEMPLATE: Parsing entities from ${paramPath} (${paramContent.length} bytes)`);
+        }
 
         while ((paramMatch = paramEntityRegex.exec(paramContent)) !== null) {
           const name = paramMatch[1];
