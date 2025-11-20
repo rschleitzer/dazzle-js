@@ -2036,6 +2036,14 @@ const memberPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   const obj = args[0];
   let list = args[1];
 
+  if (process.env.DEBUG_CLOSURES) {
+    const objStr = obj.asString();
+    console.error(`\n[member] called with:`);
+    console.error(`  obj: ${objStr ? `"${objStr.value}"` : obj.constructor.name}`);
+    console.error(`  list: ${list.constructor.name}`);
+    console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
+  }
+
   while (true) {
     if (list.asNil()) {
       return theFalseObj;
@@ -2082,6 +2090,9 @@ const memberPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
     };
 
     if (equal(obj, pair.car)) {
+      if (process.env.DEBUG_CLOSURES) {
+        console.error(`[member] returning: ${list.constructor.name} (found match)`);
+      }
       return list;
     }
 
