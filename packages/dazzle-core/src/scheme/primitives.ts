@@ -6552,22 +6552,6 @@ const nodeListRestPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj 
 
   const nl = args[0].asNodeList();
   if (!nl) {
-    console.error(`[node-list-rest] ERROR: arg is not a node-list`);
-    console.error(`  arg type: ${args[0].constructor.name}`);
-    console.error(`  arg asNodeList(): ${args[0].asNodeList()}`);
-    console.error(`  arg asSosofo(): ${args[0].asSosofo()?.constructor.name}`);
-    // If it's a PairObj, print first few elements
-    const pair = args[0].asPair();
-    if (pair) {
-      console.error(`  arg is PairObj, car: ${pair.car?.constructor.name}`);
-      const carSym = pair.car?.asSymbol();
-      const carStr = pair.car?.asString();
-      if (carSym) {
-        console.error(`  car is symbol: ${carSym.name}`);
-      } else if (carStr) {
-        console.error(`  car is string: "${carStr.value}"`);
-      }
-    }
     throw new Error('node-list-rest requires a node-list argument');
   }
 
