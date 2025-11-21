@@ -750,6 +750,11 @@ export class Compiler {
     // CRITICAL: Compile lambda body with stackPos = nParams (frame-relative addressing)
     // Port from: OpenJade Expression.cxx LambdaExpression::compile
     // Parameters are at frame positions 0..nParams-1, so body starts at nParams
+    if (process.env.DEBUG_FOT && (nOptionalParams > 0 || hasRestArg)) {
+      console.error(`[compileLambda] Creating ReturnInsn with totalArgs=${paramNames.length}`);
+      console.error(`  paramNames: [${paramNames.join(', ')}]`);
+      console.error(`  nRequiredParams: ${nRequiredParams}, nOptionalParams: ${nOptionalParams}, hasRestArg: ${hasRestArg}`);
+    }
     const bodyInsn = this.compile(body, lambdaEnv, paramNames.length, new ReturnInsn(paramNames.length));
 
     // Build signature
@@ -826,6 +831,11 @@ export class Compiler {
 
           // Stack position is the number of params in scope
           // Port from: Expression.cxx line 619 - f.size()
+          if (process.env.DEBUG_FOT) {
+            console.error(`[compileLambda] Compiling default for optional param ${i} at stackPos=${paramsInScope.length}`);
+            console.error(`  paramsInScope: [${paramsInScope.join(', ')}]`);
+            console.error(`  Will chain to entryPoints[${i + 1}]`);
+          }
           const defaultInsn = this.compile(defaultExpr, defaultEnv, paramsInScope.length, nextEntry);
           entryPoints[i] = defaultInsn;
         } else {
@@ -1669,9 +1679,19 @@ export class Compiler {
       }
       for (let i = nContent - 1; i >= 0; i--) {
         const contentExpr = argsArray[contentStart + i];
-        const checkInsn: Insn = new CheckSosofoInsn(this.makeLocation(contentExpr), rest);
+        const loc = this.makeLocation(contentExpr);
+        const checkInsn: Insn = new CheckSosofoInsn(loc, rest);
         if (process.env.DEBUG_FOT) {
           console.error(`  Loop i=${i}: Wrapping content ${i} (argsArray[${contentStart + i}]=${contentExpr ? contentExpr.constructor.name : 'undefined'}) with CheckSosofoInsn at stackPos ${stackPos + i}`);
+          console.error(`    CheckSosofoInsn location: ${loc.file}:${loc.line}:${loc.column}`);
+          // Show what the expression is if it's a pair
+          const pair = contentExpr?.asPair();
+          if (pair) {
+            const carSym = pair.car?.asSymbol();
+            if (carSym) {
+              console.error(`    Expression is: (${carSym.name} ...)`);
+            }
+          }
         }
         const compiled = this.compile(contentExpr, env, stackPos + i, checkInsn);
         if (process.env.DEBUG_FOT && compiled !== checkInsn && !this.chainContainsInsn(compiled, checkInsn)) {

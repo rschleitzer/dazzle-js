@@ -471,14 +471,14 @@ export class ReturnInsn extends Insn {
     const stackBefore = vm.stackSize();
 
     if (process.env.DEBUG_FOT) {
-      console.error(`[ReturnInsn] Executing return, stackSize=${stackBefore}`);
+      console.error(`[ReturnInsn] Executing return, totalArgs=${this.totalArgs}, stackSize=${stackBefore}, frameIndex=${vm.frameIndex}`);
     }
 
     // Pop the return value
     const result = vm.pop();
 
     if (process.env.DEBUG_FOT) {
-      console.error(`  Return value type: ${result.constructor.name}`);
+      console.error(`  Return value type: ${result.constructor.name}, will pop ${this.totalArgs} args`);
     }
 
     // Debug: Track if we're returning a sosofo
@@ -952,7 +952,12 @@ export class VarargsInsn extends Insn {
     // Normal case: return entry point for this arity
     // Port from: OpenJade line 734
     if (process.env.DEBUG_FOT) {
-      console.error(`  VarargsInsn: Returning entryPoints[${n}] (${nOptional - n} optionals missing)`);
+      console.error(`  VarargsInsn: Returning entryPoints[${n}] (${nOptional - n} optionals missing), stackSize=${vm.stackSize()}`);
+      if (n < this.entryPoints.length - 1) {
+        console.error(`    Entry point ${n} will evaluate ${nOptional - n} default(s) then jump to body`);
+      } else {
+        console.error(`    Entry point ${n} is the body (all optionals provided)`);
+      }
     }
 
     return this.entryPoints[n];
@@ -1085,16 +1090,41 @@ export class PopBindingsInsn extends Insn {
   }
 
   execute(vm: VM): Insn | null {
+    if (process.env.DEBUG_FOT) {
+      console.error(`[PopBindingsInsn] nBindings=${this.nBindings}, stackSize=${vm.stackSize()}`);
+      console.error(`  Stack before pop:`);
+      for (let i = Math.max(0, vm.stackSize() - 5); i < vm.stackSize(); i++) {
+        const val = vm.getStackValue(i);
+        console.error(`    [${i}]: ${val.constructor.name}`);
+      }
+    }
+
     // Pop the result first
     const result = vm.pop();
 
+    if (process.env.DEBUG_FOT) {
+      console.error(`  Popped result: ${result.constructor.name}`);
+    }
+
     // Pop all the bindings
     for (let i = 0; i < this.nBindings; i++) {
-      vm.pop();
+      const binding = vm.pop();
+      if (process.env.DEBUG_FOT) {
+        console.error(`  Popped binding ${i}: ${binding.constructor.name}`);
+      }
     }
 
     // Push result back
     vm.push(result);
+
+    if (process.env.DEBUG_FOT) {
+      console.error(`  Pushed result back, stackSize=${vm.stackSize()}`);
+      console.error(`  Stack after push:`);
+      for (let i = Math.max(0, vm.stackSize() - 5); i < vm.stackSize(); i++) {
+        const val = vm.getStackValue(i);
+        console.error(`    [${i}]: ${val.constructor.name}`);
+      }
+    }
 
     return this.next;
   }
