@@ -293,16 +293,44 @@ export class StackRefInsn extends Insn {
     // ASSERT(vm.sp - vm.frame == frameIndex_ - index_);
     // *vm.sp = vm.sp[index_];
     //
-    // OpenJade uses frame-relative addressing:
-    // - index is negative offset from current sp
-    // - frameIndex is positive offset from frame base
-    // - vm.sp[index] is equivalent to vm.frame[frameIndex]
+    // OpenJade accesses via sp[index_] where index_ is NEGATIVE
+    // The ASSERT ensures: vm.sp - vm.frame == frameIndex_ - index_
+    // So: vm.sp[index_] == vm.frame[frameIndex_]
     //
-    // Use frame-relative access for correctness across different call depths
+    // We can use either method, but sp-relative is more robust
     if (process.env.DEBUG_INSN) {
-      console.error(`[StackRefInsn] Accessing frame[${this.frameIndex}], frameIndex=${vm.frameIndex}`);
+      console.error(`[StackRefInsn] Accessing sp[${this.index}] (or frame[${this.frameIndex}]), vm.frameIndex=${vm.frameIndex}, vm.sp=${vm.stackSize()}`);
     }
+
+    // Verify the ASSERT from OpenJade and choose access method
+    const spMinusFrame = vm.stackSize() - vm.frameIndex;
+    const frameIndexMinusIndex = this.frameIndex - this.index;
+    const assertHolds = (spMinusFrame === frameIndexMinusIndex);
+
+    if (process.env.DEBUG_FOT && !assertHolds) {
+      console.error(`[StackRefInsn] ASSERT FAILED: sp - frame (${spMinusFrame}) != frameIndex - index (${frameIndexMinusIndex})`);
+      console.error(`  sp=${vm.stackSize()}, frame=${vm.frameIndex}, frameIndex=${this.frameIndex}, index=${this.index}`);
+      console.error(`  Will use sp-relative access as fallback`);
+    }
+
+    // Always use frame-relative access (matches OpenJade behavior)
+    // The ASSERT should always hold in correct code
     let value = vm.getFrame(this.frameIndex);
+
+    if (process.env.DEBUG_FOT && this.varName) {
+      const sp = vm.stackSize();
+      const absolutePos = sp + this.index;  // index is negative
+      console.error(`[StackRefInsn] ${this.varName}: sp[${this.index}] (sp=${sp}, absolute=${absolutePos}, frame=${vm.frameIndex}) = ${value.constructor.name}`);
+      const nl = value.asNodeList();
+      if (nl) {
+        console.error(`  -> NodeListObj with length ${nl.nodes.length()}`);
+      } else if (value.asString()) {
+        console.error(`  -> StringObj: "${value.asString()!.value}"`);
+      } else if (value.asPair()) {
+        const pair = value.asPair()!;
+        console.error(`  -> PairObj, car: ${pair.car?.constructor.name}`);
+      }
+    }
 
     // Debug: Track stack reads
     if (process.env.DEBUG_CLOSURES) {
@@ -1501,14 +1529,25 @@ export class SetNonInheritedCsSosofoInsn extends Insn {
 
   execute(vm: VM): Insn | null {
     // Port from: OpenJade SetNonInheritedCsSosofoInsn::execute
+    if (process.env.DEBUG_FOT) {
+      console.error(`[SetNonInheritedCsSosofoInsn] displayLength=${this.displayLength}, stackSize=${vm.stackSize()}`);
+    }
+
     // Pop captured variables from stack
     const display: ELObj[] = [];
     for (let i = 0; i < this.displayLength; i++) {
-      display.unshift(vm.pop());  // unshift to reverse order
+      const val = vm.pop();
+      if (process.env.DEBUG_FOT) {
+        console.error(`  Popped display[${i}]: ${val.constructor.name}`);
+      }
+      display.unshift(val);  // unshift to reverse order
     }
 
     // Pop flow object from stack (below the captured vars)
     const flowObj = vm.pop();
+    if (process.env.DEBUG_FOT) {
+      console.error(`  Popped flowObj: ${flowObj.constructor.name}`);
+    }
     if (!flowObj.asSosofo()) {
       throw new Error(`SetNonInheritedCsSosofoInsn: expected flow object, got ${flowObj.constructor.name}`);
     }
@@ -1523,6 +1562,9 @@ export class SetNonInheritedCsSosofoInsn extends Insn {
 
     // Push the sosofo object
     vm.push(sosofo);
+    if (process.env.DEBUG_FOT) {
+      console.error(`  Pushed SetNonInheritedCsSosofoObj, new stackSize=${vm.stackSize()}`);
+    }
 
     return this.next;
   }

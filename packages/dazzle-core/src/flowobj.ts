@@ -379,6 +379,53 @@ export class EntityFlowObj extends CompoundFlowObj {
 }
 
 /**
+ * Directory flow object - for organizing generated files into directories
+ * Custom extension for code generation
+ */
+export class DirectoryFlowObj extends CompoundFlowObj {
+  private path: string | null = null;
+
+  /**
+   * Set the path characteristic (directory path)
+   */
+  setNonInheritedC(name: string, value: ELObj): void {
+    if (name === 'path') {
+      const str = value.asString();
+      this.path = str ? str.value : null;
+    }
+  }
+
+  hasNonInheritedC(name: string): boolean {
+    return name === 'path';
+  }
+
+  /**
+   * Process this flow object
+   */
+  protected processInner(context: ProcessContext): void {
+    const fotb = context.currentFOTBuilder();
+
+    if (fotb.startDirectory && this.path) {
+      fotb.startDirectory(this.path);
+    }
+
+    // Process child content
+    super.processInner(context);
+
+    if (fotb.endDirectory) {
+      fotb.endDirectory();
+    }
+  }
+
+  copy(): FlowObj {
+    const copy = new DirectoryFlowObj();
+    copy.path = this.path;
+    copy.content_ = this.content_;
+    return copy;
+  }
+}
+
+/**
  * FormattingInstruction FlowObj - Writes raw text output
  * Port from: OpenJade TransformFOTBuilder formatting-instruction handling
  *
@@ -723,6 +770,11 @@ export class SetNonInheritedCsSosofoObj extends SosofoObj {
     // Save current context
     const savedNode = vm.currentNode;
     const savedClosure = vm.closure;
+    const savedFrameIndex = vm.frameIndex;
+
+    if (process.env.DEBUG_FOT) {
+      console.error(`[SetNonInheritedCsSosofoObj::resolve] Saving frameIndex=${savedFrameIndex}`);
+    }
 
     // Set up evaluation context with captured variables and node
     vm.currentNode = this.node;
@@ -756,8 +808,12 @@ export class SetNonInheritedCsSosofoObj extends SosofoObj {
       return null;
     } finally {
       // Restore context
+      if (process.env.DEBUG_FOT) {
+        console.error(`[SetNonInheritedCsSosofoObj::resolve] Restoring frameIndex from ${vm.frameIndex} to ${savedFrameIndex}`);
+      }
       vm.currentNode = savedNode;
       vm.closure = savedClosure;
+      vm.frameIndex = savedFrameIndex;
     }
   }
 
@@ -801,6 +857,8 @@ export function createFlowObj(className: string): FlowObj | null {
       return new LineFieldFlowObj();
     case 'entity':
       return new EntityFlowObj();
+    case 'directory':
+      return new DirectoryFlowObj();
     case 'formatting-instruction':
       return new FormattingInstructionFlowObj();
     default:

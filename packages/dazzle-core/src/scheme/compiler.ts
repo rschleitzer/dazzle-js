@@ -643,6 +643,9 @@ export class Compiler {
           if (process.env.DEBUG_CLOSURES && (name === 'component' || name === 'chaporapp')) {
             console.error(`[compileVariable] ${name}: binding.index=${binding.index}, stackPos=${stackPos}, offset=${offset}`);
           }
+          if (process.env.DEBUG_FOT && (name === 'itemcontent' || name === 'spacing' || name === 'first-child')) {
+            console.error(`[compileVariable] ${name}: binding.index=${binding.index}, stackPos=${stackPos}, offset=${offset}`);
+          }
           return new StackRefInsn(offset, binding.index, next, false, name);
         case 'closure':
           if (process.env.DEBUG_CLOSURES && (name === 'component' || name === 'chaporapp')) {
@@ -1785,12 +1788,18 @@ export class Compiler {
         const binding = env.lookup(varName);
         if (binding) {
           capturedVars.push(varName);
+          if (process.env.DEBUG_FOT) {
+            console.error(`[compileMake] Capturing variable '${varName}' for keyword: ${binding.kind}[${binding.index}]`);
+          }
         }
       }
 
       // Create new environment with ONLY captured variables (as closure variables, not frame)
       const kwEnv = new Environment(0);
       for (let i = 0; i < capturedVars.length; i++) {
+        if (process.env.DEBUG_FOT) {
+          console.error(`[compileMake] kwEnv: ${capturedVars[i]} -> closure[${i}]`);
+        }
         kwEnv['bindings'].set(capturedVars[i], {
           name: capturedVars[i],
           kind: 'closure',
@@ -1802,6 +1811,9 @@ export class Compiler {
       // Stack position is 1 (flow object is at position 0 in the new context)
       let kwCode: Insn | null = null;
       for (const kw of keywords) {
+        if (process.env.DEBUG_FOT) {
+          console.error(`[compileMake] Compiling keyword ${kw.name} with kwEnv (${capturedVars.length} closure vars)`);
+        }
         kwCode = this.compile(kw.valueExpr, kwEnv, 1,
                              new SetNonInheritedCInsn(kw.name, this.makeLocation(kw.valueExpr), kwCode));
       }
@@ -1821,12 +1833,10 @@ export class Compiler {
         if (binding.kind === 'frame') {
           rest = new FrameRefInsn(binding.index, rest);
         } else if (binding.kind === 'stack') {
-          // For stack refs, we need the offset from current stackPos
-          // The variable is at absolute position binding.index
-          // Current stackPos is stackPos + number of vars already pushed
-          const currentStackPos = stackPos + (capturedVars.length - 1 - i);
-          const offset = currentStackPos - binding.index;
-          rest = new StackRefInsn(offset, binding.index, rest, false);
+          // Stack variables are frame-relative (set by extendStack)
+          // Use StackRefInsn with frameIndex = binding.index
+          // Since binding.index is already frame-relative, offset is 0
+          rest = new StackRefInsn(0, binding.index, rest, false, varName);
         } else if (binding.kind === 'closure') {
           rest = new ClosureRefInsn(binding.index, rest);
         }

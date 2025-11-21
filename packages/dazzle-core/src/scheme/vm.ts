@@ -262,6 +262,21 @@ export class VM {
   }
 
   /**
+   * Get value from stack at absolute position (for stack variables)
+   * Stack variables use absolute positions that don't change with frame pointer
+   */
+  getStackAbsolute(index: number): ELObj {
+    if (index < 0 || index >= this.stack.length) {
+      throw new Error(`Stack access out of bounds: stack[${index}] (length=${this.stack.length})`);
+    }
+    const value = this.stack[index];
+    if (value === undefined) {
+      throw new Error(`Uninitialized stack slot: stack[${index}]`);
+    }
+    return value;
+  }
+
+  /**
    * Access stack variable relative to sp (index is negative)
    * Port from: VM.h vm.sp[index]
    */
