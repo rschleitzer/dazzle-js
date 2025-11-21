@@ -1818,47 +1818,74 @@ export class Compiler {
     // Port from: Expression.cxx MakeExpression::compileNonInheritedCs
     // Keyword values must be evaluated with captured variables, not frame variables
     // This is because they're evaluated lazily when the flow object is processed
-    if (keywords.length > 0) {
-      // Find all variables used in keyword expressions
+    // ALSO: Content expressions can create nested sosofos that are processed later,
+    // so they also need to capture variables
+    let capturedVars: string[] = [];
+    let kwEnv: Environment | null = null;
+
+    if (keywords.length > 0 || nContent > 0) {
+      // Find all variables used in keyword AND content expressions
       const boundVars = new Set<string>();
       for (const kw of keywords) {
         this.collectFreeVariables(kw.valueExpr, new Set(), boundVars);
       }
+      // Also analyze content expressions
+      for (let i = 0; i < nContent; i++) {
+        const contentExpr = argsArray[contentStart + i];
+        this.collectFreeVariables(contentExpr, new Set(), boundVars);
+      }
 
-      // Filter to only variables that exist in current environment
-      const capturedVars: string[] = [];
+      // Filter to only variables that exist in current environment AND have Shared flag
+      // Port from: OpenJade only captures variables that are accessed in shared contexts
+      capturedVars = [];
       for (const varName of boundVars) {
         const binding = env.lookup(varName);
         if (binding) {
-          capturedVars.push(varName);
-          if (process.env.DEBUG_FOT) {
-            console.error(`[compileMake] Capturing variable '${varName}' for keyword: ${binding.kind}[${binding.index}]`);
+          // Capture if variable has Shared flag (accessed in lambda/deferred context)
+          // OR if used in keywords (always deferred)
+          const hasSharedFlag = (binding.flags & BindingFlags.Shared) !== 0;
+          const usedInKeywords = keywords.some(kw => {
+            const kwVars = new Set<string>();
+            this.collectFreeVariables(kw.valueExpr, new Set(), kwVars);
+            return kwVars.has(varName);
+          });
+
+          if (hasSharedFlag || usedInKeywords) {
+            capturedVars.push(varName);
+            if (process.env.DEBUG_FOT) {
+              console.error(`[compileMake] Capturing '${varName}': ${binding.kind}[${binding.index}], flags=${binding.flags}, shared=${hasSharedFlag}, inKeywords=${usedInKeywords}`);
+            }
           }
         }
       }
 
       // Create new environment with ONLY captured variables (as closure variables, not frame)
-      const kwEnv = new Environment(0);
-      for (let i = 0; i < capturedVars.length; i++) {
-        if (process.env.DEBUG_FOT) {
-          console.error(`[compileMake] kwEnv: ${capturedVars[i]} -> closure[${i}]`);
+      // Only create kwEnv if there are actually captured variables
+      if (capturedVars.length > 0) {
+        kwEnv = new Environment(0);
+        for (let i = 0; i < capturedVars.length; i++) {
+          if (process.env.DEBUG_FOT) {
+            console.error(`[compileMake] kwEnv: ${capturedVars[i]} -> closure[${i}]`);
+          }
+          kwEnv['bindings'].set(capturedVars[i], {
+            name: capturedVars[i],
+            kind: 'closure',
+            index: i,
+            flags: BindingFlags.None,
+          });
         }
-        kwEnv['bindings'].set(capturedVars[i], {
-          name: capturedVars[i],
-          kind: 'closure',
-          index: i,
-          flags: BindingFlags.None,
-        });
       }
 
-      // Compile keyword value expressions with the new environment
+      // Compile keyword value expressions with the appropriate environment
       // Stack position is 1 (flow object is at position 0 in the new context)
       let kwCode: Insn | null = null;
       for (const kw of keywords) {
         if (process.env.DEBUG_FOT) {
-          console.error(`[compileMake] Compiling keyword ${kw.name} with kwEnv (${capturedVars.length} closure vars)`);
+          console.error(`[compileMake] Compiling keyword ${kw.name} with ${kwEnv !== null ? 'kwEnv' : 'env'} (${capturedVars.length} closure vars)`);
         }
-        kwCode = this.compile(kw.valueExpr, kwEnv, 1,
+        const kwCompileEnv = kwEnv !== null ? kwEnv : env;
+        const kwStackPos = kwEnv !== null ? 1 : stackPos;
+        kwCode = this.compile(kw.valueExpr, kwCompileEnv, kwStackPos,
                              new SetNonInheritedCInsn(kw.name, this.makeLocation(kw.valueExpr), kwCode));
       }
 
@@ -1895,12 +1922,17 @@ export class Compiler {
 
     // Port from: lines 1318-1326 - Handle content compilation
     // When there's content, SetContentInsn contains the template, so we DON'T need CopyFlowObjInsn
+    // Content always uses the original environment, not kwEnv
+    // Only keywords need the closure environment because they're always deferred
+    const contentEnv = env;
+    const contentStackPos = stackPos;
+
     if (nContent === 1) {
       // Single content expression
       // Port from: line 1320 - compile at stackPos (not stackPos+1!)
       // Content replaces itself with a sosofo at the same stack position
       const contentExpr = argsArray[contentStart];
-      return this.compile(contentExpr, env, stackPos,
+      return this.compile(contentExpr, contentEnv, contentStackPos,
                           new CheckSosofoInsn(this.makeLocation(contentExpr), rest));
     } else {
       // Multiple content expressions
@@ -1910,14 +1942,14 @@ export class Compiler {
       // Compile each content expression in reverse order
       // Port from: line 1324 - compile at stackPos + nContent - i
       if (process.env.DEBUG_FOT) {
-        console.error(`compileMake: nContent=${nContent}, contentStart=${contentStart}, stackPos=${stackPos}, argsArray.length=${argsArray.length}`);
+        console.error(`compileMake: nContent=${nContent}, contentStart=${contentStart}, contentStackPos=${contentStackPos}, argsArray.length=${argsArray.length}`);
       }
       for (let i = nContent - 1; i >= 0; i--) {
         const contentExpr = argsArray[contentStart + i];
         const loc = this.makeLocation(contentExpr);
         const checkInsn: Insn = new CheckSosofoInsn(loc, rest);
         if (process.env.DEBUG_FOT) {
-          console.error(`  Loop i=${i}: Wrapping content ${i} (argsArray[${contentStart + i}]=${contentExpr ? contentExpr.constructor.name : 'undefined'}) with CheckSosofoInsn at stackPos ${stackPos + i}`);
+          console.error(`  Loop i=${i}: Wrapping content ${i} (argsArray[${contentStart + i}]=${contentExpr ? contentExpr.constructor.name : 'undefined'}) with CheckSosofoInsn at contentStackPos ${contentStackPos + i}`);
           console.error(`    CheckSosofoInsn location: ${loc.file}:${loc.line}:${loc.column}`);
           // Show what the expression is if it's a pair
           const pair = contentExpr?.asPair();
@@ -1928,7 +1960,7 @@ export class Compiler {
             }
           }
         }
-        const compiled = this.compile(contentExpr, env, stackPos + i, checkInsn);
+        const compiled = this.compile(contentExpr, contentEnv, contentStackPos + i, checkInsn);
         if (process.env.DEBUG_FOT && compiled !== checkInsn && !this.chainContainsInsn(compiled, checkInsn)) {
           console.error(`    WARNING: compile() returned instruction chain that doesn't contain CheckSosofoInsn!`);
           console.error(`    Returned: ${compiled?.constructor.name}, Expected chain to include: CheckSosofoInsn`);
