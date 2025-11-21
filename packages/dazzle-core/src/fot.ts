@@ -165,6 +165,18 @@ export interface FotBuilder {
   endLink?(): void;
 
   /**
+   * Start a line-field flow object
+   * Port from: OpenJade FOTBuilder.h:476 startLineField
+   */
+  startLineField?(): void;
+
+  /**
+   * End a line-field flow object
+   * Port from: OpenJade FOTBuilder.h:477 endLineField
+   */
+  endLineField?(): void;
+
+  /**
    * Page number sosofo - outputs current page number
    * Port from: OpenJade ProcessContext.cxx PageNumberSosofoObj::process()
    * Port from: OpenJade FOTBuilder.h currentNodePageNumber

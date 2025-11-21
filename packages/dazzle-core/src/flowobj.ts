@@ -631,6 +631,65 @@ export class DisplayGroupFlowObj extends CompoundFlowObj {
 }
 
 /**
+ * Line field flow object
+ * Port from: OpenJade FlowObj.cxx:651 class LineFieldFlowObj
+ *
+ * A line field is an inline area used in page headers/footers.
+ * Supports break-before-priority and break-after-priority characteristics.
+ */
+export class LineFieldFlowObj extends CompoundFlowObj {
+  /**
+   * Process this flow object
+   * Port from: FlowObj.cxx:673 LineFieldFlowObj::processInner
+   */
+  protected processInner(context: ProcessContext): void {
+    const fotb = context.currentFOTBuilder();
+
+    // Start line field
+    // Port from: FlowObj.cxx:676 fotb.startLineField(*nic_)
+    if (fotb.startLineField) {
+      fotb.startLineField();
+    }
+
+    // Process child content
+    // Port from: FlowObj.cxx:677 CompoundFlowObj::processInner
+    super.processInner(context);
+
+    // End line field
+    // Port from: FlowObj.cxx:678 fotb.endLineField()
+    if (fotb.endLineField) {
+      fotb.endLineField();
+    }
+  }
+
+  /**
+   * Port from: FlowObj.cxx:700 LineFieldFlowObj::hasNonInheritedC
+   * Supports break-before-priority and break-after-priority
+   */
+  hasNonInheritedC(name: string): boolean {
+    return name === 'break-before-priority' || name === 'break-after-priority';
+  }
+
+  /**
+   * Port from: FlowObj.cxx:681 LineFieldFlowObj::setNonInheritedC
+   * For now, accept but ignore (proper implementation would store in NIC structure)
+   */
+  setNonInheritedC(_name: string, _value: ELObj): void {
+    // TODO: Store characteristics in NIC structure like OpenJade
+    // For now, silently accept to allow compilation
+  }
+
+  /**
+   * Port from: FlowObj.cxx:668 LineFieldFlowObj::copy
+   */
+  copy(): FlowObj {
+    const copy = new LineFieldFlowObj();
+    copy.content_ = this.content_;
+    return copy;
+  }
+}
+
+/**
  * Flow object factory
  * Creates flow objects by class name
  */
@@ -650,6 +709,8 @@ export function createFlowObj(className: string): FlowObj | null {
       return new LeaderFlowObj();
     case 'link':
       return new LinkFlowObj();
+    case 'line-field':
+      return new LineFieldFlowObj();
     case 'entity':
       return new EntityFlowObj();
     case 'formatting-instruction':

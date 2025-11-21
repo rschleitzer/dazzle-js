@@ -254,6 +254,28 @@ export class FotBackend implements FotBuilder {
   }
 
   /**
+   * Start a line-field flow object
+   * Port from: OpenJade FOTBuilder.h:476
+   */
+  startLineField(): void {
+    this.closeText();
+    this.writeIndent();
+    this.output += '<line-field>\n';
+    this.indentLevel++;
+  }
+
+  /**
+   * End a line-field flow object
+   * Port from: OpenJade FOTBuilder.h:477
+   */
+  endLineField(): void {
+    this.closeText();
+    this.indentLevel--;
+    this.writeIndent();
+    this.output += '</line-field>\n';
+  }
+
+  /**
    * Finish output and return result
    */
   end(): void {
