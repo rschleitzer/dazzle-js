@@ -292,6 +292,22 @@ const minusPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
 
   const first = args[0].asNumber();
   if (!first) {
+    // DEBUG: Show what we got and where it might have come from
+    if (process.env.DEBUG_FRAME) {
+      console.error(`\n[- primitive] ERROR: Got ${args[0].constructor.name} instead of number`);
+      console.error(`  Total args: ${args.length}`);
+      for (let i = 0; i < args.length; i++) {
+        console.error(`  args[${i}]: ${args[i].constructor.name}`);
+        const func = args[i].asFunction();
+        if (func) {
+          console.error(`    Function name: ${func.name || '<anonymous>'}`);
+          console.error(`    Is primitive: ${func.isPrimitive()}`);
+          if (func.signature) {
+            console.error(`    Signature: required=${func.signature.nRequiredArgs}, optional=${func.signature.nOptionalArgs}`);
+          }
+        }
+      }
+    }
     throw new Error(`- requires numeric arguments, got ${args[0].constructor.name}`);
   }
 

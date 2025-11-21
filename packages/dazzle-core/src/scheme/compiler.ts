@@ -419,7 +419,19 @@ export class GlobalEnvironment {
 
         // Compile and evaluate the expression
         const compiler = new Compiler(this);
-        const insn = compiler.compile(def.expr, new Environment(), 0, null);
+        const env = new Environment();
+        if (process.env.DEBUG_FRAME) {
+          console.error(`[GlobalEnvironment.lookup] Compiling with clean environment`);
+          const bindings = env.getDebugInfo();
+          console.error(`  Environment bindings: ${bindings.length} (should be 0)`);
+          if (bindings.length > 0) {
+            console.error(`  ERROR: Environment is not empty!`);
+            for (const [k, v] of bindings) {
+              console.error(`    ${k}: ${v.kind}[${v.index}]`);
+            }
+          }
+        }
+        const insn = compiler.compile(def.expr, env, 0, null);
         const vm = new VM();
         vm.globals = this;
         const value = vm.eval(insn);
@@ -822,7 +834,12 @@ export class Compiler {
       console.error(`[compileLambda] 0-arg lambda body starts with: ${bodyInsn.constructor.name}`);
       if (bodyInsn.constructor.name === 'FrameRefInsn') {
         console.error(`  ERROR: 0-arg lambda should not have FrameRefInsn in body!`);
-        console.error(`  Body instruction: ${JSON.stringify(bodyInsn, null, 2)}`);
+        console.error(`  FrameRefInsn index: ${(bodyInsn as any).index}`);
+        console.error(`  lambdaEnv bindings after enterLambda:`);
+        const bindings = lambdaEnv.getDebugInfo();
+        for (const [k, v] of bindings) {
+          console.error(`    ${k}: ${v.kind}[${v.index}]`);
+        }
       }
     }
 
