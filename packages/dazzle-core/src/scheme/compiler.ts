@@ -88,6 +88,13 @@ export class Environment {
   }
 
   /**
+   * Get debug info about bindings
+   */
+  getDebugInfo(): Array<[string, Binding]> {
+    return Array.from(this.bindings.entries());
+  }
+
+  /**
    * Extend environment with new stack variables (for let)
    * Port from: OpenJade Environment::augmentFrame
    */
@@ -311,6 +318,29 @@ export class GlobalEnvironment {
   }
 
   /**
+   * Format S-expression for debugging
+   */
+  private formatSExpr(obj: ELObj | null): string {
+    if (!obj) return '()';
+    const sym = obj.asSymbol();
+    if (sym) return sym.name;
+    const pair = obj.asPair();
+    if (pair) {
+      const items: string[] = [];
+      let current: ELObj | null = obj;
+      while (current?.asPair()) {
+        items.push(this.formatSExpr(current.asPair()!.car));
+        current = current.asPair()!.cdr;
+      }
+      if (current && !current.asPair()) {
+        return `(${items.join(' ')} . ${this.formatSExpr(current)})`;
+      }
+      return `(${items.join(' ')})`;
+    }
+    return obj.constructor.name;
+  }
+
+  /**
    * Define an expression (to be compiled lazily)
    * Port from: Identifier::setDefinition
    */
@@ -353,6 +383,18 @@ export class GlobalEnvironment {
 
       def.beingComputed = true;
       try {
+        // DEBUG: Track runtime compilation
+        if (process.env.DEBUG_FRAME) {
+          console.error(`[GlobalEnvironment.lookup] Runtime compiling global '${name}'`);
+          console.error(`  Expression type: ${def.expr.constructor.name}`);
+          // If it's a lambda, show basic structure
+          const pair = def.expr.asPair();
+          if (pair && pair.car.asSymbol()?.name === 'lambda') {
+            const params = pair.cdr.asPair()?.car ?? null;
+            console.error(`  Is lambda with params: ${this.formatSExpr(params)}`);
+          }
+        }
+
         // DEBUG: Check if this is map function
         if (name === 'map') {
           // Check map1 params in stored expr
@@ -549,6 +591,12 @@ export class Compiler {
           }
           if (process.env.DEBUG_FRAME) {
             console.error(`[compileVariable] Generating FrameRefInsn for '${name}' at index ${binding.index}`);
+            // Show environment chain
+            const envBindings = env.getDebugInfo();
+            console.error(`  Environment has ${envBindings.length} local bindings:`);
+            for (const [k, v] of envBindings) {
+              console.error(`    ${k}: ${v.kind}[${v.index}]`);
+            }
           }
           return new FrameRefInsn(binding.index, next);
         case 'stack':
@@ -768,6 +816,15 @@ export class Compiler {
       restArg: hasRestArg,
       nKeyArgs: 0,
     };
+
+    // DEBUG: For 0-arg lambdas, show what the body instruction is
+    if (process.env.DEBUG_FRAME && nRequiredParams === 0 && nOptionalParams === 0 && !hasRestArg) {
+      console.error(`[compileLambda] 0-arg lambda body starts with: ${bodyInsn.constructor.name}`);
+      if (bodyInsn.constructor.name === 'FrameRefInsn') {
+        console.error(`  ERROR: 0-arg lambda should not have FrameRefInsn in body!`);
+        console.error(`  Body instruction: ${JSON.stringify(bodyInsn, null, 2)}`);
+      }
+    }
 
     if (process.env.DEBUG_FRAME) {
       if (nRequiredParams === 0 && nOptionalParams === 0 && !hasRestArg) {
