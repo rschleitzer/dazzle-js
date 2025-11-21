@@ -155,7 +155,7 @@ export class VM {
   private initStack(): void {
     this.sp = 0;
     this.frameIndex = 0;  // Port from: OpenJade VM::initStack() - frame = sbase
-    this.stack = new Array(100); // Start with reasonable size
+    this.stack = new Array(100).fill(undefined); // Initialize all slots to undefined
     this.controlStack = [];  // Port from: OpenJade VM::initStack() - csp = csbase
     this.closure = null;  // Reset closure for clean evaluation
   }
@@ -179,7 +179,7 @@ export class VM {
     if (newSize > this.stackLimit) {
       throw new Error('Stack overflow');
     }
-    const newStack = new Array(newSize);
+    const newStack = new Array(newSize).fill(undefined);
     for (let i = 0; i < this.sp; i++) {
       newStack[i] = this.stack[i];
     }
@@ -248,7 +248,11 @@ export class VM {
       console.error(`  Caller: ${caller}`);
       throw new Error(`Frame index ${index} out of bounds`);
     }
-    return this.stack[absoluteIndex];
+    const value = this.stack[absoluteIndex];
+    if (process.env.DEBUG_FRAME && absoluteIndex >= this.sp) {
+      console.error(`[getFrame] WARNING: Accessing past sp! absoluteIndex=${absoluteIndex}, sp=${this.sp}, value=${value?.constructor.name || 'undefined'}`);
+    }
+    return value;
   }
 
   /**

@@ -242,6 +242,9 @@ export class FrameRefInsn extends Insn {
   }
 
   execute(vm: VM): Insn | null {
+    if (process.env.DEBUG_FRAME) {
+      console.error(`[FrameRefInsn] Accessing frame[${this.index}], frameIndex=${vm.frameIndex}, sp=${vm.stackSize()}`);
+    }
     let value = vm.getFrame(this.index);
 
     // Auto-unbox if this is a boxed value (for letrec variables)
@@ -816,6 +819,9 @@ export class CallInsn extends Insn {
       const newFrameIndex = vm.stackSize() - this.nArgs;
       if (process.env.DEBUG_FRAME) {
         console.error(`[CallInsn] Setting frameIndex: stackSize=${vm.stackSize()}, nArgs=${this.nArgs}, newFrameIndex=${newFrameIndex}`);
+        if (func.signature) {
+          console.error(`  Calling closure with signature: required=${func.signature.nRequiredArgs}, optional=${func.signature.nOptionalArgs}, rest=${func.signature.restArg ? 'yes' : 'no'}`);
+        }
       }
       vm.frameIndex = newFrameIndex;
 
@@ -955,13 +961,19 @@ export class VarargsInsn extends Insn {
 
     // Normal case: return entry point for this arity
     // Port from: OpenJade line 734
-    if (process.env.DEBUG_FOT) {
+    if (process.env.DEBUG_FOT || process.env.DEBUG_FRAME) {
       console.error(`  VarargsInsn: Returning entryPoints[${n}] (${nOptional - n} optionals missing), stackSize=${vm.stackSize()}`);
-      if (n < this.entryPoints.length - 1) {
+      if (n < 0) {
+        console.error(`    ERROR: n < 0! nActual=${nActual}, nRequired=${nRequired}, function called with too few arguments!`);
+      } else if (n < this.entryPoints.length - 1) {
         console.error(`    Entry point ${n} will evaluate ${nOptional - n} default(s) then jump to body`);
       } else {
         console.error(`    Entry point ${n} is the body (all optionals provided)`);
       }
+    }
+
+    if (n < 0 || n >= this.entryPoints.length) {
+      throw new Error(`VarargsInsn: invalid entry point index ${n} (nActual=${nActual}, nRequired=${nRequired}, nOptional=${nOptional}, entryPoints.length=${this.entryPoints.length})`);
     }
 
     return this.entryPoints[n];

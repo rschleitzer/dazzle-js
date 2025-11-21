@@ -292,7 +292,7 @@ const minusPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
 
   const first = args[0].asNumber();
   if (!first) {
-    throw new Error('- requires numeric arguments');
+    throw new Error(`- requires numeric arguments, got ${args[0].constructor.name}`);
   }
 
   if (args.length === 1) {
@@ -307,7 +307,7 @@ const minusPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM): ELObj => {
   for (let i = 1; i < args.length; i++) {
     const num = args[i].asNumber();
     if (!num) {
-      throw new Error('- requires numeric arguments');
+      throw new Error(`- requires numeric arguments, got ${args[i].constructor.name} at position ${i}`);
     }
     result -= num.value;
     if (!num.exact) {
