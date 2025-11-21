@@ -211,7 +211,6 @@ export interface Signature {
   nOptionalArgs: number;   // Number of optional arguments
   restArg: boolean;        // Whether there's a rest argument
   nKeyArgs: number;        // Number of keyword arguments
-  optionalDefaults?: any[];  // Compiled instructions for optional parameter default values (Insn[])
 }
 
 /**

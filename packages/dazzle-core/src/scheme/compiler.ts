@@ -41,8 +41,9 @@ import {
   ClosureInsn,
   VarargsInsn,
   ErrorInsn,
-  DefineUnitInsn,
-  WithModeInsn,
+  StoreUnitInsn,
+  PushModeInsn,
+  PopModeInsn,
   CopyFlowObjInsn,
   CheckSosofoInsn,
   SosofoAppendInsn,
@@ -597,8 +598,19 @@ export class Compiler {
     const consequent = argsArray[1];
     const alternative = argsArray[2] || theNilObj; // Unspecified if missing
 
+    if (process.env.DEBUG_FOT && next?.constructor.name === 'CheckSosofoInsn') {
+      console.error(`  compileIf: Compiling if with CheckSosofoInsn as next, stackPos=${stackPos}`);
+      console.error(`    consequent type: ${consequent.constructor.name}`);
+      console.error(`    alternative type: ${alternative.constructor.name}`);
+    }
+
     const conseqInsn = this.compile(consequent, env, stackPos, next);
     const altInsn = this.compile(alternative, env, stackPos, next);
+
+    if (process.env.DEBUG_FOT && next?.constructor.name === 'CheckSosofoInsn') {
+      console.error(`    conseqInsn: ${conseqInsn.constructor.name}, altInsn: ${altInsn.constructor.name}`);
+    }
+
     return this.compile(test, env, stackPos, new TestInsn(conseqInsn, altInsn));
   }
 
@@ -740,22 +752,6 @@ export class Compiler {
     // Parameters are at frame positions 0..nParams-1, so body starts at nParams
     const bodyInsn = this.compile(body, lambdaEnv, paramNames.length, new ReturnInsn(paramNames.length));
 
-    // Compile optional parameter default value expressions
-    // Port from: OpenJade compiles default expressions to instructions
-    const compiledDefaults: Insn[] = [];
-    for (const defaultExpr of optionalDefaults) {
-      if (!defaultExpr || defaultExpr === theFalseObj) {
-        // No default value specified or explicitly #f, use #f
-        compiledDefaults.push(new ConstantInsn(theFalseObj, null));
-      } else {
-        // Compile the default expression
-        // Default expressions are evaluated in the lambda's environment
-        // but BEFORE the parameters are bound, so use the outer environment
-        const defaultInsn = this.compile(defaultExpr, env, stackPos, null);
-        compiledDefaults.push(defaultInsn);
-      }
-    }
-
     // Build signature
     // Port from: OpenJade Expression.cxx parseFormalArguments signature building
     const signature: Signature = {
@@ -763,14 +759,85 @@ export class Compiler {
       nOptionalArgs: nOptionalParams,
       restArg: hasRestArg,
       nKeyArgs: 0,
-      optionalDefaults: compiledDefaults.length > 0 ? compiledDefaults : undefined,
     };
 
-    // Port from: OpenJade Expression.cxx lines 602-636
-    // If function has optional args or rest arg, wrap body with VarargsInsn
+    // Port from: OpenJade Expression.cxx lines 545-636
+    // Build entry points for VarargsInsn - one instruction chain per arity
     let closureCode: Insn | null = bodyInsn;
     if (hasRestArg || nOptionalParams > 0) {
-      closureCode = new VarargsInsn(signature, bodyInsn);
+      // entryPoints[0] = for only required args (all optionals missing)
+      // entryPoints[1] = for required + 1 optional (remaining optionals missing)
+      // ...
+      // entryPoints[nOptionalArgs] = for all args provided
+      // entryPoints[nOptionalArgs+1] = for rest args (if restArg)
+      const nEntryPoints = nOptionalParams + (hasRestArg ? 1 : 0) + 1;
+      const entryPoints: Insn[] = new Array(nEntryPoints);
+
+      // Start with the last entry point (all optionals provided, or rest args)
+      // Port from: Expression.cxx lines 557-607
+      let code: Insn = bodyInsn;
+
+      // If we have rest arg, push nil for it
+      // Port from: Expression.cxx lines 602-606
+      if (hasRestArg) {
+        code = new ConstantInsn(theNilObj, code);
+      }
+
+      // Store the last entry point
+      entryPoints[nOptionalParams] = code;
+
+      // Build entry points for each arity, from most args to fewest
+      // Port from: Expression.cxx lines 609-625
+      for (let i = nOptionalParams - 1; i >= 0; i--) {
+        // entryPoints[i] needs to:
+        // 1. Evaluate default expression for optional param i
+        // 2. Jump to entryPoints[i+1] (which handles remaining params)
+        const nextEntry = entryPoints[i + 1];
+        const defaultExpr = optionalDefaults[i];
+
+        if (defaultExpr && defaultExpr !== theFalseObj) {
+          // Compile default expression
+          // Port from: Expression.cxx lines 614-620
+          // Environment includes: required params + earlier optional params (not this one or later)
+          // Plus captured variables from outer scope
+          const paramsInScope = paramNames.slice(0, nRequiredParams + i);
+
+          // Create environment: Environment(formalParams[0..n], boundVars)
+          // Port from: Expression.cxx line 618
+          const defaultEnv = new Environment();
+
+          // Add captured variables as closure refs
+          for (let j = 0; j < capturedVars.length; j++) {
+            defaultEnv['bindings'].set(capturedVars[j], {
+              name: capturedVars[j],
+              kind: 'closure',
+              index: j,
+            });
+          }
+
+          // Add parameters in scope as frame refs
+          for (let j = 0; j < paramsInScope.length; j++) {
+            defaultEnv['bindings'].set(paramsInScope[j], {
+              name: paramsInScope[j],
+              kind: 'frame',
+              index: j,
+            });
+          }
+
+          // Stack position is the number of params in scope
+          // Port from: Expression.cxx line 619 - f.size()
+          const defaultInsn = this.compile(defaultExpr, defaultEnv, paramsInScope.length, nextEntry);
+          entryPoints[i] = defaultInsn;
+        } else {
+          // No default expression, use #f
+          // Port from: Expression.cxx lines 622-624
+          entryPoints[i] = new ConstantInsn(theFalseObj, nextEntry);
+        }
+      }
+
+      // Create VarargsInsn with entry points
+      // Port from: Expression.cxx line 636
+      closureCode = new VarargsInsn(signature, entryPoints);
     }
 
     // Build instruction chain:
@@ -939,6 +1006,8 @@ export class Compiler {
    *
    * Form: (define-unit name value)
    * Where name is a symbol (unit name) and value is an expression that evaluates to a quantity
+   *
+   * Creates instruction chain: valueInsn → StoreUnitInsn → next
    */
   private compileDefineUnit(args: ELObj, env: Environment, stackPos: number, next: Insn | null): Insn {
     const argsArray = this.listToArray(args);
@@ -964,11 +1033,12 @@ export class Compiler {
 
     const valueExpr = argsArray[1];
 
-    // Compile the value expression
-    const valueInsn = this.compile(valueExpr, env, stackPos, null);
+    // Build chain: valueInsn → StoreUnitInsn → next
+    // This avoids nested loop execution
+    const storeInsn = new StoreUnitInsn(unitName, next);
+    const valueInsn = this.compile(valueExpr, env, stackPos, storeInsn);
 
-    // Return DefineUnitInsn
-    return new DefineUnitInsn(unitName, valueInsn, next);
+    return valueInsn;
   }
 
   /**
@@ -1679,15 +1749,27 @@ export class Compiler {
     //   Compile: arg0 first (pushes first) → ... → argN-1 → fn last (pushes last) → CallInsn
     // Build chain: CallInsn ← fn ← argN-1 ← ... ← arg0
 
+    if (process.env.DEBUG_FOT && fnSym && next?.constructor.name === 'CheckSosofoInsn') {
+      console.error(`  compileCall: ${fnSym.name} with ${args.length} args, next=CheckSosofoInsn`);
+    }
+
     let result: Insn = new CallInsn(args.length, this.makeLocation(expr), next);
 
     // Compile function - it will execute after all args, so will be on top
     result = this.compile(fn, env, stackPos + args.length, result);
 
+    if (process.env.DEBUG_FOT && fnSym && next?.constructor.name === 'CheckSosofoInsn') {
+      console.error(`    After compiling fn: result=${result.constructor.name}`);
+    }
+
     // Compile arguments in reverse (n-1 down to 0)
     // They execute first-to-last (0 to n-1), pushing in that order
     for (let i = args.length - 1; i >= 0; i--) {
       result = this.compile(args[i], env, stackPos + i, result);
+    }
+
+    if (process.env.DEBUG_FOT && fnSym && next?.constructor.name === 'CheckSosofoInsn') {
+      console.error(`    Final result=${result.constructor.name}`);
     }
 
     return result;
@@ -2272,11 +2354,15 @@ export class Compiler {
     // Second arg is the expression to evaluate with the mode set
     const bodyExpr = argsArray[1];
 
-    // Compile the body expression
-    const bodyInsn = this.compile(bodyExpr, env, stackPos, null);
-
-    // Create WithModeInsn that wraps the body
-    return new WithModeInsn(modeName, bodyInsn, next);
+    // Port from: OpenJade WithModeExpression::compile lines 1089-1091
+    // return new PushModeInsn(mode, compile(expr, new PopModeInsn(next)));
+    //
+    // Creates instruction chain: PushMode → body → PopMode → next
+    // This ensures body is part of the normal instruction chain, not a nested loop
+    return new PushModeInsn(
+      modeName,
+      this.compile(bodyExpr, env, stackPos, new PopModeInsn(next))
+    );
   }
 
   /**

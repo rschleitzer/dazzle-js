@@ -81,6 +81,12 @@ export class VM {
   public processingMode: string = '';
 
   /**
+   * DSSSL processing context - mode stack for with-mode
+   * Port from: Interpreter.h modeStack
+   */
+  public modeStack: string[] = [];
+
+  /**
    * Global environment - for accessing rule registry
    * Port from: Interpreter.h GlobalEnvironment
    */
@@ -372,8 +378,39 @@ export class VM {
     }
 
     // The inner loop - keep executing instructions until done
+    let stepCount = 0;
+    const maxSteps = 1000000; // Safety limit
+
+    // Debug: Track last 20 instructions before error
+    const insnTrace: string[] = [];
+
     while (insn) {
-      insn = insn.execute(this);
+      if (process.env.DEBUG_INSN) {
+        console.error(`[${stepCount}] Executing: ${insn.constructor.name}, stackSize=${this.sp}`);
+      }
+
+      // Track instruction execution for debugging
+      if (process.env.DEBUG_FOT) {
+        const trace = `[${stepCount}] ${insn.constructor.name} sp=${this.sp}`;
+        insnTrace.push(trace);
+        if (insnTrace.length > 50) insnTrace.shift();
+      }
+
+      try {
+        insn = insn.execute(this);
+      } catch (e) {
+        if (process.env.DEBUG_FOT && insnTrace.length > 0) {
+          console.error('\n=== Last 50 instructions before error ===');
+          insnTrace.forEach(t => console.error(t));
+          console.error('=== End trace ===\n');
+        }
+        throw e;
+      }
+
+      stepCount++;
+      if (stepCount > maxSteps) {
+        throw new Error('Instruction execution exceeded maximum steps - possible infinite loop');
+      }
     }
 
     // Pop and return result

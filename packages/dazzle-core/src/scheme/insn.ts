@@ -76,7 +76,11 @@ export class TestInsn extends Insn {
 
   execute(vm: VM): Insn | null {
     const test = vm.pop();
-    return test.isTrue() ? this.consequent : this.alternative;
+    const result = test.isTrue() ? this.consequent : this.alternative;
+    if (process.env.DEBUG_FOT) {
+      console.error(`[TestInsn] test=${test.isTrue()}, returning ${result?.constructor.name || 'null'}, stackSize=${vm.stackSize()}`);
+    }
+    return result;
   }
 }
 
@@ -248,6 +252,10 @@ export class FrameRefInsn extends Insn {
       if (box) {
         value = box.value;
       }
+    }
+
+    if (process.env.DEBUG_FOT && this.next?.constructor.name === 'CallInsn') {
+      console.error(`[FrameRefInsn] index=${this.index}, value=${value.constructor.name}, next=CallInsn, stackSize=${vm.stackSize()}`);
     }
 
     vm.push(value);
@@ -462,8 +470,16 @@ export class ReturnInsn extends Insn {
     // DEBUG: Check stack before return
     const stackBefore = vm.stackSize();
 
+    if (process.env.DEBUG_FOT) {
+      console.error(`[ReturnInsn] Executing return, stackSize=${stackBefore}`);
+    }
+
     // Pop the return value
     const result = vm.pop();
+
+    if (process.env.DEBUG_FOT) {
+      console.error(`  Return value type: ${result.constructor.name}`);
+    }
 
     // Debug: Track if we're returning a sosofo
     if (process.env.DEBUG_CLOSURES) {
@@ -505,6 +521,10 @@ export class ReturnInsn extends Insn {
 
     // Pop the call frame and get the return address
     const next = vm.popFrame();
+
+    if (process.env.DEBUG_FOT) {
+      console.error(`  Returning to: ${next ? next.constructor.name : 'null'}`);
+    }
 
     // Push result back on stack for caller
     vm.push(result);
@@ -720,6 +740,11 @@ export class CallInsn extends Insn {
 
     // Handle closures
     if (func.isClosure()) {
+      // Debug: Track what next instruction is being saved for FOT debugging
+      if (process.env.DEBUG_FOT) {
+        console.error(`[CallInsn] Calling closure: ${func.name || '<anonymous>'}, nArgs=${this.nArgs}, saving next=${this.next?.constructor.name || 'null'}, stackSize=${vm.stackSize()}`);
+      }
+
       // Debug: Track function calls with 1 argument
       if (process.env.DEBUG_CLOSURES && this.nArgs === 1) {
         const arg = args[0];
@@ -861,104 +886,76 @@ export class ClosureInsn extends Insn {
 }
 
 /**
- * Varargs instruction - Handle variable argument lists
- * Port from: Insn.h VarargsInsn
+ * Varargs instruction - Handle variable-arity functions using entry points
+ * Port from: OpenJade Insn.h VarargsInsn and Insn.cxx VarargsInsn::execute
  *
- * Packs excess arguments into a list for the rest parameter.
- * For a function with signature (lambda (a b #!rest c) ...):
- * - nRequiredArgs = 2 (a, b)
- * - restArg = true (c)
- * If called with 5 args, this packs args 2-4 into a list for c.
+ * Uses pre-compiled entry points (instruction chains) for each arity.
+ * Each entry point evaluates the necessary defaults and jumps to the body.
+ * NO nested loops - just returns the appropriate entry point!
+ *
+ * Entry points array:
+ * - entryPoints[0]: Only required args provided → eval all defaults → body
+ * - entryPoints[1]: Required + 1 optional → eval remaining defaults → body
+ * - entryPoints[n]: Required + n optionals → eval remaining defaults → body
+ * - entryPoints[last]: All args provided (or rest args) → body
  */
 export class VarargsInsn extends Insn {
   constructor(
     private signature: Signature,
-    private body: Insn | null
+    private entryPoints: Insn[]
   ) {
     super();
   }
 
   execute(vm: VM): Insn | null {
+    // Port from: OpenJade Insn.cxx VarargsInsn::execute lines 689-735
     const nActual = vm.nActualArgs;
     const nRequired = this.signature.nRequiredArgs;
     const nOptional = this.signature.nOptionalArgs;
-    const nTotal = nRequired + nOptional;
 
-    // Port from: OpenJade Insn.cxx VarargsInsn::execute lines 689-735
-    if (this.signature.restArg) {
-      // Calculate how many args go to rest (beyond required + optional)
-      const nRest = Math.max(0, nActual - nTotal);
+    // Calculate how many optional args were provided
+    // n = number of args beyond required
+    const n = nActual - nRequired;
 
-      if (nRest > 0) {
-        // Pack extra arguments into a list (from top of stack backwards)
-        // Port from: lines 695-702
-        let restList: ELObj = theNilObj;
-        for (let i = 0; i < nRest; i++) {
-          const arg = vm.pop();
-          restList = makePair(arg, restList);
-        }
-        // Push the rest list back onto stack
+    if (process.env.DEBUG_FOT) {
+      console.error(`[VarargsInsn] nActualArgs=${nActual}, required=${nRequired}, optional=${nOptional}, n=${n}, entryPoints.length=${this.entryPoints.length}`);
+    }
+
+    // Port from: OpenJade Insn.cxx lines 692-733
+    // Handle rest args case
+    if ((this.signature.restArg || this.signature.nKeyArgs)
+        && n > this.entryPoints.length - 2) {
+      // Too many args - need to cons up rest list
+      // Port from: OpenJade lines 694-702
+      let restList: ELObj = theNilObj;
+      const nRest = n - (this.entryPoints.length - 2);
+
+      for (let i = 0; i < nRest; i++) {
+        const arg = vm.pop();
+        restList = makePair(arg, restList);
+      }
+
+      // Push rest list onto stack
+      if (this.signature.restArg) {
         vm.push(restList);
-      } else {
-        // No extra args, push empty list for rest parameter
-        vm.push(theNilObj);
       }
 
-      // After handling rest args, we have nActual - nRest args on stack
-      // which should be nRequired + min(nActual - nRequired, nOptional)
-    }
-
-    // Handle optional parameters
-    if (nOptional > 0) {
-      // Calculate how many optional args were actually provided
-      const nOptionalProvided = Math.max(0, Math.min(nOptional, nActual - nRequired));
-      const nOptionalMissing = nOptional - nOptionalProvided;
-
-      // Fill in missing optional parameters
-      // Port from: OpenJade evaluates default value expressions for missing optional args
-      // Stack layout (top to bottom): [opt_n ... opt_1] [req_n ... req_1]
-      // We need to evaluate default expressions for missing optional args
-      for (let i = 0; i < nOptionalMissing; i++) {
-        // Get the default value instruction for this optional parameter
-        // Optional parameters are indexed from the first missing one
-        const defaultIndex = nOptionalProvided + i;
-
-        if (this.signature.optionalDefaults && defaultIndex < this.signature.optionalDefaults.length) {
-          // Execute the default value instruction
-          const defaultInsn = this.signature.optionalDefaults[defaultIndex];
-
-          // Debug: Log what currentNode is when evaluating defaults
-          if (process.env.DEBUG_OPTIONAL_DEFAULTS) {
-            console.error(`VarargsInsn: Evaluating optional parameter default #${defaultIndex}`);
-            console.error(`  vm.currentNode: ${vm.currentNode ? vm.currentNode.gi() : 'null'}`);
-          }
-
-          let currentInsn: Insn | null = defaultInsn;
-
-          // Execute instruction chain until we get the value
-          while (currentInsn) {
-            currentInsn = currentInsn.execute(vm);
-          }
-
-          // Debug: Check what was pushed onto stack
-          if (process.env.DEBUG_OPTIONAL_DEFAULTS) {
-            const topValue = vm.getStackValue(vm.stackSize() - 1);
-            console.error(`  Default value type: ${topValue.constructor.name}`);
-            const sosofo = topValue.asSosofo();
-            if (sosofo) {
-              console.error(`  WARNING: Default value is a sosofo!`);
-            }
-          }
-
-          // The value is now on the stack
-        } else {
-          // No default value expression, use #f
-          vm.push(theFalseObj);
-        }
+      if (process.env.DEBUG_FOT) {
+        console.error(`  VarargsInsn: Packed ${nRest} rest args, returning last entry point`);
       }
+
+      // Return last entry point (for rest args case)
+      // Port from: OpenJade line 732
+      return this.entryPoints[this.entryPoints.length - 1];
     }
 
-    return this.body;
+    // Normal case: return entry point for this arity
+    // Port from: OpenJade line 734
+    if (process.env.DEBUG_FOT) {
+      console.error(`  VarargsInsn: Returning entryPoints[${n}] (${nOptional - n} optionals missing)`);
+    }
+
+    return this.entryPoints[n];
   }
 }
 
@@ -1112,27 +1109,20 @@ export class PopBindingsInsn extends Insn {
  * Used for case expressions without else clause when no clause matches
  */
 /**
- * DefineUnitInsn - Define a custom unit
- * Port from: OpenJade SchemeParser.cxx doDefineUnit()
+ * StoreUnitInsn - Pop quantity from stack and store in unit registry
+ * Port from: OpenJade Interpreter.cxx Unit::tryCompute()
  *
- * Evaluates the value expression and registers the unit with the VM
+ * This instruction is chained after the value expression in DefineUnitInsn.
  */
-export class DefineUnitInsn extends Insn {
+export class StoreUnitInsn extends Insn {
   constructor(
     private unitName: string,
-    private valueInsn: Insn,
-    private next: Insn | null = null
+    private next: Insn | null
   ) {
     super();
   }
 
   execute(vm: VM): Insn | null {
-    // Evaluate the value expression first
-    let insn: Insn | null = this.valueInsn;
-    while (insn !== null) {
-      insn = insn.execute(vm);
-    }
-
     // Pop the result - can be a quantity or unresolved quantity
     const value = vm.pop();
 
@@ -1170,31 +1160,45 @@ export class DefineUnitInsn extends Insn {
  * Temporarily sets the processing mode to mode-name while evaluating expr,
  * then restores the previous mode.
  */
-export class WithModeInsn extends Insn {
+/**
+ * PushMode instruction - Push processing mode onto mode stack
+ * Port from: OpenJade Insn2.h PushModeInsn
+ */
+export class PushModeInsn extends Insn {
   constructor(
     private modeName: string,
-    private body: Insn | null,
     private next: Insn | null
   ) {
     super();
   }
 
   execute(vm: VM): Insn | null {
-    // Save current processing mode
-    const savedMode = vm.processingMode;
+    // Push current mode onto mode stack
+    vm.modeStack.push(vm.processingMode);
 
     // Set new mode
     vm.processingMode = this.modeName;
 
-    // Execute body with mode set
-    // Port from: OpenJade - modes affect rule matching in process-children
-    let insn = this.body;
-    while (insn) {
-      insn = insn.execute(vm);
-    }
+    return this.next;
+  }
+}
 
-    // Restore previous mode
-    vm.processingMode = savedMode;
+/**
+ * PopMode instruction - Pop processing mode from mode stack
+ * Port from: OpenJade Insn2.h PopModeInsn
+ */
+export class PopModeInsn extends Insn {
+  constructor(
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Restore previous mode from mode stack
+    if (vm.modeStack.length > 0) {
+      vm.processingMode = vm.modeStack.pop()!;
+    }
 
     return this.next;
   }
