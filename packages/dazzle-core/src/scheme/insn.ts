@@ -242,9 +242,14 @@ export class FrameRefInsn extends Insn {
   }
 
   execute(vm: VM): Insn | null {
+    // Debug BEFORE any operations
+    const spBefore = vm.stackSize();
+    const frameIndexBefore = vm.frameIndex;
+
     if (process.env.DEBUG_FRAME) {
-      console.error(`[FrameRefInsn] Accessing frame[${this.index}], frameIndex=${vm.frameIndex}, sp=${vm.stackSize()}`);
+      console.error(`[FrameRefInsn.execute] START: sp=${spBefore}, frameIndex=${frameIndexBefore}, accessing frame[${this.index}]`);
     }
+
     let value = vm.getFrame(this.index);
 
     // Auto-unbox if this is a boxed value (for letrec variables)
@@ -806,10 +811,12 @@ export class CallInsn extends Insn {
       // Port from: OpenJade Insn.cxx ClosureObj::call lines 755-764
       // Note: OpenJade doesn't validate argument count here - VarargsInsn handles it
       // IMPORTANT: Order matters! Must match OpenJade exactly:
+      // 0. Ensure stack space (needStack)
       // 1. Set nActualArgs
       // 2. Push frame (saves previous frameIndex)
       // 3. Set new frameIndex
       // 4. Set closure display
+
       vm.nActualArgs = this.nArgs;
 
       // Push call frame (saves current frame state)

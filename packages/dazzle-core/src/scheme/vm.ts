@@ -201,7 +201,13 @@ export class VM {
     if (this.sp <= 0) {
       throw new Error('Stack underflow');
     }
-    return this.stack[--this.sp];
+    const value = this.stack[--this.sp];
+    if (process.env.DEBUG_FRAME) {
+      const stack = new Error().stack;
+      const caller = stack?.split('\n')[2]?.trim() || 'unknown';
+      console.error(`[pop] sp: ${this.sp + 1} -> ${this.sp}, caller: ${caller}`);
+    }
+    return value;
   }
 
   /**
