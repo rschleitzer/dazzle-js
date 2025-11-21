@@ -569,6 +569,10 @@ export class PrimitiveCallInsn extends Insn {
     vm.currentLine = this.loc.line;
     vm.currentColumn = this.loc.column;
 
+    if (process.env.DEBUG_FRAME) {
+      console.error(`[PrimitiveCallInsn] nArgs=${this.nArgs}, next=${this.next?.constructor.name || 'null'}`);
+    }
+
     // Get the function object
     const func = this.primitive.asFunction();
     if (!func || !func.isPrimitive()) {
