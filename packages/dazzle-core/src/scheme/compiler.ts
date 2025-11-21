@@ -49,6 +49,7 @@ import {
   SosofoAppendInsn,
   SetContentInsn,
   SetNonInheritedCInsn,
+  SetNonInheritedCsSosofoInsn,
 } from './insn.js';
 
 
@@ -72,13 +73,20 @@ interface Binding {
  */
 export class Environment {
   private bindings: Map<string, Binding> = new Map();
+  private static nextId = 0;
+  private id: number;
 
   /**
    * Create environment
    */
   constructor(
     private stackDepth: number = 0  // Current stack depth for let bindings
-  ) {}
+  ) {
+    this.id = Environment.nextId++;
+    if (process.env.DEBUG_FRAME) {
+      console.error(`[Environment] Created env#${this.id} with stackDepth=${stackDepth}`);
+    }
+  }
 
   /**
    * Look up a variable
@@ -102,9 +110,17 @@ export class Environment {
     const baseStackPos = stackPos;
     const newEnv = new Environment(baseStackPos + vars.length);
 
+    if (process.env.DEBUG_FRAME) {
+      console.error(`[extendStack] env#${this.id} -> env#${newEnv.id}: Adding ${vars.length} vars at stackPos=${stackPos}`);
+      console.error(`  Parent has ${this.bindings.size} bindings`);
+    }
+
     // Copy existing bindings unchanged
     this.bindings.forEach((binding, name) => {
       newEnv.bindings.set(name, binding);
+      if (process.env.DEBUG_FRAME) {
+        console.error(`  Copied: ${name} -> ${binding.kind}[${binding.index}]`);
+      }
     });
 
     // Add new stack variables at frame-relative positions
@@ -115,8 +131,8 @@ export class Environment {
     }
     for (let i = 0; i < vars.length; i++) {
       const framePos = baseStackPos + i;
-      if (process.env.DEBUG_CLOSURES) {
-        console.error(`  ${vars[i]} -> frame[${framePos}]`);
+      if (process.env.DEBUG_FRAME) {
+        console.error(`  New: ${vars[i]} -> stack[${framePos}]`);
       }
       newEnv.bindings.set(vars[i], {
         name: vars[i],
@@ -134,8 +150,15 @@ export class Environment {
   enterLambda(lambdaParams: string[], capturedVars: string[]): Environment {
     const newEnv = new Environment(0);
 
+    if (process.env.DEBUG_FRAME) {
+      console.error(`[enterLambda] env#${this.id} -> env#${newEnv.id}: ${lambdaParams.length} params, ${capturedVars.length} captured`);
+    }
+
     // Closure variables
     for (let i = 0; i < capturedVars.length; i++) {
+      if (process.env.DEBUG_FRAME) {
+        console.error(`  Captured: ${capturedVars[i]} -> closure[${i}]`);
+      }
       newEnv.bindings.set(capturedVars[i], {
         name: capturedVars[i],
         kind: 'closure',
@@ -145,6 +168,9 @@ export class Environment {
 
     // Lambda parameters as frame variables
     for (let i = 0; i < lambdaParams.length; i++) {
+      if (process.env.DEBUG_FRAME) {
+        console.error(`  Param: ${lambdaParams[i]} -> frame[${i}]`);
+      }
       newEnv.bindings.set(lambdaParams[i], {
         name: lambdaParams[i],
         kind: 'frame',
@@ -789,6 +815,9 @@ export class Compiler {
     const capturedVars: string[] = [];
 
     // Debug: log free variables found
+    if (process.env.DEBUG_FRAME) {
+      console.error(`[compileLambda] findFreeVariables found: ${Array.from(freeVars).join(', ') || '(none)'}`);
+    }
     if (process.env.DEBUG_CLOSURE && freeVars.size > 0) {
       console.error(`findFreeVariables found: ${Array.from(freeVars).join(', ')}`);
     }
@@ -799,7 +828,10 @@ export class Compiler {
       const binding = env.lookup(varName);
       if (binding) {
         capturedVars.push(varName);
-      } else if (process.env.DEBUG_CLOSURE) {
+        if (process.env.DEBUG_FRAME) {
+          console.error(`[compileLambda] Capturing '${varName}' from outer env: ${binding.kind}[${binding.index}]`);
+        }
+      } else if (process.env.DEBUG_CLOSURE || process.env.DEBUG_FRAME) {
         console.error(`  ${varName}: NOT FOUND in environment (skipped)`);
       }
     }
@@ -1737,12 +1769,68 @@ export class Compiler {
     // Build instruction chain from back to front:
     let rest: Insn | null = next;
 
-    // Port from: lines 1293-1301 - Compile keyword characteristics
-    // For each keyword, compile its value expression and create SetNonInheritedCInsn
-    for (const kw of keywords) {
-      // Compile keyword value at stackPos + 1 (flow object is at stackPos)
-      rest = this.compile(kw.valueExpr, env, stackPos + 1,
-                          new SetNonInheritedCInsn(kw.name, this.makeLocation(kw.valueExpr), rest));
+    // Port from: Expression.cxx MakeExpression::compileNonInheritedCs
+    // Keyword values must be evaluated with captured variables, not frame variables
+    // This is because they're evaluated lazily when the flow object is processed
+    if (keywords.length > 0) {
+      // Find all variables used in keyword expressions
+      const boundVars = new Set<string>();
+      for (const kw of keywords) {
+        this.collectFreeVariables(kw.valueExpr, new Set(), boundVars);
+      }
+
+      // Filter to only variables that exist in current environment
+      const capturedVars: string[] = [];
+      for (const varName of boundVars) {
+        const binding = env.lookup(varName);
+        if (binding) {
+          capturedVars.push(varName);
+        }
+      }
+
+      // Create new environment with ONLY captured variables (as closure variables, not frame)
+      const kwEnv = new Environment(0);
+      for (let i = 0; i < capturedVars.length; i++) {
+        kwEnv['bindings'].set(capturedVars[i], {
+          name: capturedVars[i],
+          kind: 'closure',
+          index: i,
+        });
+      }
+
+      // Compile keyword value expressions with the new environment
+      // Stack position is 1 (flow object is at position 0 in the new context)
+      let kwCode: Insn | null = null;
+      for (const kw of keywords) {
+        kwCode = this.compile(kw.valueExpr, kwEnv, 1,
+                             new SetNonInheritedCInsn(kw.name, this.makeLocation(kw.valueExpr), kwCode));
+      }
+
+      // Wrap in SetNonInheritedCsSosofoInsn that captures the variables
+      rest = new SetNonInheritedCsSosofoInsn(kwCode, capturedVars.length, rest);
+
+      // Push captured variables onto stack (right-to-left)
+      for (let i = capturedVars.length - 1; i >= 0; i--) {
+        const varName = capturedVars[i];
+        const binding = env.lookup(varName);
+        if (!binding) {
+          throw new Error(`Variable ${varName} not found in environment`);
+        }
+
+        // Generate appropriate reference instruction based on binding type
+        if (binding.kind === 'frame') {
+          rest = new FrameRefInsn(binding.index, rest);
+        } else if (binding.kind === 'stack') {
+          // For stack refs, we need the offset from current stackPos
+          // The variable is at absolute position binding.index
+          // Current stackPos is stackPos + number of vars already pushed
+          const currentStackPos = stackPos + (capturedVars.length - 1 - i);
+          const offset = currentStackPos - binding.index;
+          rest = new StackRefInsn(offset, binding.index, rest, false);
+        } else if (binding.kind === 'closure') {
+          rest = new ClosureRefInsn(binding.index, rest);
+        }
+      }
     }
 
     // Port from: line 1311 - SetContentInsn attaches content to flow object
@@ -1939,6 +2027,111 @@ export class Compiler {
    * @param bound Set of bound variables (parameters, let bindings)
    * @returns Set of free variable names
    */
+  /**
+   * Collect all free variables in an expression (simpler than findFreeVariables)
+   * Port from: OpenJade Expression::markBoundVars
+   */
+  private collectFreeVariables(expr: ELObj, bound: Set<string>, result: Set<string>): void {
+    // Symbol - add if not bound
+    const sym = expr.asSymbol();
+    if (sym) {
+      if (!bound.has(sym.name) && !Compiler.UNSHADOWABLE_BUILTINS.has(sym.name)) {
+        result.add(sym.name);
+      }
+      return;
+    }
+
+    // Not a list - no variables
+    const pair = expr.asPair();
+    if (!pair) {
+      return;
+    }
+
+    const car = pair.car;
+    const carSym = car.asSymbol();
+
+    // Special forms that introduce bindings
+    if (carSym) {
+      switch (carSym.name) {
+        case 'lambda': {
+          const args = this.listToArray(pair.cdr);
+          if (args.length < 2) return;
+
+          const params = this.listToArray(args[0]);
+          const newBound = new Set(bound);
+          for (const p of params) {
+            const pSym = p.asSymbol();
+            if (pSym) newBound.add(pSym.name);
+          }
+
+          // Recurse into body with extended bindings
+          for (let i = 1; i < args.length; i++) {
+            this.collectFreeVariables(args[i], newBound, result);
+          }
+          return;
+        }
+
+        case 'let': {
+          const args = this.listToArray(pair.cdr);
+          if (args.length < 2) return;
+
+          const firstArg = args[0];
+          const namedLetSym = firstArg.asSymbol();
+          if (namedLetSym) {
+            // Named let
+            if (args.length < 3) return;
+            const bindings = this.listToArray(args[1]);
+            const newBound = new Set(bound);
+            newBound.add(namedLetSym.name);
+
+            for (const binding of bindings) {
+              const bindingList = this.listToArray(binding);
+              if (bindingList.length === 2) {
+                this.collectFreeVariables(bindingList[1], bound, result);
+                const varSym = bindingList[0].asSymbol();
+                if (varSym) newBound.add(varSym.name);
+              }
+            }
+
+            for (let i = 2; i < args.length; i++) {
+              this.collectFreeVariables(args[i], newBound, result);
+            }
+            return;
+          }
+
+          // Regular let
+          const bindings = this.listToArray(args[0]);
+          const newBound = new Set(bound);
+
+          for (const binding of bindings) {
+            const bindingList = this.listToArray(binding);
+            if (bindingList.length === 2) {
+              this.collectFreeVariables(bindingList[1], bound, result);
+              const varSym = bindingList[0].asSymbol();
+              if (varSym) newBound.add(varSym.name);
+            }
+          }
+
+          for (let i = 1; i < args.length; i++) {
+            this.collectFreeVariables(args[i], newBound, result);
+          }
+          return;
+        }
+
+        case 'define':
+        case 'set!':
+        case 'if':
+        case 'quote':
+          // These don't introduce new bindings, just recurse
+          break;
+      }
+    }
+
+    // Default: recurse into all parts of the list
+    this.collectFreeVariables(car, bound, result);
+    this.collectFreeVariables(pair.cdr, bound, result);
+  }
+
   private findFreeVariables(expr: ELObj, bound: Set<string>): Set<string> {
     const free = new Set<string>();
 

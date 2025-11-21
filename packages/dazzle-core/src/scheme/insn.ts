@@ -9,7 +9,7 @@
 import type { ELObj } from './elobj.js';
 import type { VM } from './vm.js';
 import { FunctionObj, type Signature, theNilObj, theFalseObj, makePair, makeSymbol } from './elobj.js';
-import { createFlowObj, CompoundFlowObj, FlowObj } from '../flowobj.js';
+import { createFlowObj, CompoundFlowObj, FlowObj, SetNonInheritedCsSosofoObj } from '../flowobj.js';
 
 /**
  * Source location information
@@ -1474,6 +1474,55 @@ export class SetNonInheritedCInsn extends Insn {
 
     // Set the characteristic
     flowObjInstance.setNonInheritedC(this.characteristicName, value);
+
+    return this.next;
+  }
+}
+
+/**
+ * Set non-inherited characteristics sosofo instruction
+ * Port from: Insn2.h SetNonInheritedCsSosofoInsn
+ *
+ * Creates a sosofo object that wraps a flow object with code to set its
+ * non-inherited characteristics. The code is evaluated lazily when the sosofo
+ * is processed, with captured variables from the display.
+ *
+ * Stack on entry: [flow-obj, captured-var-0, ..., captured-var-n]
+ * Stack on exit: [SetNonInheritedCsSosofoObj]
+ */
+export class SetNonInheritedCsSosofoInsn extends Insn {
+  constructor(
+    private code: Insn | null,
+    private displayLength: number,
+    private next: Insn | null
+  ) {
+    super();
+  }
+
+  execute(vm: VM): Insn | null {
+    // Port from: OpenJade SetNonInheritedCsSosofoInsn::execute
+    // Pop captured variables from stack
+    const display: ELObj[] = [];
+    for (let i = 0; i < this.displayLength; i++) {
+      display.unshift(vm.pop());  // unshift to reverse order
+    }
+
+    // Pop flow object from stack (below the captured vars)
+    const flowObj = vm.pop();
+    if (!flowObj.asSosofo()) {
+      throw new Error(`SetNonInheritedCsSosofoInsn: expected flow object, got ${flowObj.constructor.name}`);
+    }
+
+    // Create SetNonInheritedCsSosofoObj
+    const sosofo = new SetNonInheritedCsSosofoObj(
+      flowObj as FlowObj,
+      this.code,
+      display,
+      vm.currentNode
+    );
+
+    // Push the sosofo object
+    vm.push(sosofo);
 
     return this.next;
   }

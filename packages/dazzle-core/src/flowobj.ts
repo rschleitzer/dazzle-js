@@ -9,6 +9,9 @@
 
 import { SosofoObj, type ELObj } from './scheme/elobj.js';
 import type { ProcessContext } from './dsssl/process-context.js';
+import type { Insn } from './scheme/insn.js';
+import type { VM } from './scheme/vm.js';
+import type { Node } from './grove/grove.js';
 
 /**
  * Base FlowObj class
@@ -686,6 +689,91 @@ export class LineFieldFlowObj extends CompoundFlowObj {
     const copy = new LineFieldFlowObj();
     copy.content_ = this.content_;
     return copy;
+  }
+}
+
+/**
+ * SetNonInheritedCsSosofoObj - Wraps a flow object with lazy evaluation of non-inherited characteristics
+ * Port from: OpenJade style/SosofoObj.h SetNonInheritedCsSosofoObj
+ *
+ * This sosofo object stores:
+ * - A flow object template
+ * - Code (instructions) to set its non-inherited characteristics
+ * - A display (captured variables) for evaluating the code
+ * - The current node context
+ *
+ * When processed, it evaluates the code with the captured environment to set
+ * the characteristics, then processes the resulting flow object.
+ */
+export class SetNonInheritedCsSosofoObj extends SosofoObj {
+  constructor(
+    private flowObj: FlowObj,
+    private code: Insn | null,
+    private display: ELObj[],
+    private node: Node | null
+  ) {
+    super();
+  }
+
+  /**
+   * Evaluate the code with captured variables to resolve the flow object
+   * Port from: ProcessContext.cxx SetNonInheritedCsSosofoObj::resolve
+   */
+  private resolve(vm: VM): FlowObj | null {
+    // Save current context
+    const savedNode = vm.currentNode;
+    const savedClosure = vm.closure;
+
+    // Set up evaluation context with captured variables and node
+    vm.currentNode = this.node;
+    vm.closure = this.display.length > 0 ? this.display : null;
+
+    try {
+      // Make a copy of the flow object
+      const flowObjCopy = this.flowObj.copy();
+
+      // Push the flow object copy onto the stack for the code to modify
+      vm.push(flowObjCopy);
+
+      // Evaluate the code (SetNonInheritedCInsn chain) with captured environment
+      if (this.code) {
+        let insn: Insn | null = this.code;
+        while (insn) {
+          insn = insn.execute(vm);
+        }
+      }
+
+      // Pop the modified flow object
+      const result = vm.pop();
+      if (!result.asSosofo()) {
+        return null;
+      }
+
+      return result as FlowObj;
+    } catch (error) {
+      // On error, return null
+      console.error('SetNonInheritedCsSosofoObj::resolve error:', error);
+      return null;
+    } finally {
+      // Restore context
+      vm.currentNode = savedNode;
+      vm.closure = savedClosure;
+    }
+  }
+
+  /**
+   * Process this sosofo by resolving and processing the flow object
+   * Port from: ProcessContext.cxx SetNonInheritedCsSosofoObj::process
+   */
+  process(context: ProcessContext): void {
+    const resolvedFlowObj = this.resolve(context.getVM());
+    if (resolvedFlowObj) {
+      resolvedFlowObj.process(context);
+    }
+  }
+
+  asSosofo(): SosofoObj {
+    return this;
   }
 }
 
