@@ -1830,13 +1830,16 @@ export class Compiler {
         }
 
         // Generate appropriate reference instruction based on binding type
-        if (binding.kind === 'frame') {
+        // Port from: OpenJade Expression.cxx compilePushVars
+        // Frame and stack variables both use FrameRefInsn
+        // Only closure variables use ClosureRefInsn
+        if (binding.kind === 'frame' || binding.kind === 'stack') {
+          // Both frame and stack variables use FrameRefInsn in OpenJade
+          // binding.index is the frame-relative position
+          if (process.env.DEBUG_FOT) {
+            console.error(`[compileMake] Pushing captured ${binding.kind} var '${varName}': binding.index=${binding.index} (frame-relative)`);
+          }
           rest = new FrameRefInsn(binding.index, rest);
-        } else if (binding.kind === 'stack') {
-          // Stack variables are frame-relative (set by extendStack)
-          // Use StackRefInsn with frameIndex = binding.index
-          // Since binding.index is already frame-relative, offset is 0
-          rest = new StackRefInsn(0, binding.index, rest, false, varName);
         } else if (binding.kind === 'closure') {
           rest = new ClosureRefInsn(binding.index, rest);
         }

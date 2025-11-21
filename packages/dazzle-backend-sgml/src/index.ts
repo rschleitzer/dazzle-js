@@ -240,46 +240,6 @@ export class TransformFotBuilder implements FotBuilder {
   }
 
   /**
-   * Start a directory flow object (changes output directory context)
-   * Custom extension for code generation - allows nesting file output in directories
-   */
-  startDirectory(dirPath: string): void {
-    // Update output directory to be relative to current directory
-    const newOutputDir = path.resolve(this.outputDir, dirPath);
-
-    // Create the directory if it doesn't exist
-    const fs = require('fs');
-    if (!fs.existsSync(newOutputDir)) {
-      fs.mkdirSync(newOutputDir, { recursive: true });
-    }
-
-    // Save current output dir on stack
-    const openDir: OpenDirectory = {
-      path: dirPath,
-      savedOutputDir: this.outputDir,
-    };
-    this.directoryStack.push(openDir);
-
-    // Switch to new directory
-    this.outputDir = newOutputDir;
-  }
-
-  /**
-   * End a directory flow object (restores previous output directory)
-   */
-  endDirectory(): void {
-    if (this.directoryStack.length === 0) {
-      throw new Error('endDirectory called without matching startDirectory');
-    }
-
-    // Pop directory from stack
-    const openDir = this.directoryStack.pop()!;
-
-    // Restore previous directory
-    this.outputDir = openDir.savedOutputDir;
-  }
-
-  /**
    * Start a directory flow object (creates directory)
    * Custom extension for directory structure generation
    *

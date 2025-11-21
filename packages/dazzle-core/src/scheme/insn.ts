@@ -280,7 +280,7 @@ export class FrameRefInsn extends Insn {
 export class StackRefInsn extends Insn {
   constructor(
     private index: number,        // negative offset from sp
-    private frameIndex: number,   // for debugging/validation
+    private frameIndex: number,   // frame-relative position
     private next: Insn | null,
     private forCapture: boolean = false, // true if capturing for closure
     private varName?: string  // for debugging
@@ -310,11 +310,12 @@ export class StackRefInsn extends Insn {
     if (process.env.DEBUG_FOT && !assertHolds) {
       console.error(`[StackRefInsn] ASSERT FAILED: sp - frame (${spMinusFrame}) != frameIndex - index (${frameIndexMinusIndex})`);
       console.error(`  sp=${vm.stackSize()}, frame=${vm.frameIndex}, frameIndex=${this.frameIndex}, index=${this.index}`);
-      console.error(`  Will use sp-relative access as fallback`);
+      console.error(`  This indicates a compiler bug - stack variables accessed across frame boundaries should be captured as closures`);
     }
 
     // Always use frame-relative access (matches OpenJade behavior)
-    // The ASSERT should always hold in correct code
+    // When ASSERT fails, it indicates the variable should have been captured as a closure
+    // But we proceed anyway to maintain compatibility
     let value = vm.getFrame(this.frameIndex);
 
     if (process.env.DEBUG_FOT && this.varName) {
