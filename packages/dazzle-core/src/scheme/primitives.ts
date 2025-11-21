@@ -9253,6 +9253,14 @@ const processChildrenTrimPrimitive: PrimitiveFunction = (args: ELObj[], vm: VM):
     throw new Error('process-children-trim takes no arguments');
   }
 
+  if (process.env.DEBUG_PROCESS) {
+    console.error(`[process-children-trim] called, vm.processingMode='${vm.processingMode}', modeStack.length=${vm.modeStack.length}`);
+    if (!vm.processingMode) {
+      console.error(`[process-children-trim] ERROR: No mode! Stack trace:`);
+      console.error(new Error().stack);
+    }
+  }
+
   if (!vm.processingMode) {
     throw new Error('process-children-trim: no current processing mode');
   }

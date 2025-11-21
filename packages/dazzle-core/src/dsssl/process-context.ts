@@ -316,8 +316,14 @@ export class ProcessContext {
         }
 
         // Element node - call startNode, match rules, call endNode
-        // Port from: ProcessContext.cxx:80
+        // Port from: ProcessContext.cxx:76-80
+        // OpenJade uses CurrentNodeSetter RAII to save/restore mode and node
         this.fotBuilder.startNode(child, processingMode);
+
+        // Save and set processing mode for rule execution
+        // Port from: EvalContext.h CurrentNodeSetter - sets both node and mode
+        const savedMode = this.vm.processingMode;
+        this.vm.processingMode = processingMode;
 
         try {
           // Find rule for this element
@@ -340,6 +346,9 @@ export class ProcessContext {
             this.processChildrenTrim(processingMode);
           }
         } finally {
+          // Restore processing mode
+          // Port from: EvalContext.h CurrentNodeSetter destructor
+          this.vm.processingMode = savedMode;
           this.fotBuilder.endNode();
         }
       } finally {

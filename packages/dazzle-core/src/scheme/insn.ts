@@ -1209,6 +1209,10 @@ export class PushModeInsn extends Insn {
     // Set new mode
     vm.processingMode = this.modeName;
 
+    if (process.env.DEBUG_PROCESS) {
+      console.error(`[PushModeInsn] Set mode to '${this.modeName}', prev='${vm.modeStack[vm.modeStack.length - 1] || ''}'`);
+    }
+
     return this.next;
   }
 }
@@ -1225,9 +1229,14 @@ export class PopModeInsn extends Insn {
   }
 
   execute(vm: VM): Insn | null {
+    const prevMode = vm.processingMode;
     // Restore previous mode from mode stack
     if (vm.modeStack.length > 0) {
       vm.processingMode = vm.modeStack.pop()!;
+    }
+
+    if (process.env.DEBUG_PROCESS) {
+      console.error(`[PopModeInsn] Restored mode from '${prevMode}' to '${vm.processingMode}'`);
     }
 
     return this.next;
