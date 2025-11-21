@@ -813,7 +813,11 @@ export class CallInsn extends Insn {
       vm.pushFrame(this.next, this.nArgs);
 
       // Set up frame for closure call (arguments are already on stack)
-      vm.frameIndex = vm.stackSize() - this.nArgs;
+      const newFrameIndex = vm.stackSize() - this.nArgs;
+      if (process.env.DEBUG_FRAME) {
+        console.error(`[CallInsn] Setting frameIndex: stackSize=${vm.stackSize()}, nArgs=${this.nArgs}, newFrameIndex=${newFrameIndex}`);
+      }
+      vm.frameIndex = newFrameIndex;
 
       // Set closure display
       vm.closure = func.display || null;

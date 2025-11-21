@@ -234,10 +234,21 @@ export class VM {
    * Port from: VM.h vm.frame[index]
    */
   getFrame(index: number): ELObj {
-    if (index < 0 || this.frameIndex + index >= this.sp) {
+    // Port from: OpenJade Insn.cxx FrameRefInsn::execute line 863
+    // OpenJade allows accessing frame[index] even if frame + index >= sp
+    // as long as it's within the allocated stack array.
+    // This happens when default argument expressions reference earlier parameters.
+    const absoluteIndex = this.frameIndex + index;
+    if (index < 0 || absoluteIndex >= this.stack.length) {
+      const stack = new Error().stack;
+      const caller = stack?.split('\n')[2]?.trim() || 'unknown';
+      console.error(`Frame access error: index=${index}, frameIndex=${this.frameIndex}, sp=${this.sp}`);
+      console.error(`  Attempted access at: frameIndex + index = ${this.frameIndex} + ${index} = ${absoluteIndex}`);
+      console.error(`  Stack size: ${this.sp}, allocated: ${this.stack.length}`);
+      console.error(`  Caller: ${caller}`);
       throw new Error(`Frame index ${index} out of bounds`);
     }
-    return this.stack[this.frameIndex + index];
+    return this.stack[absoluteIndex];
   }
 
   /**
@@ -325,6 +336,14 @@ export class VM {
     // Calculate frame size (stack size before arguments were pushed)
     const frameSize = this.sp - this.frameIndex - argsPushed;
 
+    if (process.env.DEBUG_FRAME) {
+      // Get stack trace to see where pushFrame was called from
+      const stack = new Error().stack;
+      const caller = stack?.split('\n')[2]?.trim() || 'unknown';
+      console.error(`[pushFrame] sp=${this.sp}, frameIndex=${this.frameIndex}, argsPushed=${argsPushed}, frameSize=${frameSize}`);
+      console.error(`  controlStack.length=${this.controlStack.length}, caller=${caller}`);
+    }
+
     // Push control stack entry
     this.controlStack.push({
       frameSize,
@@ -350,7 +369,12 @@ export class VM {
     this.closure = entry.closure;
 
     // Restore frame pointer
-    this.frameIndex = this.sp - entry.frameSize;
+    const newFrameIndex = this.sp - entry.frameSize;
+    if (process.env.DEBUG_FRAME) {
+      console.error(`[popFrame] sp=${this.sp}, entry.frameSize=${entry.frameSize}, newFrameIndex=${newFrameIndex}`);
+      console.error(`  old frameIndex=${this.frameIndex}, controlStack.length=${this.controlStack.length}`);
+    }
+    this.frameIndex = newFrameIndex;
 
     return entry.next;
   }
@@ -387,6 +411,10 @@ export class VM {
     while (insn) {
       if (process.env.DEBUG_INSN) {
         console.error(`[${stepCount}] Executing: ${insn.constructor.name}, stackSize=${this.sp}`);
+      }
+
+      if (process.env.DEBUG_FRAME) {
+        console.error(`[${stepCount}] Before ${insn.constructor.name}: sp=${this.sp}, frameIndex=${this.frameIndex}`);
       }
 
       // Track instruction execution for debugging
