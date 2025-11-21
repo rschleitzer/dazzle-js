@@ -547,6 +547,9 @@ export class Compiler {
           if (process.env.DEBUG_CLOSURES && (name === 'component' || name === 'chaporapp')) {
             console.error(`[compileVariable] ${name}: frame[${binding.index}]`);
           }
+          if (process.env.DEBUG_FRAME) {
+            console.error(`[compileVariable] Generating FrameRefInsn for '${name}' at index ${binding.index}`);
+          }
           return new FrameRefInsn(binding.index, next);
         case 'stack':
           // Convert absolute position to relative offset from current stackPos
@@ -765,6 +768,17 @@ export class Compiler {
       restArg: hasRestArg,
       nKeyArgs: 0,
     };
+
+    if (process.env.DEBUG_FRAME) {
+      if (nRequiredParams === 0 && nOptionalParams === 0 && !hasRestArg) {
+        console.error(`[compileLambda] Compiling 0-argument lambda with paramNames=[${paramNames.join(', ')}], capturedVars=[${capturedVars.join(', ')}]`);
+        if (paramNames.length > 0) {
+          console.error(`  BUG: signature has 0 params but paramNames has ${paramNames.length}`);
+        }
+      } else {
+        console.error(`[compileLambda] Compiling lambda with paramNames=[${paramNames.join(', ')}], capturedVars=[${capturedVars.join(', ')}]`);
+      }
+    }
 
     // Port from: OpenJade Expression.cxx lines 545-636
     // Build entry points for VarargsInsn - one instruction chain per arity

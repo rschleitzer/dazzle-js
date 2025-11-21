@@ -828,6 +828,7 @@ export class CallInsn extends Insn {
         console.error(`[CallInsn] Setting frameIndex: stackSize=${vm.stackSize()}, nArgs=${this.nArgs}, newFrameIndex=${newFrameIndex}`);
         if (func.signature) {
           console.error(`  Calling closure with signature: required=${func.signature.nRequiredArgs}, optional=${func.signature.nOptionalArgs}, rest=${func.signature.restArg ? 'yes' : 'no'}`);
+          console.error(`  Closure code starts with: ${func.code?.constructor.name || 'null'}, display size: ${func.display?.length || 0}`);
         }
       }
       vm.frameIndex = newFrameIndex;
