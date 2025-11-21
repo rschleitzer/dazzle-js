@@ -59,12 +59,34 @@ import { RuleRegistry } from '../dsssl/rules.js';
 import { parse } from './parser.js';
 
 /**
+ * Variable binding flags - Port from OpenJade Expression.h BoundVar
+ */
+enum BindingFlags {
+  None = 0,
+  Used = 0x01,      // Variable is used
+  Assigned = 0x02,  // Variable is assigned (set!)
+  Shared = 0x04,    // Variable is accessed in shared context (lambda body)
+  Uninit = 0x08,    // Variable may be uninitialized (letrec)
+}
+
+/**
+ * Check if variable needs boxing (mutable + shared)
+ * Port from: OpenJade BoundVar::boxed()
+ */
+function isBoxed(flags: BindingFlags): boolean {
+  const boxedFlags = BindingFlags.Assigned | BindingFlags.Shared;
+  return (flags & boxedFlags) === boxedFlags;
+}
+
+/**
  * Variable binding in environment
+ * Port from OpenJade Expression.h BoundVar
  */
 interface Binding {
   name: string;
   kind: 'frame' | 'stack' | 'closure';  // location kind
   index: number;     // index (positive for frame, ABSOLUTE for stack, positive for closure)
+  flags: BindingFlags;  // Usage flags for determining capture/boxing needs
 }
 
 /**
@@ -106,7 +128,7 @@ export class Environment {
    * Extend environment with new stack variables (for let)
    * Port from: OpenJade Environment::augmentFrame
    */
-  extendStack(vars: string[], stackPos: number): Environment {
+  extendStack(vars: string[], stackPos: number, flags?: BindingFlags[]): Environment {
     const baseStackPos = stackPos;
     const newEnv = new Environment(baseStackPos + vars.length);
 
@@ -131,13 +153,15 @@ export class Environment {
     }
     for (let i = 0; i < vars.length; i++) {
       const framePos = baseStackPos + i;
+      const varFlags = flags && flags[i] !== undefined ? flags[i] : BindingFlags.None;
       if (process.env.DEBUG_FRAME) {
-        console.error(`  New: ${vars[i]} -> stack[${framePos}]`);
+        console.error(`  New: ${vars[i]} -> stack[${framePos}], flags=${varFlags}`);
       }
       newEnv.bindings.set(vars[i], {
         name: vars[i],
         kind: 'stack',
         index: framePos,  // Frame-relative position (NOT reversed!)
+        flags: varFlags,
       });
     }
 
@@ -163,6 +187,7 @@ export class Environment {
         name: capturedVars[i],
         kind: 'closure',
         index: i,
+        flags: BindingFlags.None,  // Captured variables don't need flags in lambda body
       });
     }
 
@@ -175,6 +200,7 @@ export class Environment {
         name: lambdaParams[i],
         kind: 'frame',
         index: i,
+        flags: BindingFlags.None,  // Parameters start with no flags
       });
     }
 
@@ -944,6 +970,7 @@ export class Compiler {
               name: capturedVars[j],
               kind: 'closure',
               index: j,
+              flags: BindingFlags.None,
             });
           }
 
@@ -953,6 +980,7 @@ export class Compiler {
               name: paramsInScope[j],
               kind: 'frame',
               index: j,
+              flags: BindingFlags.None,
             });
           }
 
@@ -1319,8 +1347,19 @@ export class Compiler {
       ? bodyExprs[0]
       : this.makeBegin(bodyExprs);
 
+    // Port from: OpenJade LetExpression::compile calls body_->markBoundVars
+    // Analyze body to mark which variables are used in shared contexts
+    const boundVarFlags = new Map<string, BindingFlags>();
+    for (const varName of vars) {
+      boundVarFlags.set(varName, BindingFlags.None);
+    }
+    this.markBoundVars(body, boundVarFlags, false);  // shared=false for let body
+
+    // Extract flags array in same order as vars
+    const varFlags: BindingFlags[] = vars.map(v => boundVarFlags.get(v) || BindingFlags.None);
+
     // Compile body with extended environment
-    const bodyEnv = env.extendStack(vars, stackPos);
+    const bodyEnv = env.extendStack(vars, stackPos, varFlags);
     const bodyStackPos = stackPos + vars.length;
     if (process.env.DEBUG_CLOSURES && vars.includes('component')) {
       console.error(`[compileLet] component let: stackPos=${stackPos}, vars.length=${vars.length}, bodyStackPos=${bodyStackPos}`);
@@ -1808,6 +1847,7 @@ export class Compiler {
           name: capturedVars[i],
           kind: 'closure',
           index: i,
+          flags: BindingFlags.None,
         });
       }
 
@@ -2147,6 +2187,145 @@ export class Compiler {
     // Default: recurse into all parts of the list
     this.collectFreeVariables(car, bound, result);
     this.collectFreeVariables(pair.cdr, bound, result);
+  }
+
+  /**
+   * Mark bound variables with usage flags
+   * Port from: OpenJade Expression.cxx markBoundVars
+   *
+   * @param expr Expression to analyze
+   * @param boundVars Map of variable names to their flags
+   * @param shared Whether we're in a shared context (lambda body)
+   */
+  private markBoundVars(expr: ELObj, boundVars: Map<string, BindingFlags>, shared: boolean): void {
+    // Symbol - mark as used (and shared if in lambda)
+    const sym = expr.asSymbol();
+    if (sym) {
+      const currentFlags = boundVars.get(sym.name) || BindingFlags.None;
+      const newFlags = currentFlags | BindingFlags.Used | (shared ? BindingFlags.Shared : 0);
+      boundVars.set(sym.name, newFlags);
+      return;
+    }
+
+    // Not a list - no variables
+    const pair = expr.asPair();
+    if (!pair) {
+      return;
+    }
+
+    const car = pair.car;
+    const carSym = car.asSymbol();
+
+    // Special forms that introduce bindings or change shared context
+    if (carSym) {
+      switch (carSym.name) {
+        case 'lambda': {
+          // Lambda body is analyzed with shared=true
+          const args = this.listToArray(pair.cdr);
+          if (args.length < 2) return;
+
+          // Get lambda parameters
+          const params = this.listToArray(args[0]);
+          const paramNames = new Set<string>();
+          for (const p of params) {
+            const pSym = p.asSymbol();
+            if (pSym) paramNames.add(pSym.name);
+          }
+
+          // Analyze body with shared=true, but exclude lambda parameters
+          const bodyBoundVars = new Map(boundVars);
+          for (const name of paramNames) {
+            bodyBoundVars.delete(name);  // Lambda params are local, not from outer scope
+          }
+
+          for (let i = 1; i < args.length; i++) {
+            this.markBoundVars(args[i], bodyBoundVars, true);  // shared=true in lambda body
+          }
+
+          // Merge flags back
+          for (const [name, flags] of bodyBoundVars) {
+            if (boundVars.has(name)) {
+              boundVars.set(name, flags);
+            }
+          }
+          return;
+        }
+
+        case 'let':
+        case 'let*':
+        case 'letrec': {
+          // Let bindings - analyze recursively
+          const args = this.listToArray(pair.cdr);
+          if (args.length < 2) return;
+
+          // Check for named let
+          const firstArg = args[0];
+          const namedLetSym = firstArg.asSymbol();
+          let bindingsArg: ELObj;
+          let bodyStart: number;
+
+          if (namedLetSym && carSym.name === 'let') {
+            // Named let
+            if (args.length < 3) return;
+            bindingsArg = args[1];
+            bodyStart = 2;
+          } else {
+            bindingsArg = args[0];
+            bodyStart = 1;
+          }
+
+          const bindings = this.listToArray(bindingsArg);
+
+          // Analyze init expressions (not shared)
+          for (const binding of bindings) {
+            const bindingList = this.listToArray(binding);
+            if (bindingList.length === 2) {
+              this.markBoundVars(bindingList[1], boundVars, shared);
+            }
+          }
+
+          // Analyze body (same shared state)
+          for (let i = bodyStart; i < args.length; i++) {
+            this.markBoundVars(args[i], boundVars, shared);
+          }
+          return;
+        }
+
+        case 'set!': {
+          // Mark variable as assigned
+          const args = this.listToArray(pair.cdr);
+          if (args.length === 2) {
+            const varSym = args[0].asSymbol();
+            if (varSym) {
+              const currentFlags = boundVars.get(varSym.name) || BindingFlags.None;
+              boundVars.set(varSym.name, currentFlags | BindingFlags.Assigned);
+            }
+            // Analyze value expression
+            this.markBoundVars(args[1], boundVars, shared);
+          }
+          return;
+        }
+
+        case 'quote':
+          // Quoted expressions don't reference variables
+          return;
+
+        case 'if': {
+          const args = this.listToArray(pair.cdr);
+          for (const arg of args) {
+            this.markBoundVars(arg, boundVars, shared);
+          }
+          return;
+        }
+      }
+    }
+
+    // Default: analyze all subexpressions
+    this.markBoundVars(car, boundVars, shared);
+    const cdr = pair.cdr;
+    if (cdr) {
+      this.markBoundVars(cdr, boundVars, shared);
+    }
   }
 
   private findFreeVariables(expr: ELObj, bound: Set<string>): Set<string> {
