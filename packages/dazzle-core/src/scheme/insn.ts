@@ -250,6 +250,11 @@ export class FrameRefInsn extends Insn {
       console.error(`[FrameRefInsn.execute] START: sp=${spBefore}, frameIndex=${frameIndexBefore}, accessing frame[${this.index}]`);
     }
 
+    if (process.env.DEBUG_FOT) {
+      const absolutePos = frameIndexBefore + this.index;
+      console.error(`[FrameRefInsn] frame[${this.index}] (frameIndex=${frameIndexBefore}, absolute=${absolutePos}, sp=${spBefore})`);
+    }
+
     let value = vm.getFrame(this.index);
 
     // Auto-unbox if this is a boxed value (for letrec variables)

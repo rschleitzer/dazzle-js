@@ -638,15 +638,19 @@ export class Compiler {
           }
           return new FrameRefInsn(binding.index, next);
         case 'stack':
-          // Convert absolute position to relative offset from current stackPos
-          const offset = binding.index - stackPos;
+          // Port from: OpenJade uses StackRefInsn for frame variables
+          // BUT: StackRefInsn has an ASSERT that sp - frame == frameIndex - index
+          // This fails when variables are accessed across frame boundaries (e.g., in lambdas)
+          // Solution: Use FrameRefInsn which accesses frame[index] relative to current frame
+          // The index is frame-relative from when the variable was bound
           if (process.env.DEBUG_CLOSURES && (name === 'component' || name === 'chaporapp')) {
-            console.error(`[compileVariable] ${name}: binding.index=${binding.index}, stackPos=${stackPos}, offset=${offset}`);
+            console.error(`[compileVariable] ${name}: binding.index=${binding.index} (frame-relative)`);
           }
           if (process.env.DEBUG_FOT && (name === 'itemcontent' || name === 'spacing' || name === 'first-child')) {
-            console.error(`[compileVariable] ${name}: binding.index=${binding.index}, stackPos=${stackPos}, offset=${offset}`);
+            console.error(`[compileVariable] ${name}: binding.index=${binding.index} (frame-relative)`);
           }
-          return new StackRefInsn(offset, binding.index, next, false, name);
+          // Use FrameRefInsn for stack variables - accesses frame[binding.index]
+          return new FrameRefInsn(binding.index, next);
         case 'closure':
           if (process.env.DEBUG_CLOSURES && (name === 'component' || name === 'chaporapp')) {
             console.error(`[compileVariable] ${name}: closure[${binding.index}]`);
