@@ -1535,17 +1535,19 @@ export class Compiler {
       // Regular clause
       if (clauseList.length === 1) {
         // (test) with no body - return test result if true
-        const thenBranch = new PopInsn(next); // Pop test result and continue
+        // Port from: OpenJade - test result stays on stack
+        const thenBranch = next;
         const elseBranch = result;
         const testInsn = this.compile(test, env, stackPos, new TestInsn(thenBranch, elseBranch));
         result = testInsn;
       } else {
         // (test expr ...) - evaluate body if test is true
+        // Port from: OpenJade IfExpression - both branches at same stackPos
         const bodyExprs = clauseList.slice(1);
         const body = bodyExprs.length === 1
           ? bodyExprs[0]
           : this.makeBegin(bodyExprs);
-        const thenBranch = this.compile(body, env, stackPos - 1, new PopInsn(next));
+        const thenBranch = this.compile(body, env, stackPos, next);
         const elseBranch = result;
         result = this.compile(test, env, stackPos, new TestInsn(thenBranch, elseBranch));
       }
