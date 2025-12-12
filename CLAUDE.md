@@ -55,7 +55,7 @@ Examples:
 |------------|---------|-------------|
 | [openjade-js](https://github.com/rschleitzer/openjade-js) | `@scaly/openjade` | TypeScript port of OpenJade DSSSL engine |
 | [openjade-js](https://github.com/rschleitzer/openjade-js) | `@scaly/opensp` | TypeScript port of OpenSP SGML parser |
-| dazzle (this repo) | `dazzle` | CLI wrapper |
+| dazzle (this repo) | `@scaly/dazzle` | CLI wrapper |
 
 ## Development
 

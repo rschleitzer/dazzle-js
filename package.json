@@ -1,5 +1,5 @@
 {
-  "name": "dazzle",
+  "name": "@scaly/dazzle",
   "version": "0.1.0",
   "description": "DSSSL processor - CLI wrapper for @scaly/openjade",
   "main": "./dist/index.js",

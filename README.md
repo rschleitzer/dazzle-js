@@ -5,7 +5,7 @@ CLI wrapper for [`@scaly/openjade`](https://www.npmjs.com/package/@scaly/openjad
 ## Installation
 
 ```bash
-npm install -g dazzle
+npm install -g @scaly/dazzle
 ```
 
 ## Usage
