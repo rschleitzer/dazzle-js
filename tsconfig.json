@@ -8,6 +8,8 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
@@ -17,5 +19,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }
