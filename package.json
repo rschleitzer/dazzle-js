@@ -6,8 +6,11 @@
   "types": "./dist/index.d.ts",
   "type": "module",
   "bin": {
-    "dazzle": "./dist/cli.js"
+    "dazzle": "dist/cli.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
@@ -27,7 +30,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rschleitzer/dazzle.git"
+    "url": "https://github.com/rschleitzer/dazzle-js.git"
   },
   "dependencies": {
     "@scaly/openjade": "^0.2.0",
